@@ -11,142 +11,110 @@
       --bg: #0b0d10;
       --panel: #13171c;
       --panel-border: #262d35;
+      --board-bg: #0e100f;
+      --board-panel: #151816;
+      --board-line: #303630;
+      --board-line-soft: #242a25;
       --text: #f5f7fa;
+      --board-text: #f1eddc;
       --muted: #8f99a6;
       --accent: #8bb8ff;
+      --todo: #b9d9ee;
+      --progress: #ffd166;
+      --review: #cdb4ff;
+      --blocked: #ff786f;
+      --done: #8fd694;
+      --unknown: #d7d2c3;
       --radius: 16px;
       --gap: 18px;
-      font-family:
-        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-        "Segoe UI", sans-serif;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
+    html { background: var(--bg); }
+    body { margin: 0; min-width: 0; min-height: 100vh; background: var(--bg); color: var(--text); }
+    button, input { font: inherit; }
 
-    html {
-      background: var(--bg);
-    }
+    .page { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 40px 0 56px; }
+    .page-header { margin-bottom: 24px; }
+    .eyebrow { margin: 0 0 6px; color: var(--accent); font-size: .78rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1; letter-spacing: -.04em; }
+    .subtitle { max-width: 680px; margin: 12px 0 0; color: var(--muted); line-height: 1.55; }
 
-    body {
-      margin: 0;
+    .dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gap); min-width: 0; }
+    .widget { min-width: 0; min-height: 280px; padding: 20px; border: 1px solid var(--panel-border); border-radius: var(--radius); background: var(--panel); }
+    .widget--tickets { grid-column: span 7; }
+    .widget--github { grid-column: span 5; }
+    .widget--recent { grid-column: 1 / -1; min-height: 220px; }
+    .widget-header { padding-bottom: 16px; border-bottom: 1px solid var(--panel-border); }
+    .widget h2 { margin: 0; font-size: 1.05rem; letter-spacing: -.01em; }
+    .widget-placeholder { display: grid; min-height: 190px; place-items: center; padding: 24px 12px; color: var(--muted); text-align: center; }
+    .widget--recent .widget-placeholder { min-height: 140px; }
+
+    .flight-board {
+      margin-top: 16px;
       min-width: 0;
-      min-height: 100vh;
-      background: var(--bg);
-      color: var(--text);
+      overflow: hidden;
+      border: 1px solid var(--board-line);
+      background: var(--board-bg);
+      color: var(--board-text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     }
 
-    .page {
-      width: min(1180px, calc(100% - 32px));
-      margin: 0 auto;
-      padding: 40px 0 56px;
-    }
+    .flight-meta { min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 6px 8px; border-bottom: 1px solid var(--board-line); background: var(--board-panel); }
+    .flight-source { min-width: 0; flex: 1 1 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #a8aea8; font-size: 8px; letter-spacing: .055em; text-transform: uppercase; }
+    .flight-action { flex: 0 0 auto; min-height: 24px; border: 1px solid #697069; padding: 3px 7px; background: transparent; color: var(--board-text); cursor: pointer; font-size: 8px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+    .flight-action:hover, .flight-action:focus-visible { border-color: var(--board-text); outline: none; }
 
-    .page-header {
-      margin-bottom: 24px;
-    }
-
-    .eyebrow {
-      margin: 0 0 6px;
-      color: var(--accent);
-      font-size: 0.78rem;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-    }
-
-    h1 {
-      margin: 0;
-      font-size: clamp(2rem, 5vw, 3.2rem);
-      line-height: 1;
-      letter-spacing: -0.04em;
-    }
-
-    .subtitle {
-      max-width: 680px;
-      margin: 12px 0 0;
-      color: var(--muted);
-      line-height: 1.55;
-    }
-
-    .dashboard-grid {
+    .flight-columns, .flight-row {
       display: grid;
-      grid-template-columns: repeat(12, minmax(0, 1fr));
-      gap: var(--gap);
+      grid-template-columns: 68px minmax(100px, 1fr) 112px 100px;
+      align-items: center;
+      column-gap: 7px;
       min-width: 0;
     }
 
-    .widget {
-      min-width: 0;
-      min-height: 280px;
-      padding: 20px;
-      border: 1px solid var(--panel-border);
-      border-radius: var(--radius);
-      background: var(--panel);
-    }
+    .flight-columns { min-height: 26px; padding: 0 8px; border-bottom: 1px solid var(--board-line); color: #9da59d; font-size: 8px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+    .flight-project { padding: 6px 8px 5px; border-bottom: 1px solid var(--board-line); background: #101310; color: #c8cec8; font-size: 8px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
+    .flight-row { min-height: 38px; padding: 0 8px; border-bottom: 1px solid var(--board-line-soft); color: inherit; text-decoration: none; font-size: 10px; line-height: 1.1; }
+    .flight-row:nth-of-type(even) { background: #121512; }
+    .flight-row:hover { background: #181d19; }
+    .flight-cell { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .flight-key { color: #fff7d3; font-weight: 900; }
+    .flight-summary { font-weight: 700; }
+    .flight-move { color: #c8c8bc; font-variant-numeric: tabular-nums; overflow: visible; text-overflow: clip; }
+    .flight-status { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border: 1px solid currentColor; padding: 5px 4px 4px; text-align: center; font-size: 8px; font-weight: 950; letter-spacing: .035em; text-transform: uppercase; }
+    .flight-status.todo { color: var(--todo); }
+    .flight-status.progress { color: var(--progress); }
+    .flight-status.review { color: var(--review); }
+    .flight-status.blocked { color: var(--blocked); }
+    .flight-status.done { color: var(--done); }
+    .flight-status.unknown { color: var(--unknown); }
 
-    .widget--tickets {
-      grid-column: span 7;
-    }
-
-    .widget--github {
-      grid-column: span 5;
-    }
-
-    .widget--recent {
-      grid-column: 1 / -1;
-      min-height: 220px;
-    }
-
-    .widget-header {
-      padding-bottom: 16px;
-      border-bottom: 1px solid var(--panel-border);
-    }
-
-    .widget h2 {
-      margin: 0;
-      font-size: 1.05rem;
-      letter-spacing: -0.01em;
-    }
-
-    .widget-placeholder {
-      display: grid;
-      min-height: 190px;
-      place-items: center;
-      padding: 24px 12px;
-      color: var(--muted);
-      text-align: center;
-    }
-
-    .widget--recent .widget-placeholder {
-      min-height: 140px;
-    }
+    .flight-empty { display: grid; min-height: 174px; place-items: center; padding: 18px; color: #9da59d; text-align: center; font-size: 9px; line-height: 1.45; letter-spacing: .04em; text-transform: uppercase; }
+    .unlock-form { width: min(260px, 100%); display: grid; gap: 8px; }
+    .unlock-form label { color: #c8cec8; font-size: 9px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+    .unlock-row { display: flex; min-width: 0; gap: 6px; }
+    .unlock-row input { min-width: 0; flex: 1 1 auto; border: 1px solid #697069; border-radius: 0; padding: 6px 7px; background: #101310; color: var(--board-text); font-family: inherit; font-size: 10px; }
+    .unlock-row button { flex: 0 0 auto; border: 1px solid #777e77; background: transparent; color: var(--board-text); padding: 0 8px; cursor: pointer; font-family: inherit; font-size: 8px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+    .unlock-error { min-height: 1em; color: var(--blocked); font-size: 8px; text-transform: none; letter-spacing: 0; }
 
     @media (max-width: 760px) {
-      .page {
-        width: min(100% - 24px, 1180px);
-        padding-top: 28px;
-      }
+      .page { width: min(100% - 24px, 1180px); padding-top: 28px; }
+      .dashboard-grid { grid-template-columns: 1fr; }
+      .widget--tickets, .widget--github, .widget--recent { grid-column: auto; }
+      .widget { min-height: 220px; }
+      .widget-placeholder, .widget--recent .widget-placeholder { min-height: 130px; }
+    }
 
-      .dashboard-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .widget--tickets,
-      .widget--github,
-      .widget--recent {
-        grid-column: auto;
-      }
-
-      .widget {
-        min-height: 220px;
-      }
-
-      .widget-placeholder,
-      .widget--recent .widget-placeholder {
-        min-height: 130px;
-      }
+    @media (max-width: 470px) {
+      .widget { padding: 14px; }
+      .flight-columns, .flight-row { grid-template-columns: 52px minmax(70px, 1fr) 92px 76px; column-gap: 5px; }
+      .flight-columns, .flight-row { padding-left: 6px; padding-right: 6px; }
+      .flight-columns { font-size: 7px; }
+      .flight-row { min-height: 36px; font-size: 9px; }
+      .flight-move { font-size: 8px; }
+      .flight-status { font-size: 7px; padding-left: 2px; padding-right: 2px; }
     }
   </style>
 </head>
@@ -155,39 +123,229 @@
     <header class="page-header">
       <p class="eyebrow">Homepage Dashboard</p>
       <h1>Flight Control</h1>
-      <p class="subtitle">
-        A lightweight view of current work across tickets and GitHub.
-      </p>
+      <p class="subtitle">A lightweight view of current work across tickets and GitHub.</p>
     </header>
 
     <div class="dashboard-grid" aria-label="Dashboard widgets">
       <section class="widget widget--tickets" aria-labelledby="tickets-title">
-        <header class="widget-header">
-          <h2 id="tickets-title">Ticket Flight Control</h2>
-        </header>
-        <div class="widget-placeholder">
-          <p>Active ticket work will appear here.</p>
+        <header class="widget-header"><h2 id="tickets-title">Ticket Flight Control</h2></header>
+        <div class="flight-board" aria-label="Live Jira ticket flight board">
+          <div class="flight-meta">
+            <div id="flightSource" class="flight-source">Encrypted Jira feed</div>
+            <button id="flightLock" class="flight-action" type="button" hidden>Lock</button>
+          </div>
+          <div class="flight-columns" aria-hidden="true">
+            <div>Key</div><div>Summary</div><div>Last Move</div><div>Status</div>
+          </div>
+          <div id="flightRows">
+            <div class="flight-empty">
+              <form id="unlockForm" class="unlock-form">
+                <label for="unlockPassphrase">Unlock Jira Flight Control</label>
+                <div class="unlock-row">
+                  <input id="unlockPassphrase" type="password" autocomplete="current-password" aria-describedby="unlockError" />
+                  <button type="submit">Unlock</button>
+                </div>
+                <div id="unlockError" class="unlock-error" role="alert"></div>
+              </form>
+            </div>
+          </div>
         </div>
       </section>
 
       <section class="widget widget--github" aria-labelledby="github-title">
-        <header class="widget-header">
-          <h2 id="github-title">GitHub PRs</h2>
-        </header>
-        <div class="widget-placeholder">
-          <p>Open pull requests will appear here.</p>
-        </div>
+        <header class="widget-header"><h2 id="github-title">GitHub PRs</h2></header>
+        <div class="widget-placeholder"><p>Open pull requests will appear here.</p></div>
       </section>
 
       <section class="widget widget--recent" aria-labelledby="recent-title">
-        <header class="widget-header">
-          <h2 id="recent-title">Recently Active</h2>
-        </header>
-        <div class="widget-placeholder">
-          <p>Recently updated tickets and pull requests will appear here.</p>
-        </div>
+        <header class="widget-header"><h2 id="recent-title">Recently Active</h2></header>
+        <div class="widget-placeholder"><p>Recently updated tickets and pull requests will appear here.</p></div>
       </section>
     </div>
   </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const CONFIG_URL = './jira-flight-control.config.json';
+      const rowsEl = document.getElementById('flightRows');
+      const sourceEl = document.getElementById('flightSource');
+      const lockEl = document.getElementById('flightLock');
+      let configPromise;
+
+      const statusInfo = status => {
+        const value = String(status || '').trim();
+        const lower = value.toLowerCase();
+        if (/block|imped/.test(lower)) return { className: 'blocked', rank: 0 };
+        if (/review|approval/.test(lower)) return { className: 'review', rank: 1 };
+        if (/in progress|progress|doing|active|started/.test(lower)) return { className: 'progress', rank: 2 };
+        if (/to do|todo|backlog|ready|open|new/.test(lower)) return { className: 'todo', rank: 3 };
+        if (/done|closed|complete|resolved|finished/.test(lower)) return { className: 'done', rank: 9 };
+        return { className: 'unknown', rank: 4 };
+      };
+
+      const bytesFromBase64 = value => Uint8Array.from(atob(value), char => char.charCodeAt(0));
+
+      async function decryptEnvelope(envelope, passphrase) {
+        const salt = bytesFromBase64(envelope.salt);
+        const iv = bytesFromBase64(envelope.iv);
+        const ciphertext = bytesFromBase64(envelope.ciphertext);
+        const tag = bytesFromBase64(envelope.tag);
+        const combined = new Uint8Array(ciphertext.length + tag.length);
+        combined.set(ciphertext);
+        combined.set(tag, ciphertext.length);
+
+        const keyMaterial = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+        const key = await crypto.subtle.deriveKey(
+          { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: envelope.iterations },
+          keyMaterial,
+          { name: 'AES-GCM', length: 256 },
+          false,
+          ['decrypt']
+        );
+        const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, combined);
+        return JSON.parse(new TextDecoder().decode(plaintext));
+      }
+
+      function formatLastMove(value) {
+        if (!value) return '—';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '—';
+        const day = new Intl.DateTimeFormat(undefined, { day: '2-digit' }).format(date);
+        const month = new Intl.DateTimeFormat(undefined, { month: 'short' }).format(date);
+        const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
+        return `${day} ${month} ${time}`;
+      }
+
+      function formatGenerated(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return 'Live Jira feed';
+        return `Jira · data updated ${formatLastMove(value)}`;
+      }
+
+      function render(payload) {
+        rowsEl.replaceChildren();
+        const grouped = new Map();
+        for (const issue of payload.issues || []) {
+          const key = issue.projectKey || 'OTHER';
+          if (!grouped.has(key)) grouped.set(key, { name: issue.projectName || key, issues: [] });
+          grouped.get(key).issues.push(issue);
+        }
+
+        for (const [, group] of grouped) {
+          const project = document.createElement('div');
+          project.className = 'flight-project';
+          project.textContent = group.name;
+          rowsEl.appendChild(project);
+
+          group.issues
+            .sort((a, b) => statusInfo(a.status).rank - statusInfo(b.status).rank || String(b.lastMove || '').localeCompare(String(a.lastMove || '')) || a.key.localeCompare(b.key))
+            .forEach(issue => {
+              const row = document.createElement('a');
+              row.className = 'flight-row';
+              row.href = issue.url;
+              row.target = '_blank';
+              row.rel = 'noopener noreferrer';
+              row.setAttribute('aria-label', `${issue.key}: ${issue.summary}; last move ${formatLastMove(issue.lastMove)}; status ${issue.status}`);
+
+              const key = document.createElement('div');
+              key.className = 'flight-cell flight-key';
+              key.textContent = issue.key;
+              key.title = issue.key;
+              row.appendChild(key);
+
+              const summary = document.createElement('div');
+              summary.className = 'flight-cell flight-summary';
+              summary.textContent = issue.summary || 'Unavailable';
+              summary.title = issue.summary || 'Unavailable';
+              row.appendChild(summary);
+
+              const move = document.createElement('div');
+              move.className = 'flight-cell flight-move';
+              move.textContent = formatLastMove(issue.lastMove);
+              move.title = issue.lastMove || 'No status transition recorded';
+              row.appendChild(move);
+
+              const info = statusInfo(issue.status);
+              const status = document.createElement('div');
+              status.className = `flight-cell flight-status ${info.className}`;
+              status.textContent = issue.status || 'Unavailable';
+              status.title = issue.status || 'Unavailable';
+              row.appendChild(status);
+
+              rowsEl.appendChild(row);
+            });
+        }
+
+        if (!grouped.size) {
+          const empty = document.createElement('div');
+          empty.className = 'flight-empty';
+          empty.textContent = 'No active Jira tickets in the configured projects.';
+          rowsEl.appendChild(empty);
+        }
+
+        sourceEl.textContent = formatGenerated(payload.generatedAt);
+        lockEl.hidden = false;
+      }
+
+      function renderUnlock(message = '') {
+        rowsEl.innerHTML = '<div class="flight-empty"><form id="unlockForm" class="unlock-form"><label for="unlockPassphrase">Unlock Jira Flight Control</label><div class="unlock-row"><input id="unlockPassphrase" type="password" autocomplete="current-password" aria-describedby="unlockError"><button type="submit">Unlock</button></div><div id="unlockError" class="unlock-error" role="alert"></div></form></div>';
+        document.getElementById('unlockError').textContent = message;
+        document.getElementById('unlockForm').addEventListener('submit', onUnlock);
+        sourceEl.textContent = 'Encrypted Jira feed';
+        lockEl.hidden = true;
+      }
+
+      async function getConfig() {
+        if (!configPromise) {
+          configPromise = fetch(`${CONFIG_URL}?v=${Date.now()}`, { cache: 'no-store' }).then(response => {
+            if (!response.ok) throw new Error(`Config request failed (${response.status})`);
+            return response.json();
+          });
+        }
+        return configPromise;
+      }
+
+      async function unlock(passphrase) {
+        const config = await getConfig();
+        const response = await fetch(`${config.dataUrl}?v=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Jira data is not available yet (${response.status}).`);
+        const envelope = await response.json();
+        const payload = await decryptEnvelope(envelope, passphrase);
+        sessionStorage.setItem('flight-control-passphrase', passphrase);
+        render(payload);
+      }
+
+      async function onUnlock(event) {
+        event.preventDefault();
+        const input = document.getElementById('unlockPassphrase');
+        const error = document.getElementById('unlockError');
+        error.textContent = '';
+        try {
+          await unlock(input.value);
+        } catch (failure) {
+          sessionStorage.removeItem('flight-control-passphrase');
+          error.textContent = failure instanceof Error && failure.message.includes('not available') ? failure.message : 'Unable to unlock Jira data.';
+          input.select();
+        }
+      }
+
+      lockEl.addEventListener('click', () => {
+        sessionStorage.removeItem('flight-control-passphrase');
+        renderUnlock();
+      });
+
+      document.getElementById('unlockForm').addEventListener('submit', onUnlock);
+
+      const saved = sessionStorage.getItem('flight-control-passphrase');
+      if (saved) {
+        unlock(saved).catch(() => {
+          sessionStorage.removeItem('flight-control-passphrase');
+          renderUnlock('Stored unlock key is no longer valid.');
+        });
+      }
+    })();
+  </script>
 </body>
 </html>
