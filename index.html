@@ -50,6 +50,35 @@
         border: 1px solid #ddd;
         border-radius: 12px;
     }
+
+    .dashboard-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 30px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: #111419;
+        color: #f5f7fa;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .dashboard-link:hover {
+        text-decoration: none;
+        background: #1b2128;
+    }
+
+    .dashboard-link .signal {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #8bb8ff;
+        box-shadow: 0 0 10px #8bb8ff;
+    }
 </style>
 
 </head>
@@ -75,6 +104,12 @@
 </p>
 
 </div>
+
+<a class="dashboard-link" href="dashboard/">
+    <span class="signal" aria-hidden="true"></span>
+    <span>Open Flight Control</span>
+    <span aria-hidden="true">→</span>
+</a>
 
 <div class="links">
     <a href="support.html">Support</a> |
