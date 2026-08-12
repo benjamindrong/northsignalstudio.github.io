@@ -1,6 +1,11 @@
 name: Refresh Jira Flight Control
 
 on:
+  pull_request:
+    paths:
+      - "dashboard/jira-flight-control.config.json"
+      - "scripts/refresh-jira-flight-control.mjs"
+      - ".github/workflows/refresh-jira-flight-control.yml"
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
@@ -12,27 +17,57 @@ on:
       - ".github/workflows/refresh-jira-flight-control.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: jira-flight-control-refresh
+  group: jira-flight-control-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  refresh:
+  verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out dashboard source
-        uses: actions/checkout@v4
-
-      - name: Check out encrypted data branch
-        uses: actions/checkout@v4
+      - name: Check out exact source candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: dashboard-data
-          path: _dashboard-data
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
 
       - name: Verify refresh logic
         run: node scripts/refresh-jira-flight-control.mjs --self-test
+
+      - name: Verify live Jira refresh for trusted owner PRs
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.actor == github.repository_owner
+        env:
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
+          OUTPUT_PATH: /tmp/jira-flight-control.enc.json
+          VERIFY_PROJECTS: MYR,LAN
+        run: |
+          node scripts/refresh-jira-flight-control.mjs
+          node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: verify
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out dashboard source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Check out encrypted data branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: dashboard-data
+          path: _dashboard-data
 
       - name: Refresh encrypted Jira snapshot
         env:
