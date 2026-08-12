@@ -33,9 +33,15 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Verify refresh logic
         run: node scripts/refresh-jira-flight-control.mjs --self-test
+
+      - name: Verify candidate diff
+        run: |
+          git fetch --no-tags origin main
+          git diff --check FETCH_HEAD...HEAD
 
       - name: Verify live Jira refresh for trusted owner PRs
         if: >-
@@ -53,7 +59,7 @@ jobs:
           node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
 
   publish:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: verify
     permissions:
       contents: write
@@ -70,20 +76,22 @@ jobs:
           ref: dashboard-data
           path: _dashboard-data
 
-      - name: Refresh encrypted Jira snapshot
+      - name: Refresh and verify encrypted Jira snapshot
         env:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
           PREVIOUS_PATH: _dashboard-data/dashboard/jira-flight-control.enc.json
           OUTPUT_PATH: _dashboard-data/dashboard/jira-flight-control.enc.json
-        run: node scripts/refresh-jira-flight-control.mjs
+        run: |
+          node scripts/refresh-jira-flight-control.mjs
+          node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
 
       - name: Publish changed snapshot
         working-directory: _dashboard-data
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+benjamindrong@users.noreply.github.com"
           git add dashboard/jira-flight-control.enc.json
           if git diff --cached --quiet; then
             echo "No Jira Flight Control changes."
