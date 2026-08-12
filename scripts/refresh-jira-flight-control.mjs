@@ -23,17 +23,31 @@ function buildJql(projects) {
     throw new Error('Config must contain at least one Jira project key.');
   }
   const quoted = projects.map(project => `"${String(project).replaceAll('"', '\\"')}"`).join(', ');
-  return `project in (${quoted}) AND statusCategory != Done ORDER BY project ASC, updated DESC`;
+  return `project in (${quoted}) AND statusCategory != Done AND status != Shelved AND (labels IS EMPTY OR labels NOT IN ("shelved", "validated-not-pursuing")) ORDER BY project ASC, updated DESC`;
+}
+
+function historyTimestamp(created) {
+  if (typeof created === 'number') {
+    const milliseconds = created < 1_000_000_000_000 ? created * 1000 : created;
+    return Number.isFinite(milliseconds) ? milliseconds : NaN;
+  }
+  const parsed = Date.parse(created);
+  return Number.isNaN(parsed) ? NaN : parsed;
 }
 
 export function latestStatusMove(histories) {
   let latest = null;
   for (const history of histories || []) {
-    const hasStatusChange = (history.items || []).some(item => String(item.field || '').toLowerCase() === 'status');
-    if (!hasStatusChange || !history.created) continue;
-    const timestamp = Date.parse(history.created);
+    const hasStatusChange = (history.items || []).some(item =>
+      String(item.fieldId || item.field || '').toLowerCase() === 'status'
+      || String(item.field || '').toLowerCase() === 'status'
+    );
+    if (!hasStatusChange || history.created == null) continue;
+    const timestamp = historyTimestamp(history.created);
     if (Number.isNaN(timestamp)) continue;
-    if (!latest || timestamp > latest.timestamp) latest = { timestamp, value: history.created };
+    if (!latest || timestamp > latest.timestamp) {
+      latest = { timestamp, value: new Date(timestamp).toISOString() };
+    }
   }
   return latest?.value || null;
 }
@@ -62,7 +76,7 @@ async function searchIssues(baseUrl, authHeader, projects, maxIssues) {
     const body = {
       jql: buildJql(projects),
       maxResults: Math.min(100, Math.max(1, maxIssues - issues.length)),
-      fields: ['summary', 'status', 'project', 'created']
+      fields: ['summary', 'status', 'project']
     };
     if (nextPageToken) body.nextPageToken = nextPageToken;
     const page = await jiraFetch(`${baseUrl}/rest/api/3/search/jql`, {
@@ -75,30 +89,34 @@ async function searchIssues(baseUrl, authHeader, projects, maxIssues) {
   return issues.slice(0, maxIssues);
 }
 
-async function fetchAllChangelog(baseUrl, authHeader, issueKey) {
-  const histories = [];
-  let startAt = 0;
-  while (true) {
-    const page = await jiraFetch(`${baseUrl}/rest/api/3/issue/${encodeURIComponent(issueKey)}/changelog?startAt=${startAt}&maxResults=100`, {}, authHeader);
-    histories.push(...(page.values || []));
-    startAt += page.maxResults || (page.values || []).length;
-    if (startAt >= (page.total || histories.length) || !(page.values || []).length) break;
-  }
-  return histories;
-}
+async function fetchStatusChangelogs(baseUrl, authHeader, issues) {
+  if (!issues.length) return new Map();
 
-async function mapWithConcurrency(values, concurrency, mapper) {
-  const results = new Array(values.length);
-  let cursor = 0;
-  async function worker() {
-    while (true) {
-      const index = cursor++;
-      if (index >= values.length) return;
-      results[index] = await mapper(values[index], index);
+  const historiesByIssueId = new Map();
+  let nextPageToken;
+  do {
+    const body = {
+      issueIdsOrKeys: issues.map(issue => issue.id || issue.key),
+      fieldIds: ['status'],
+      maxResults: 1000
+    };
+    if (nextPageToken) body.nextPageToken = nextPageToken;
+
+    const page = await jiraFetch(`${baseUrl}/rest/api/3/changelog/bulkfetch`, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    }, authHeader);
+
+    for (const issueLog of page.issueChangeLogs || []) {
+      const current = historiesByIssueId.get(String(issueLog.issueId)) || [];
+      current.push(...(issueLog.changeHistories || []));
+      historiesByIssueId.set(String(issueLog.issueId), current);
     }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, values.length || 1) }, worker));
-  return results;
+
+    nextPageToken = page.nextPageToken;
+  } while (nextPageToken);
+
+  return historiesByIssueId;
 }
 
 function contentHash(payload) {
@@ -152,14 +170,17 @@ async function readPreviousEnvelope(filePath) {
 async function runSelfTest() {
   const histories = [
     { created: '2026-08-11T10:00:00.000-0500', items: [{ field: 'summary' }] },
-    { created: '2026-08-11T11:00:00.000-0500', items: [{ field: 'status', fromString: 'To Do', toString: 'Ready' }] },
-    { created: '2026-08-11T12:34:56.000-0500', items: [{ field: 'status', fromString: 'Ready', toString: 'In Progress' }] }
+    { created: '2026-08-11T11:00:00.000-0500', items: [{ field: 'status', fieldId: 'status', fromString: 'To Do', toString: 'Ready' }] },
+    { created: 1786473296, items: [{ field: 'status', fieldId: 'status', fromString: 'Ready', toString: 'In Progress' }] }
   ];
-  if (latestStatusMove(histories) !== '2026-08-11T12:34:56.000-0500') throw new Error('latestStatusMove self-test failed');
+  if (latestStatusMove(histories) !== '2026-08-11T18:34:56.000Z') {
+    throw new Error(`latestStatusMove self-test failed: ${latestStatusMove(histories)}`);
+  }
   const payload = { version: 1, generatedAt: '2026-08-12T12:00:00.000Z', projects: ['MYR'], issues: [{ key: 'MYR-1' }] };
   const envelope = encryptPayload(payload, 'correct horse battery staple');
   if (JSON.stringify(decryptPayload(envelope, 'correct horse battery staple')) !== JSON.stringify(payload)) throw new Error('encryption self-test failed');
-  if (!buildJql(['MYR', 'HOME']).includes('project in ("MYR", "HOME")')) throw new Error('JQL self-test failed');
+  const jql = buildJql(['MYR', 'HOME']);
+  if (!jql.includes('project in ("MYR", "HOME")') || !jql.includes('status != Shelved')) throw new Error('JQL self-test failed');
   console.log('refresh-jira-flight-control self-test passed');
 }
 
@@ -178,18 +199,16 @@ async function main() {
   const maxIssues = Number.isFinite(Number(config.maxIssues)) ? Number(config.maxIssues) : 100;
 
   const issues = await searchIssues(baseUrl, authHeader, config.projects, maxIssues);
-  const mapped = await mapWithConcurrency(issues, 5, async issue => {
-    const histories = await fetchAllChangelog(baseUrl, authHeader, issue.key);
-    return {
-      key: issue.key,
-      summary: issue.fields?.summary || '',
-      status: issue.fields?.status?.name || '',
-      projectKey: issue.fields?.project?.key || '',
-      projectName: issue.fields?.project?.name || issue.fields?.project?.key || '',
-      lastMove: latestStatusMove(histories),
-      url: `${baseUrl}/browse/${encodeURIComponent(issue.key)}`
-    };
-  });
+  const historiesByIssueId = await fetchStatusChangelogs(baseUrl, authHeader, issues);
+  const mapped = issues.map(issue => ({
+    key: issue.key,
+    summary: issue.fields?.summary || '',
+    status: issue.fields?.status?.name || '',
+    projectKey: issue.fields?.project?.key || '',
+    projectName: issue.fields?.project?.name || issue.fields?.project?.key || '',
+    lastMove: latestStatusMove(historiesByIssueId.get(String(issue.id)) || []),
+    url: `${baseUrl}/browse/${encodeURIComponent(issue.key)}`
+  }));
 
   const payload = {
     version: 1,
@@ -200,12 +219,9 @@ async function main() {
 
   const previous = await readPreviousEnvelope(previousPath);
   const hash = contentHash(payload);
-  let envelope;
-  if (previous?.contentSha256 === hash) {
-    envelope = previous;
-  } else {
-    envelope = encryptPayload(payload, passphrase);
-  }
+  const envelope = previous?.contentSha256 === hash
+    ? previous
+    : encryptPayload(payload, passphrase);
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
   await fs.writeFile(outputPath, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
