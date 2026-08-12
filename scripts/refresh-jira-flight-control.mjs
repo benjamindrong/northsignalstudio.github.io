@@ -158,6 +158,22 @@ export function decryptPayload(envelope, passphrase) {
   return JSON.parse(plaintext.toString('utf8'));
 }
 
+function canReuseEnvelope(previous, expectedHash, passphrase) {
+  if (
+    previous?.version !== 1
+    || previous?.cipher !== 'AES-256-GCM'
+    || previous?.kdf !== 'PBKDF2-SHA256'
+    || previous?.iterations !== PBKDF2_ITERATIONS
+    || previous?.contentSha256 !== expectedHash
+  ) return false;
+
+  try {
+    return contentHash(decryptPayload(previous, passphrase)) === expectedHash;
+  } catch {
+    return false;
+  }
+}
+
 async function readJson(filePath) {
   return JSON.parse(await fs.readFile(filePath, 'utf8'));
 }
@@ -176,16 +192,59 @@ async function runSelfTest() {
   if (latestStatusMove(histories) !== '2026-08-11T18:34:56.000Z') {
     throw new Error(`latestStatusMove self-test failed: ${latestStatusMove(histories)}`);
   }
+
   const payload = { version: 1, generatedAt: '2026-08-12T12:00:00.000Z', projects: ['MYR'], issues: [{ key: 'MYR-1' }] };
-  const envelope = encryptPayload(payload, 'correct horse battery staple');
-  if (JSON.stringify(decryptPayload(envelope, 'correct horse battery staple')) !== JSON.stringify(payload)) throw new Error('encryption self-test failed');
+  const passphrase = 'correct horse battery staple';
+  const envelope = encryptPayload(payload, passphrase);
+  if (JSON.stringify(decryptPayload(envelope, passphrase)) !== JSON.stringify(payload)) throw new Error('encryption self-test failed');
+
+  const hash = contentHash(payload);
+  if (!canReuseEnvelope(envelope, hash, passphrase)) throw new Error('same-key envelope reuse self-test failed');
+  if (canReuseEnvelope(envelope, hash, 'rotated dashboard passphrase')) throw new Error('passphrase rotation self-test failed');
+
   const jql = buildJql(['MYR', 'HOME']);
   if (!jql.includes('project in ("MYR", "HOME")') || !jql.includes('status != Shelved')) throw new Error('JQL self-test failed');
   console.log('refresh-jira-flight-control self-test passed');
 }
 
+async function verifyOutput(filePath) {
+  if (!filePath) throw new Error('--verify-output requires an encrypted snapshot path.');
+  const configPath = process.env.CONFIG_PATH || DEFAULT_CONFIG;
+  const config = await readJson(configPath);
+  const baseUrl = normalizeBaseUrl(config.jiraBaseUrl);
+  const passphrase = requiredEnv('DASHBOARD_DATA_PASSPHRASE');
+  const payload = decryptPayload(await readJson(filePath), passphrase);
+
+  if (JSON.stringify(payload.projects) !== JSON.stringify(config.projects)) {
+    throw new Error('Encrypted snapshot project configuration does not match the dashboard config.');
+  }
+  if (!Array.isArray(payload.issues)) throw new Error('Encrypted snapshot issues must be an array.');
+
+  const observedProjects = new Set();
+  for (const issue of payload.issues) {
+    for (const field of ['key', 'summary', 'status', 'projectKey', 'projectName', 'url']) {
+      if (typeof issue[field] !== 'string') throw new Error(`Encrypted snapshot issue field ${field} must be a string.`);
+    }
+    if (!issue.url.startsWith(`${baseUrl}/browse/`)) throw new Error(`Unexpected Jira issue URL for ${issue.key}.`);
+    if (issue.lastMove != null && Number.isNaN(Date.parse(issue.lastMove))) throw new Error(`Invalid LAST MOVE value for ${issue.key}.`);
+    observedProjects.add(issue.projectKey);
+  }
+
+  const requiredProjects = String(process.env.VERIFY_PROJECTS || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+  for (const project of requiredProjects) {
+    if (!observedProjects.has(project)) throw new Error(`Live snapshot is missing required verification project ${project}.`);
+  }
+
+  console.log(`Verified encrypted Jira snapshot with ${payload.issues.length} issues across ${[...observedProjects].sort().join(', ') || 'no active projects'}.`);
+}
+
 async function main() {
   if (process.argv.includes('--self-test')) return runSelfTest();
+  const verifyIndex = process.argv.indexOf('--verify-output');
+  if (verifyIndex >= 0) return verifyOutput(process.argv[verifyIndex + 1]);
 
   const configPath = process.env.CONFIG_PATH || DEFAULT_CONFIG;
   const outputPath = process.env.OUTPUT_PATH || DEFAULT_OUTPUT;
@@ -219,7 +278,7 @@ async function main() {
 
   const previous = await readPreviousEnvelope(previousPath);
   const hash = contentHash(payload);
-  const envelope = previous?.contentSha256 === hash
+  const envelope = canReuseEnvelope(previous, hash, passphrase)
     ? previous
     : encryptPayload(payload, passphrase);
 
