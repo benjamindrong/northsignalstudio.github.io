@@ -231,64 +231,96 @@
         return `Jira · data updated ${formatLastMove(value)}`;
       }
 
+      function appendProjectHeader(label) {
+        const project = document.createElement('div');
+        project.className = 'flight-project';
+        project.textContent = label;
+        rowsEl.appendChild(project);
+      }
+
+      function appendIssueRow(issue) {
+        const row = document.createElement('a');
+        row.className = 'flight-row';
+        row.href = issue.url;
+        row.target = '_blank';
+        row.rel = 'noopener noreferrer';
+        row.setAttribute('aria-label', `${issue.key}: ${issue.summary}; last move ${formatLastMove(issue.lastMove)}; status ${issue.status}`);
+
+        const key = document.createElement('div');
+        key.className = 'flight-cell flight-key';
+        key.textContent = issue.key;
+        key.title = issue.key;
+        row.appendChild(key);
+
+        const summary = document.createElement('div');
+        summary.className = 'flight-cell flight-summary';
+        summary.textContent = issue.summary || 'Unavailable';
+        summary.title = issue.summary || 'Unavailable';
+        row.appendChild(summary);
+
+        const move = document.createElement('div');
+        move.className = 'flight-cell flight-move';
+        move.textContent = formatLastMove(issue.lastMove);
+        move.title = issue.lastMove || 'No status transition recorded';
+        row.appendChild(move);
+
+        const info = statusInfo(issue.status);
+        const status = document.createElement('div');
+        status.className = `flight-cell flight-status ${info.className}`;
+        status.textContent = issue.status || 'Unavailable';
+        status.title = issue.status || 'Unavailable';
+        row.appendChild(status);
+
+        rowsEl.appendChild(row);
+      }
+
       function render(payload) {
         rowsEl.replaceChildren();
-        const grouped = new Map();
+        const activeByProject = new Map();
+        const doneByProject = new Map();
+        const projectNames = new Map();
+
         for (const issue of payload.issues || []) {
           const key = issue.projectKey || 'OTHER';
-          if (!grouped.has(key)) grouped.set(key, { name: issue.projectName || key, issues: [] });
-          grouped.get(key).issues.push(issue);
+          projectNames.set(key, issue.projectName || key);
+          const target = issue.statusCategory === 'done' ? doneByProject : activeByProject;
+          if (!target.has(key)) target.set(key, []);
+          target.get(key).push(issue);
         }
 
-        for (const [, group] of grouped) {
-          const project = document.createElement('div');
-          project.className = 'flight-project';
-          project.textContent = group.name;
-          rowsEl.appendChild(project);
+        const discoveredKeys = [...new Set([...activeByProject.keys(), ...doneByProject.keys()])];
+        const allKeys = [...new Set([...(payload.projects || []), ...discoveredKeys])];
+        const projectOrder = [...allKeys.filter(key => key !== 'LAN'), ...allKeys.filter(key => key === 'LAN')];
 
-          group.issues
+        let renderedCount = 0;
+        for (const key of projectOrder) {
+          const issues = activeByProject.get(key) || [];
+          if (!issues.length) continue;
+          appendProjectHeader(projectNames.get(key) || key);
+          issues
             .sort((a, b) => statusInfo(a.status).rank - statusInfo(b.status).rank || String(b.lastMove || '').localeCompare(String(a.lastMove || '')) || a.key.localeCompare(b.key))
             .forEach(issue => {
-              const row = document.createElement('a');
-              row.className = 'flight-row';
-              row.href = issue.url;
-              row.target = '_blank';
-              row.rel = 'noopener noreferrer';
-              row.setAttribute('aria-label', `${issue.key}: ${issue.summary}; last move ${formatLastMove(issue.lastMove)}; status ${issue.status}`);
-
-              const key = document.createElement('div');
-              key.className = 'flight-cell flight-key';
-              key.textContent = issue.key;
-              key.title = issue.key;
-              row.appendChild(key);
-
-              const summary = document.createElement('div');
-              summary.className = 'flight-cell flight-summary';
-              summary.textContent = issue.summary || 'Unavailable';
-              summary.title = issue.summary || 'Unavailable';
-              row.appendChild(summary);
-
-              const move = document.createElement('div');
-              move.className = 'flight-cell flight-move';
-              move.textContent = formatLastMove(issue.lastMove);
-              move.title = issue.lastMove || 'No status transition recorded';
-              row.appendChild(move);
-
-              const info = statusInfo(issue.status);
-              const status = document.createElement('div');
-              status.className = `flight-cell flight-status ${info.className}`;
-              status.textContent = issue.status || 'Unavailable';
-              status.title = issue.status || 'Unavailable';
-              row.appendChild(status);
-
-              rowsEl.appendChild(row);
+              appendIssueRow(issue);
+              renderedCount += 1;
             });
         }
 
-        if (!grouped.size) {
+        for (const key of projectOrder) {
+          const issues = doneByProject.get(key) || [];
+          if (!issues.length) continue;
+          appendProjectHeader(`${projectNames.get(key) || key} · Recently Done`);
+          issues
+            .sort((a, b) => String(b.lastMove || '').localeCompare(String(a.lastMove || '')) || a.key.localeCompare(b.key))
+            .forEach(issue => {
+              appendIssueRow(issue);
+              renderedCount += 1;
+            });
+        }
+
+        if (!renderedCount) {
           const empty = document.createElement('div');
           empty.className = 'flight-empty';
-          empty.textContent = 'No active Jira tickets in the configured projects.';
+          empty.textContent = 'No Jira tickets match the Flight Control filters.';
           rowsEl.appendChild(empty);
         }
 
