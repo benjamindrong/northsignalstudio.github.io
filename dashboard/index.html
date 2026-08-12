@@ -42,10 +42,10 @@
     .subtitle { max-width: 680px; margin: 12px 0 0; color: var(--muted); line-height: 1.55; }
 
     .dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gap); min-width: 0; }
-    .widget { min-width: 0; min-height: 280px; padding: 20px; border: 1px solid var(--panel-border); border-radius: var(--radius); background: var(--panel); }
-    .widget--tickets { grid-column: span 7; height: 280px; display: flex; flex-direction: column; }
+    .widget { min-width: 0; min-height: 560px; padding: 20px; border: 1px solid var(--panel-border); border-radius: var(--radius); background: var(--panel); }
+    .widget--tickets { grid-column: span 7; height: 560px; display: flex; flex-direction: column; }
     .widget--github { grid-column: span 5; }
-    .widget--recent { grid-column: 1 / -1; min-height: 220px; }
+    .widget--recent { grid-column: 1 / -1; min-height: 440px; }
     .widget-header { padding-bottom: 16px; border-bottom: 1px solid var(--panel-border); }
     .widget h2 { margin: 0; font-size: 1.05rem; letter-spacing: -.01em; }
     .widget-placeholder { display: grid; min-height: 190px; place-items: center; padding: 24px 12px; color: var(--muted); text-align: center; }
@@ -109,8 +109,8 @@
       .page { width: min(100% - 24px, 1180px); padding-top: 28px; }
       .dashboard-grid { grid-template-columns: 1fr; }
       .widget--tickets, .widget--github, .widget--recent { grid-column: auto; }
-      .widget { min-height: 220px; }
-      .widget--tickets { height: 220px; }
+      .widget { min-height: 440px; }
+      .widget--tickets { height: 440px; }
       .widget-placeholder, .widget--recent .widget-placeholder { min-height: 130px; }
     }
 
