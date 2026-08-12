@@ -43,7 +43,7 @@
 
     .dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gap); min-width: 0; }
     .widget { min-width: 0; min-height: 280px; padding: 20px; border: 1px solid var(--panel-border); border-radius: var(--radius); background: var(--panel); }
-    .widget--tickets { grid-column: span 7; }
+    .widget--tickets { grid-column: span 7; height: 280px; display: flex; flex-direction: column; }
     .widget--github { grid-column: span 5; }
     .widget--recent { grid-column: 1 / -1; min-height: 220px; }
     .widget-header { padding-bottom: 16px; border-bottom: 1px solid var(--panel-border); }
@@ -54,6 +54,10 @@
     .flight-board {
       margin-top: 16px;
       min-width: 0;
+      min-height: 0;
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
       border: 1px solid var(--board-line);
       background: var(--board-bg);
@@ -75,6 +79,8 @@
     }
 
     .flight-columns { min-height: 26px; padding: 0 8px; border-bottom: 1px solid var(--board-line); color: #9da59d; font-size: 8px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+    #flightRows { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
+    #flightRows > .flight-empty { min-height: 100%; }
     .flight-project { padding: 6px 8px 5px; border-bottom: 1px solid var(--board-line); background: #101310; color: #c8cec8; font-size: 8px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
     .flight-row { min-height: 38px; padding: 0 8px; border-bottom: 1px solid var(--board-line-soft); color: inherit; text-decoration: none; font-size: 10px; line-height: 1.1; }
     .flight-row:nth-of-type(even) { background: #121512; }
@@ -104,6 +110,7 @@
       .dashboard-grid { grid-template-columns: 1fr; }
       .widget--tickets, .widget--github, .widget--recent { grid-column: auto; }
       .widget { min-height: 220px; }
+      .widget--tickets { height: 220px; }
       .widget-placeholder, .widget--recent .widget-placeholder { min-height: 130px; }
     }
 
