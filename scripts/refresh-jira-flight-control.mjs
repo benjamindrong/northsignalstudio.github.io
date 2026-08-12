@@ -23,7 +23,7 @@ function buildJql(projects) {
     throw new Error('Config must contain at least one Jira project key.');
   }
   const quoted = projects.map(project => `"${String(project).replaceAll('"', '\\"')}"`).join(', ');
-  return `project in (${quoted}) AND statusCategory != Done AND status != Shelved AND (labels IS EMPTY OR labels NOT IN ("shelved", "validated-not-pursuing")) ORDER BY project ASC, updated DESC`;
+  return `project in (${quoted}) AND status != Shelved AND (labels IS EMPTY OR labels NOT IN ("shelved", "validated-not-pursuing")) AND ((statusCategory != Done AND status NOT IN ("To Do", "Backlog", "Ready", "New")) OR (statusCategory = Done AND statusCategoryChangedDate >= -7d)) ORDER BY project ASC, updated DESC`;
 }
 
 function historyTimestamp(created) {
@@ -203,7 +203,13 @@ async function runSelfTest() {
   if (canReuseEnvelope(envelope, hash, 'rotated dashboard passphrase')) throw new Error('passphrase rotation self-test failed');
 
   const jql = buildJql(['MYR', 'HOME']);
-  if (!jql.includes('project in ("MYR", "HOME")') || !jql.includes('status != Shelved')) throw new Error('JQL self-test failed');
+  if (
+    !jql.includes('project in ("MYR", "HOME")')
+    || !jql.includes('status != Shelved')
+    || !jql.includes('status NOT IN ("To Do", "Backlog", "Ready", "New")')
+    || !jql.includes('statusCategory = Done AND statusCategoryChangedDate >= -7d')
+    || jql.includes('"Open"')
+  ) throw new Error('JQL self-test failed');
   console.log('refresh-jira-flight-control self-test passed');
 }
 
