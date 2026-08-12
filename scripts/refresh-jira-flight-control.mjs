@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const DEFAULT_CONFIG = 'dashboard/jira-flight-control.config.json';
 const DEFAULT_OUTPUT = 'dashboard/jira-flight-control.enc.json';
 const PBKDF2_ITERATIONS = 250_000;
+const RECENT_DONE_PER_PROJECT = 3;
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -18,12 +19,24 @@ function normalizeBaseUrl(value) {
   return String(value || '').replace(/\/+$/, '');
 }
 
-function buildJql(projects) {
+function quoteJqlValue(value) {
+  return `"${String(value).replaceAll('"', '\\"')}"`;
+}
+
+function exclusionJql() {
+  return 'status != Shelved AND (labels IS EMPTY OR labels NOT IN ("shelved", "validated-not-pursuing"))';
+}
+
+function buildActiveJql(projects) {
   if (!Array.isArray(projects) || projects.length === 0) {
     throw new Error('Config must contain at least one Jira project key.');
   }
-  const quoted = projects.map(project => `"${String(project).replaceAll('"', '\\"')}"`).join(', ');
-  return `project in (${quoted}) AND status != Shelved AND (labels IS EMPTY OR labels NOT IN ("shelved", "validated-not-pursuing")) AND ((statusCategory != Done AND status NOT IN ("To Do", "Backlog", "Ready", "New")) OR (statusCategory = Done AND statusCategoryChangedDate >= -7d)) ORDER BY project ASC, updated DESC`;
+  const quoted = projects.map(quoteJqlValue).join(', ');
+  return `project in (${quoted}) AND ${exclusionJql()} AND statusCategory != Done AND status NOT IN ("To Do", "Backlog", "Ready", "New") ORDER BY project ASC, updated DESC`;
+}
+
+function buildDoneJql(project) {
+  return `project = ${quoteJqlValue(project)} AND ${exclusionJql()} AND statusCategory = Done ORDER BY statusCategoryChangedDate DESC`;
 }
 
 function historyTimestamp(created) {
@@ -69,12 +82,12 @@ async function jiraFetch(url, options, authHeader) {
   return response.json();
 }
 
-async function searchIssues(baseUrl, authHeader, projects, maxIssues) {
+async function searchJqlIssues(baseUrl, authHeader, jql, maxIssues) {
   const issues = [];
   let nextPageToken;
   do {
     const body = {
-      jql: buildJql(projects),
+      jql,
       maxResults: Math.min(100, Math.max(1, maxIssues - issues.length)),
       fields: ['summary', 'status', 'project']
     };
@@ -87,6 +100,20 @@ async function searchIssues(baseUrl, authHeader, projects, maxIssues) {
     nextPageToken = page.nextPageToken;
   } while (nextPageToken && issues.length < maxIssues);
   return issues.slice(0, maxIssues);
+}
+
+async function searchIssues(baseUrl, authHeader, projects, maxIssues) {
+  const active = await searchJqlIssues(baseUrl, authHeader, buildActiveJql(projects), maxIssues);
+  const recentDone = [];
+  for (const project of projects) {
+    recentDone.push(...await searchJqlIssues(
+      baseUrl,
+      authHeader,
+      buildDoneJql(project),
+      RECENT_DONE_PER_PROJECT
+    ));
+  }
+  return [...active, ...recentDone];
 }
 
 async function fetchStatusChangelogs(baseUrl, authHeader, issues) {
@@ -202,14 +229,22 @@ async function runSelfTest() {
   if (!canReuseEnvelope(envelope, hash, passphrase)) throw new Error('same-key envelope reuse self-test failed');
   if (canReuseEnvelope(envelope, hash, 'rotated dashboard passphrase')) throw new Error('passphrase rotation self-test failed');
 
-  const jql = buildJql(['MYR', 'HOME']);
+  const activeJql = buildActiveJql(['MYR', 'HOME']);
   if (
-    !jql.includes('project in ("MYR", "HOME")')
-    || !jql.includes('status != Shelved')
-    || !jql.includes('status NOT IN ("To Do", "Backlog", "Ready", "New")')
-    || !jql.includes('statusCategory = Done AND statusCategoryChangedDate >= -7d')
-    || jql.includes('"Open"')
-  ) throw new Error('JQL self-test failed');
+    !activeJql.includes('project in ("MYR", "HOME")')
+    || !activeJql.includes('status != Shelved')
+    || !activeJql.includes('statusCategory != Done')
+    || !activeJql.includes('status NOT IN ("To Do", "Backlog", "Ready", "New")')
+    || activeJql.includes('"Open"')
+  ) throw new Error('active JQL self-test failed');
+
+  const doneJql = buildDoneJql('LAN');
+  if (
+    !doneJql.includes('project = "LAN"')
+    || !doneJql.includes('statusCategory = Done')
+    || !doneJql.includes('ORDER BY statusCategoryChangedDate DESC')
+    || doneJql.includes('-7d')
+  ) throw new Error('Done JQL self-test failed');
   console.log('refresh-jira-flight-control self-test passed');
 }
 
@@ -227,12 +262,18 @@ async function verifyOutput(filePath) {
   if (!Array.isArray(payload.issues)) throw new Error('Encrypted snapshot issues must be an array.');
 
   const observedProjects = new Set();
+  const doneCountByProject = new Map();
   for (const issue of payload.issues) {
-    for (const field of ['key', 'summary', 'status', 'projectKey', 'projectName', 'url']) {
+    for (const field of ['key', 'summary', 'status', 'statusCategory', 'projectKey', 'projectName', 'url']) {
       if (typeof issue[field] !== 'string') throw new Error(`Encrypted snapshot issue field ${field} must be a string.`);
     }
     if (!issue.url.startsWith(`${baseUrl}/browse/`)) throw new Error(`Unexpected Jira issue URL for ${issue.key}.`);
     if (issue.lastMove != null && Number.isNaN(Date.parse(issue.lastMove))) throw new Error(`Invalid LAST MOVE value for ${issue.key}.`);
+    if (issue.statusCategory === 'done') {
+      const count = (doneCountByProject.get(issue.projectKey) || 0) + 1;
+      doneCountByProject.set(issue.projectKey, count);
+      if (count > RECENT_DONE_PER_PROJECT) throw new Error(`Snapshot contains more than ${RECENT_DONE_PER_PROJECT} Done issues for ${issue.projectKey}.`);
+    }
     observedProjects.add(issue.projectKey);
   }
 
@@ -269,6 +310,7 @@ async function main() {
     key: issue.key,
     summary: issue.fields?.summary || '',
     status: issue.fields?.status?.name || '',
+    statusCategory: issue.fields?.status?.statusCategory?.key || '',
     projectKey: issue.fields?.project?.key || '',
     projectName: issue.fields?.project?.name || issue.fields?.project?.key || '',
     lastMove: latestStatusMove(historiesByIssueId.get(String(issue.id)) || []),
