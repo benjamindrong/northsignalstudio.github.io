@@ -227,6 +227,7 @@ async function verifyOutput(filePath) {
 
   if (JSON.stringify(payload.repositories) !== JSON.stringify(repositories)) throw new Error('Encrypted snapshot repository configuration does not match the effective configuration.');
   if (!Array.isArray(payload.pullRequests)) throw new Error('Encrypted snapshot pullRequests must be an array.');
+  const observedRepositories = new Set();
   for (const pull of payload.pullRequests) {
     for (const field of ['repository', 'title', 'updatedAt', 'url', 'state', 'stateClass']) {
       if (typeof pull[field] !== 'string') throw new Error(`Encrypted snapshot PR field ${field} must be a string.`);
@@ -236,8 +237,14 @@ async function verifyOutput(filePath) {
     if (!repositories.includes(pull.repository)) throw new Error(`Snapshot contains unconfigured repository ${pull.repository}.`);
     if (!pull.url.startsWith(`https://github.com/${pull.repository}/pull/`)) throw new Error(`Unexpected GitHub PR URL for ${pull.repository}#${pull.number}.`);
     if (Number.isNaN(Date.parse(pull.updatedAt))) throw new Error(`Invalid updatedAt value for ${pull.repository}#${pull.number}.`);
+    observedRepositories.add(pull.repository);
   }
-  console.log(`Verified encrypted GitHub PR snapshot with ${payload.pullRequests.length} open PRs across ${repositories.length} configured repositories.`);
+
+  const minimumOpenRepositories = Number(process.env.VERIFY_OPEN_REPOSITORIES || 0);
+  if (Number.isFinite(minimumOpenRepositories) && minimumOpenRepositories > 0 && observedRepositories.size < minimumOpenRepositories) {
+    throw new Error(`Live snapshot contains open PRs from ${observedRepositories.size} repositories; expected at least ${minimumOpenRepositories}.`);
+  }
+  console.log(`Verified encrypted GitHub PR snapshot with ${payload.pullRequests.length} open PRs across ${observedRepositories.size} repositories (${repositories.length} configured).`);
 }
 
 async function main() {
