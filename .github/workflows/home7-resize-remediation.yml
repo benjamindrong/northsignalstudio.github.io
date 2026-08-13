@@ -1,0 +1,127 @@
+name: HOME-7 Resize Remediation
+
+on:
+  push:
+    branches:
+      - HOME-7-Make-dashboard-resize-to-fit-browser-window
+    paths:
+      - ".github/workflows/home7-resize-remediation.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact HOME-7 branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: HOME-7-Make-dashboard-resize-to-fit-browser-window
+          fetch-depth: 0
+
+      - name: Verify reviewed starting state
+        run: |
+          test "$(git rev-parse HEAD^)" = "50ca93848a9c456db3f28f60fc120b1325f789ce"
+
+      - name: Apply narrow breakpoint remediation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('dashboard/index.html')
+          text = path.read_text()
+          replacements = {
+              '@media (min-width: 761px) and (min-height: 640px)': '@media (min-width: 860px) and (min-height: 640px)',
+              '@media (max-width: 760px)': '@media (max-width: 859px)',
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected exactly one occurrence of {old!r}')
+              text = text.replace(old, new)
+          path.write_text(text)
+          PY
+
+      - name: Verify rendered resize behavior
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import html
+          import json
+          import re
+          import shutil
+          import subprocess
+          import tempfile
+
+          chrome = next((p for p in ('google-chrome', 'chromium', 'chromium-browser') if shutil.which(p)), None)
+          if not chrome:
+              raise SystemExit('Chrome/Chromium is unavailable on the runner')
+
+          source = Path('dashboard/index.html').read_text()
+          probe = '''<script>
+          (() => {
+            const flight = document.querySelector('.flight-columns');
+            const tickets = document.querySelector('.widget--tickets');
+            const github = document.querySelector('.widget--github');
+            const data = {
+              innerWidth: window.innerWidth,
+              innerHeight: window.innerHeight,
+              documentScrollWidth: document.documentElement.scrollWidth,
+              documentScrollHeight: document.documentElement.scrollHeight,
+              flightClientWidth: flight.clientWidth,
+              flightScrollWidth: flight.scrollWidth,
+              ticketsTop: tickets.getBoundingClientRect().top,
+              githubTop: github.getBoundingClientRect().top,
+              ticketsLeft: tickets.getBoundingClientRect().left,
+              githubLeft: github.getBoundingClientRect().left,
+              ticketsWidth: tickets.getBoundingClientRect().width,
+              githubWidth: github.getBoundingClientRect().width
+            };
+            const pre = document.createElement('pre');
+            pre.id = 'home7-metrics';
+            pre.textContent = JSON.stringify(data);
+            document.body.appendChild(pre);
+          })();
+          </script>'''
+          if '</body>' not in source:
+              raise SystemExit('dashboard source has no body terminator')
+          instrumented = source.replace('</body>', probe + '\n</body>', 1)
+
+          with tempfile.TemporaryDirectory() as tmp:
+              page = Path(tmp) / 'index.html'
+              page.write_text(instrumented)
+              for width in (800, 859, 860, 1024, 1440):
+                  proc = subprocess.run([
+                      chrome, '--headless=new', '--no-sandbox', '--disable-gpu',
+                      f'--window-size={width},900', '--dump-dom', page.as_uri()
+                  ], check=True, capture_output=True, text=True)
+                  match = re.search(r'<pre id="home7-metrics">(.*?)</pre>', proc.stdout, re.S)
+                  if not match:
+                      raise SystemExit(f'metrics missing at width {width}')
+                  metrics = json.loads(html.unescape(match.group(1)))
+                  if metrics['documentScrollWidth'] > metrics['innerWidth']:
+                      raise SystemExit(f'page horizontally overflows at {width}px: {metrics}')
+                  if metrics['flightScrollWidth'] > metrics['flightClientWidth']:
+                      raise SystemExit(f'Flight Control clips at {width}px: {metrics}')
+                  stacked = abs(metrics['ticketsTop'] - metrics['githubTop']) > 1
+                  if width <= 859 and not stacked:
+                      raise SystemExit(f'widgets should stack at {width}px: {metrics}')
+                  if width >= 860 and stacked:
+                      raise SystemExit(f'widgets should share the top row at {width}px: {metrics}')
+                  if width >= 860 and metrics['documentScrollHeight'] > metrics['innerHeight']:
+                      raise SystemExit(f'desktop dashboard should fit viewport height at {width}px: {metrics}')
+                  print(width, metrics)
+          PY
+
+      - name: Verify existing dashboard behavior
+        run: |
+          node scripts/refresh-github-prs.mjs --self-test
+          git diff --check
+
+      - name: Commit remediation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dashboard/index.html
+          git commit -m "HOME-7 Prevent narrow desktop clipping"
+          git push origin HEAD:HOME-7-Make-dashboard-resize-to-fit-browser-window
