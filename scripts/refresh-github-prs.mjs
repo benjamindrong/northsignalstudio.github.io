@@ -92,7 +92,7 @@ export function classifyPullRequest({ draft, mergeableState, requestedReviewers,
 async function fetchPullRequestsForRepository(repository, token, maxPullRequests) {
   const [owner, repo] = repository.split('/');
   const pulls = await githubFetch(`${API_ROOT}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls?state=open&sort=updated&direction=desc&per_page=${Math.min(100, maxPullRequests)}`, token);
-  const selected = pulls.slice(0, maxPullRequests);
+  const selected = pulls.filter(pull => !pull.draft).slice(0, maxPullRequests);
   const mapped = [];
 
   for (const pull of selected) {
