@@ -1,4 +1,4 @@
-name: Refresh Jira Flight Control
+name: Refresh Flight Control
 
 on:
   pull_request:
