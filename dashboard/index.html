@@ -44,14 +44,15 @@
     .dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gap); min-width: 0; }
     .widget { min-width: 0; min-height: 460px; padding: 20px; border: 1px solid var(--panel-border); border-radius: var(--radius); background: var(--panel); }
     .widget--tickets { grid-column: span 7; height: 460px; display: flex; flex-direction: column; }
-    .widget--github { grid-column: span 5; }
+    .widget--github { grid-column: span 5; height: 460px; display: flex; flex-direction: column; }
     .widget--recent { grid-column: 1 / -1; min-height: 440px; }
     .widget-header { padding-bottom: 16px; border-bottom: 1px solid var(--panel-border); }
     .widget h2 { margin: 0; font-size: 1.15rem; letter-spacing: -.01em; }
     .widget-placeholder { display: grid; min-height: 190px; place-items: center; padding: 24px 12px; color: var(--muted); text-align: center; }
     .widget--recent .widget-placeholder { min-height: 140px; }
 
-    .flight-board {
+    .flight-board,
+    .github-board {
       margin-top: 16px;
       min-width: 0;
       min-height: 0;
@@ -65,8 +66,10 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     }
 
-    .flight-meta { min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 6px 8px; border-bottom: 1px solid var(--board-line); background: var(--board-panel); }
-    .flight-source { min-width: 0; flex: 1 1 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #a8aea8; font-size: 9px; letter-spacing: .055em; text-transform: uppercase; }
+    .flight-meta,
+    .github-meta { min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 6px 8px; border-bottom: 1px solid var(--board-line); background: var(--board-panel); }
+    .flight-source,
+    .github-source { min-width: 0; flex: 1 1 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #a8aea8; font-size: 9px; letter-spacing: .055em; text-transform: uppercase; }
     .flight-action { flex: 0 0 auto; min-height: 24px; border: 1px solid #697069; padding: 3px 7px; background: transparent; color: var(--board-text); cursor: pointer; font-size: 9px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
     .flight-action:hover, .flight-action:focus-visible { border-color: var(--board-text); outline: none; }
 
@@ -79,8 +82,8 @@
     }
 
     .flight-columns { min-height: 26px; padding: 0 8px; border-bottom: 1px solid var(--board-line); color: #9da59d; font-size: 9px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
-    #flightRows { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
-    #flightRows > .flight-empty { min-height: 100%; }
+    #flightRows, #githubRows { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
+    #flightRows > .flight-empty, #githubRows > .github-empty { min-height: 100%; }
     .flight-project { padding: 6px 8px 5px; border-bottom: 1px solid var(--board-line); background: #101310; color: #c8cec8; font-size: 9px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
     .flight-row { min-height: 40px; padding: 0 8px; border-bottom: 1px solid var(--board-line-soft); color: inherit; text-decoration: none; font-size: 12px; line-height: 1.1; }
     .flight-row:nth-of-type(even) { background: #121512; }
@@ -97,7 +100,7 @@
     .flight-status.done { color: var(--done); }
     .flight-status.unknown { color: var(--unknown); }
 
-    .flight-empty { display: grid; min-height: 174px; place-items: center; padding: 18px; color: #9da59d; text-align: center; font-size: 10px; line-height: 1.45; letter-spacing: .04em; text-transform: uppercase; }
+    .flight-empty, .github-empty { display: grid; min-height: 174px; place-items: center; padding: 18px; color: #9da59d; text-align: center; font-size: 10px; line-height: 1.45; letter-spacing: .04em; text-transform: uppercase; }
     .unlock-form { width: min(260px, 100%); display: grid; gap: 8px; }
     .unlock-form label { color: #c8cec8; font-size: 10px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
     .unlock-row { display: flex; min-width: 0; gap: 6px; }
@@ -105,12 +108,39 @@
     .unlock-row button { flex: 0 0 auto; border: 1px solid #777e77; background: transparent; color: var(--board-text); padding: 0 8px; cursor: pointer; font-family: inherit; font-size: 9px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
     .unlock-error { min-height: 1em; color: var(--blocked); font-size: 9px; text-transform: none; letter-spacing: 0; }
 
+    .github-pr-row {
+      min-width: 0;
+      min-height: 62px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: "repo state" "title state" "updated state";
+      align-items: center;
+      column-gap: 8px;
+      padding: 7px 8px;
+      border-bottom: 1px solid var(--board-line-soft);
+      color: inherit;
+      text-decoration: none;
+    }
+    .github-pr-row:nth-child(even) { background: #121512; }
+    .github-pr-row:hover { background: #181d19; }
+    .github-pr-repo { grid-area: repo; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #fff7d3; font-size: 9px; font-weight: 900; letter-spacing: .035em; }
+    .github-pr-number { color: #c8c8bc; }
+    .github-pr-title { grid-area: title; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 750; }
+    .github-pr-updated { grid-area: updated; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #9da59d; font-size: 8px; letter-spacing: .03em; text-transform: uppercase; }
+    .github-pr-state { grid-area: state; min-width: 78px; max-width: 92px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border: 1px solid currentColor; padding: 5px 5px 4px; text-align: center; font-size: 8px; font-weight: 950; letter-spacing: .035em; text-transform: uppercase; }
+    .github-pr-state.todo { color: var(--todo); }
+    .github-pr-state.progress { color: var(--progress); }
+    .github-pr-state.review { color: var(--review); }
+    .github-pr-state.blocked { color: var(--blocked); }
+    .github-pr-state.done { color: var(--done); }
+    .github-pr-state.unknown { color: var(--unknown); }
+
     @media (max-width: 760px) {
       .page { width: min(100% - 24px, 1180px); padding-top: 28px; }
       .dashboard-grid { grid-template-columns: 1fr; }
       .widget--tickets, .widget--github, .widget--recent { grid-column: auto; }
       .widget { min-height: 440px; }
-      .widget--tickets { height: 440px; }
+      .widget--tickets, .widget--github { height: 440px; }
       .widget-placeholder, .widget--recent .widget-placeholder { min-height: 130px; }
     }
 
@@ -122,6 +152,8 @@
       .flight-row { min-height: 38px; font-size: 10px; }
       .flight-move { font-size: 9px; }
       .flight-status { font-size: 8px; padding-left: 2px; padding-right: 2px; }
+      .github-pr-row { min-height: 58px; padding-left: 6px; padding-right: 6px; column-gap: 5px; }
+      .github-pr-state { min-width: 68px; max-width: 76px; font-size: 7px; padding-left: 3px; padding-right: 3px; }
     }
   </style>
 </head>
@@ -147,7 +179,7 @@
           <div id="flightRows">
             <div class="flight-empty">
               <form id="unlockForm" class="unlock-form">
-                <label for="unlockPassphrase">Unlock Jira Flight Control</label>
+                <label for="unlockPassphrase">Unlock Dashboard</label>
                 <div class="unlock-row">
                   <input id="unlockPassphrase" type="password" autocomplete="current-password" aria-describedby="unlockError" />
                   <button type="submit">Unlock</button>
@@ -161,7 +193,10 @@
 
       <section class="widget widget--github" aria-labelledby="github-title">
         <header class="widget-header"><h2 id="github-title">GitHub PRs</h2></header>
-        <div class="widget-placeholder"><p>Open pull requests will appear here.</p></div>
+        <div class="github-board" aria-label="Live GitHub pull request board">
+          <div class="github-meta"><div id="githubSource" class="github-source">Encrypted GitHub feed</div></div>
+          <div id="githubRows"><div class="github-empty">Unlock the dashboard to load pull requests.</div></div>
+        </div>
       </section>
 
       <section class="widget widget--recent" aria-labelledby="recent-title">
@@ -175,11 +210,14 @@
     (() => {
       'use strict';
 
-      const CONFIG_URL = './jira-flight-control.config.json';
+      const JIRA_CONFIG_URL = './jira-flight-control.config.json';
+      const GITHUB_CONFIG_URL = './github-prs.config.json';
       const rowsEl = document.getElementById('flightRows');
       const sourceEl = document.getElementById('flightSource');
       const lockEl = document.getElementById('flightLock');
-      let configPromise;
+      const githubRowsEl = document.getElementById('githubRows');
+      const githubSourceEl = document.getElementById('githubSource');
+      const configPromises = new Map();
 
       const statusInfo = status => {
         const value = String(status || '').trim();
@@ -215,7 +253,7 @@
         return JSON.parse(new TextDecoder().decode(plaintext));
       }
 
-      function formatLastMove(value) {
+      function formatDateTime(value) {
         if (!value) return '—';
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) return '—';
@@ -225,10 +263,10 @@
         return `${day} ${month} ${time}`;
       }
 
-      function formatGenerated(value) {
+      function formatGenerated(value, label) {
         const date = new Date(value);
-        if (Number.isNaN(date.getTime())) return 'Live Jira feed';
-        return `Jira · data updated ${formatLastMove(value)}`;
+        if (Number.isNaN(date.getTime())) return `${label} · live feed`;
+        return `${label} · data updated ${formatDateTime(value)}`;
       }
 
       function appendProjectHeader(label) {
@@ -244,7 +282,7 @@
         row.href = issue.url;
         row.target = '_blank';
         row.rel = 'noopener noreferrer';
-        row.setAttribute('aria-label', `${issue.key}: ${issue.summary}; last move ${formatLastMove(issue.lastMove)}; status ${issue.status}`);
+        row.setAttribute('aria-label', `${issue.key}: ${issue.summary}; last move ${formatDateTime(issue.lastMove)}; status ${issue.status}`);
 
         const key = document.createElement('div');
         key.className = 'flight-cell flight-key';
@@ -260,7 +298,7 @@
 
         const move = document.createElement('div');
         move.className = 'flight-cell flight-move';
-        move.textContent = formatLastMove(issue.lastMove);
+        move.textContent = formatDateTime(issue.lastMove);
         move.title = issue.lastMove || 'No status transition recorded';
         row.appendChild(move);
 
@@ -270,11 +308,10 @@
         status.textContent = issue.status || 'Unavailable';
         status.title = issue.status || 'Unavailable';
         row.appendChild(status);
-
         rowsEl.appendChild(row);
       }
 
-      function render(payload) {
+      function renderJira(payload) {
         rowsEl.replaceChildren();
         const activeByProject = new Map();
         const doneByProject = new Map();
@@ -291,18 +328,15 @@
         const discoveredKeys = [...new Set([...activeByProject.keys(), ...doneByProject.keys()])];
         const allKeys = [...new Set([...(payload.projects || []), ...discoveredKeys])];
         const projectOrder = [...allKeys.filter(key => key !== 'LAN'), ...allKeys.filter(key => key === 'LAN')];
-
         let renderedCount = 0;
+
         for (const key of projectOrder) {
           const issues = activeByProject.get(key) || [];
           if (!issues.length) continue;
           appendProjectHeader(projectNames.get(key) || key);
           issues
             .sort((a, b) => statusInfo(a.status).rank - statusInfo(b.status).rank || String(b.lastMove || '').localeCompare(String(a.lastMove || '')) || a.key.localeCompare(b.key))
-            .forEach(issue => {
-              appendIssueRow(issue);
-              renderedCount += 1;
-            });
+            .forEach(issue => { appendIssueRow(issue); renderedCount += 1; });
         }
 
         for (const key of projectOrder) {
@@ -311,10 +345,7 @@
           appendProjectHeader(`${projectNames.get(key) || key} · Recently Done`);
           issues
             .sort((a, b) => String(b.lastMove || '').localeCompare(String(a.lastMove || '')) || a.key.localeCompare(b.key))
-            .forEach(issue => {
-              appendIssueRow(issue);
-              renderedCount += 1;
-            });
+            .forEach(issue => { appendIssueRow(issue); renderedCount += 1; });
         }
 
         if (!renderedCount) {
@@ -324,36 +355,114 @@
           rowsEl.appendChild(empty);
         }
 
-        sourceEl.textContent = formatGenerated(payload.generatedAt);
+        sourceEl.textContent = formatGenerated(payload.generatedAt, 'Jira');
         lockEl.hidden = false;
       }
 
+      function appendPullRequestRow(pull) {
+        const row = document.createElement('a');
+        row.className = 'github-pr-row';
+        row.href = pull.url;
+        row.target = '_blank';
+        row.rel = 'noopener noreferrer';
+        row.setAttribute('aria-label', `${pull.repository} pull request ${pull.number}: ${pull.title}; ${pull.state}; updated ${formatDateTime(pull.updatedAt)}`);
+
+        const repo = document.createElement('div');
+        repo.className = 'github-pr-repo';
+        const shortRepo = String(pull.repository || '').split('/').pop() || pull.repository || 'Repository';
+        repo.textContent = `${shortRepo} `;
+        const number = document.createElement('span');
+        number.className = 'github-pr-number';
+        number.textContent = `#${pull.number}`;
+        repo.appendChild(number);
+        repo.title = pull.repository;
+        row.appendChild(repo);
+
+        const title = document.createElement('div');
+        title.className = 'github-pr-title';
+        title.textContent = pull.title || 'Untitled pull request';
+        title.title = pull.title || 'Untitled pull request';
+        row.appendChild(title);
+
+        const updated = document.createElement('div');
+        updated.className = 'github-pr-updated';
+        updated.textContent = `Updated ${formatDateTime(pull.updatedAt)}`;
+        updated.title = pull.updatedAt || 'Unknown update time';
+        row.appendChild(updated);
+
+        const state = document.createElement('div');
+        const allowedClass = ['todo', 'progress', 'review', 'blocked', 'done', 'unknown'].includes(pull.stateClass) ? pull.stateClass : 'unknown';
+        state.className = `github-pr-state ${allowedClass}`;
+        state.textContent = pull.state || 'OPEN';
+        state.title = pull.state || 'OPEN';
+        row.appendChild(state);
+        githubRowsEl.appendChild(row);
+      }
+
+      function renderGithub(payload) {
+        githubRowsEl.replaceChildren();
+        const pulls = [...(payload.pullRequests || [])]
+          .sort((a, b) => Number(a.attentionRank) - Number(b.attentionRank) || String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')) || String(a.repository || '').localeCompare(String(b.repository || '')) || Number(a.number) - Number(b.number));
+
+        for (const pull of pulls) appendPullRequestRow(pull);
+        if (!pulls.length) {
+          const empty = document.createElement('div');
+          empty.className = 'github-empty';
+          empty.textContent = 'No open pull requests in the configured repositories.';
+          githubRowsEl.appendChild(empty);
+        }
+        githubSourceEl.textContent = formatGenerated(payload.generatedAt, 'GitHub');
+      }
+
+      function renderGithubLocked(message = 'Unlock the dashboard to load pull requests.') {
+        githubRowsEl.innerHTML = `<div class="github-empty">${message}</div>`;
+        githubSourceEl.textContent = 'Encrypted GitHub feed';
+      }
+
       function renderUnlock(message = '') {
-        rowsEl.innerHTML = '<div class="flight-empty"><form id="unlockForm" class="unlock-form"><label for="unlockPassphrase">Unlock Jira Flight Control</label><div class="unlock-row"><input id="unlockPassphrase" type="password" autocomplete="current-password" aria-describedby="unlockError"><button type="submit">Unlock</button></div><div id="unlockError" class="unlock-error" role="alert"></div></form></div>';
+        rowsEl.innerHTML = '<div class="flight-empty"><form id="unlockForm" class="unlock-form"><label for="unlockPassphrase">Unlock Dashboard</label><div class="unlock-row"><input id="unlockPassphrase" type="password" autocomplete="current-password" aria-describedby="unlockError"><button type="submit">Unlock</button></div><div id="unlockError" class="unlock-error" role="alert"></div></form></div>';
         document.getElementById('unlockError').textContent = message;
         document.getElementById('unlockForm').addEventListener('submit', onUnlock);
         sourceEl.textContent = 'Encrypted Jira feed';
         lockEl.hidden = true;
+        renderGithubLocked();
       }
 
-      async function getConfig() {
-        if (!configPromise) {
-          configPromise = fetch(`${CONFIG_URL}?v=${Date.now()}`, { cache: 'no-store' }).then(response => {
+      async function getConfig(url) {
+        if (!configPromises.has(url)) {
+          configPromises.set(url, fetch(`${url}?v=${Date.now()}`, { cache: 'no-store' }).then(response => {
             if (!response.ok) throw new Error(`Config request failed (${response.status})`);
             return response.json();
-          });
+          }));
         }
-        return configPromise;
+        return configPromises.get(url);
+      }
+
+      async function fetchEncryptedPayload(configUrl, passphrase, label) {
+        const config = await getConfig(configUrl);
+        const response = await fetch(`${config.dataUrl}?v=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`${label} data is not available yet (${response.status}).`);
+        return decryptEnvelope(await response.json(), passphrase);
       }
 
       async function unlock(passphrase) {
-        const config = await getConfig();
-        const response = await fetch(`${config.dataUrl}?v=${Date.now()}`, { cache: 'no-store' });
-        if (!response.ok) throw new Error(`Jira data is not available yet (${response.status}).`);
-        const envelope = await response.json();
-        const payload = await decryptEnvelope(envelope, passphrase);
+        const [jiraResult, githubResult] = await Promise.allSettled([
+          fetchEncryptedPayload(JIRA_CONFIG_URL, passphrase, 'Jira'),
+          fetchEncryptedPayload(GITHUB_CONFIG_URL, passphrase, 'GitHub')
+        ]);
+
+        if (jiraResult.status === 'rejected') throw jiraResult.reason;
         sessionStorage.setItem('flight-control-passphrase', passphrase);
-        render(payload);
+        renderJira(jiraResult.value);
+
+        if (githubResult.status === 'fulfilled') {
+          renderGithub(githubResult.value);
+        } else {
+          const message = githubResult.reason instanceof Error && githubResult.reason.message.includes('not available')
+            ? githubResult.reason.message
+            : 'Unable to load GitHub PR data.';
+          renderGithubLocked(message);
+        }
       }
 
       async function onUnlock(event) {
@@ -365,7 +474,7 @@
           await unlock(input.value);
         } catch (failure) {
           sessionStorage.removeItem('flight-control-passphrase');
-          error.textContent = failure instanceof Error && failure.message.includes('not available') ? failure.message : 'Unable to unlock Jira data.';
+          error.textContent = failure instanceof Error && failure.message.includes('not available') ? failure.message : 'Unable to unlock dashboard data.';
           input.select();
         }
       }
@@ -376,7 +485,6 @@
       });
 
       document.getElementById('unlockForm').addEventListener('submit', onUnlock);
-
       const saved = sessionStorage.getItem('flight-control-passphrase');
       if (saved) {
         unlock(saved).catch(() => {
