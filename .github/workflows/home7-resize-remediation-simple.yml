@@ -1,0 +1,44 @@
+name: HOME-7 Breakpoint Remediation
+
+on:
+  push:
+    branches:
+      - HOME-7-Make-dashboard-resize-to-fit-browser-window
+    paths:
+      - ".github/home7-resize-trigger.txt"
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: HOME-7-Make-dashboard-resize-to-fit-browser-window
+          fetch-depth: 0
+      - name: Verify source and patch breakpoints
+        run: |
+          git merge-base --is-ancestor 50ca93848a9c456db3f28f60fc120b1325f789ce HEAD
+          test "$(git hash-object dashboard/index.html)" = "5b78429a3ffb13400245968de10bc15389ced001"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('dashboard/index.html')
+          s = p.read_text()
+          a = '@media (min-width: 761px) and (min-height: 640px)'
+          b = '@media (min-width: 860px) and (min-height: 640px)'
+          c = '@media (max-width: 760px)'
+          d = '@media (max-width: 859px)'
+          if s.count(a) != 1 or s.count(c) != 1:
+              raise SystemExit('unexpected breakpoint preimage')
+          p.write_text(s.replace(a, b).replace(c, d))
+          PY
+          git diff --check
+      - name: Commit remediation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dashboard/index.html
+          git commit -m "HOME-7 Prevent narrow desktop clipping"
+          git push origin HEAD:HOME-7-Make-dashboard-resize-to-fit-browser-window
