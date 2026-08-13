@@ -89,7 +89,7 @@ async function searchJqlIssues(baseUrl, authHeader, jql, maxIssues) {
     const body = {
       jql,
       maxResults: Math.min(100, Math.max(1, maxIssues - issues.length)),
-      fields: ['summary', 'status', 'project']
+      fields: ['summary', 'status', 'project', 'updated']
     };
     if (nextPageToken) body.nextPageToken = nextPageToken;
     const page = await jiraFetch(`${baseUrl}/rest/api/3/search/jql`, {
@@ -264,11 +264,12 @@ async function verifyOutput(filePath) {
   const observedProjects = new Set();
   const doneCountByProject = new Map();
   for (const issue of payload.issues) {
-    for (const field of ['key', 'summary', 'status', 'statusCategory', 'projectKey', 'projectName', 'url']) {
+    for (const field of ['key', 'summary', 'status', 'statusCategory', 'projectKey', 'projectName', 'updatedAt', 'url']) {
       if (typeof issue[field] !== 'string') throw new Error(`Encrypted snapshot issue field ${field} must be a string.`);
     }
     if (!issue.url.startsWith(`${baseUrl}/browse/`)) throw new Error(`Unexpected Jira issue URL for ${issue.key}.`);
     if (issue.lastMove != null && Number.isNaN(Date.parse(issue.lastMove))) throw new Error(`Invalid LAST MOVE value for ${issue.key}.`);
+    if (Number.isNaN(Date.parse(issue.updatedAt))) throw new Error(`Invalid updatedAt value for ${issue.key}.`);
     if (issue.statusCategory === 'done') {
       const count = (doneCountByProject.get(issue.projectKey) || 0) + 1;
       doneCountByProject.set(issue.projectKey, count);
@@ -313,6 +314,7 @@ async function main() {
     statusCategory: issue.fields?.status?.statusCategory?.key || '',
     projectKey: issue.fields?.project?.key || '',
     projectName: issue.fields?.project?.name || issue.fields?.project?.key || '',
+    updatedAt: issue.fields?.updated || '',
     lastMove: latestStatusMove(historiesByIssueId.get(String(issue.id)) || []),
     url: `${baseUrl}/browse/${encodeURIComponent(issue.key)}`
   }));

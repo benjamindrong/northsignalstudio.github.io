@@ -143,6 +143,26 @@
     .github-pr-state.done { color: var(--done); }
     .github-pr-state.unknown { color: var(--unknown); }
 
+    .recent-board {
+      margin-top: 16px; min-width: 0; min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden;
+      border: 1px solid var(--board-line); background: var(--board-bg); color: var(--board-text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    .recent-meta { min-width: 0; min-height: 34px; display: flex; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--board-line); background: var(--board-panel); }
+    .recent-source { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #a8aea8; font-size: 9px; letter-spacing: .055em; text-transform: uppercase; }
+    #recentRows { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
+    .recent-row { min-width: 0; min-height: 48px; display: grid; grid-template-columns: 120px minmax(0, 1fr) 112px; align-items: center; column-gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--board-line-soft); color: inherit; text-decoration: none; }
+    .recent-row:nth-child(even) { background: #121512; }
+    .recent-row:hover { background: #181d19; }
+    .recent-identity, .recent-title, .recent-updated { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .recent-identity { color: #fff7d3; font-size: 9px; font-weight: 900; }
+    .recent-source-badge { margin-right: 5px; border: 1px solid currentColor; padding: 2px 3px 1px; font-size: 7px; font-weight: 950; letter-spacing: .04em; text-transform: uppercase; }
+    .recent-source-badge.jira { color: var(--accent); }
+    .recent-source-badge.github { color: var(--review); }
+    .recent-title { font-size: 11px; font-weight: 750; }
+    .recent-updated { color: #9da59d; text-align: right; font-size: 8px; letter-spacing: .03em; text-transform: uppercase; }
+    .recent-empty { display: grid; min-height: 100%; place-items: center; padding: 18px; color: #9da59d; text-align: center; font-size: 10px; line-height: 1.45; letter-spacing: .04em; text-transform: uppercase; }
+
     @media (min-width: 860px) and (min-height: 640px) {
       .page { height: 100vh; height: 100dvh; }
       .dashboard-grid { grid-template-rows: minmax(260px, 1.15fr) minmax(180px, .85fr); }
@@ -171,6 +191,11 @@
       .flight-status { font-size: 8px; padding-left: 2px; padding-right: 2px; }
       .github-pr-row { min-height: 58px; padding-left: 6px; padding-right: 6px; column-gap: 5px; }
       .github-pr-state { min-width: 68px; max-width: 76px; font-size: 7px; padding-left: 3px; padding-right: 3px; }
+      .recent-row { grid-template-columns: 86px minmax(0, 1fr) 72px; column-gap: 4px; padding-left: 6px; padding-right: 6px; }
+      .recent-source-badge { margin-right: 3px; font-size: 6px; padding-left: 2px; padding-right: 2px; }
+      .recent-identity { font-size: 8px; }
+      .recent-title { font-size: 10px; }
+      .recent-updated { font-size: 7px; }
     }
   </style>
 </head>
@@ -218,7 +243,10 @@
 
       <section class="widget widget--recent" aria-labelledby="recent-title">
         <header class="widget-header"><h2 id="recent-title">Recently Active</h2></header>
-        <div class="widget-placeholder"><p>Recently updated tickets and pull requests will appear here.</p></div>
+        <div class="recent-board" aria-label="Recently active Jira and GitHub work">
+          <div class="recent-meta"><div id="recentSource" class="recent-source">Encrypted Jira + GitHub feeds</div></div>
+          <div id="recentRows"><div class="recent-empty">Unlock the dashboard to load recent activity.</div></div>
+        </div>
       </section>
     </div>
   </main>
@@ -234,6 +262,9 @@
       const lockEl = document.getElementById('flightLock');
       const githubRowsEl = document.getElementById('githubRows');
       const githubSourceEl = document.getElementById('githubSource');
+      const recentRowsEl = document.getElementById('recentRows');
+      const recentSourceEl = document.getElementById('recentSource');
+      const RECENT_ACTIVITY_LIMIT = 12;
       const configPromises = new Map();
 
       const statusInfo = status => {
@@ -432,6 +463,55 @@
         githubSourceEl.textContent = formatGenerated(payload.generatedAt, 'GitHub');
       }
 
+      function recentTimestamp(value) {
+        const timestamp = Date.parse(value || '');
+        return Number.isNaN(timestamp) ? 0 : timestamp;
+      }
+
+      function recentActivityItems(jiraPayload, githubPayload) {
+        const jiraItems = (jiraPayload?.issues || []).map(issue => ({
+          source: 'JIRA', identity: issue.key || 'Issue', title: issue.summary || 'Untitled issue',
+          updatedAt: issue.updatedAt || issue.lastMove || '', url: issue.url || ''
+        }));
+        const githubItems = (githubPayload?.pullRequests || [])
+          .filter(pull => String(pull.state || '').toUpperCase() !== 'DRAFT')
+          .map(pull => {
+            const repository = String(pull.repository || 'Repository').split('/').pop() || 'Repository';
+            return { source: 'GITHUB', identity: `${repository} #${pull.number}`, title: pull.title || 'Untitled pull request', updatedAt: pull.updatedAt || '', url: pull.url || '' };
+          });
+        return [...jiraItems, ...githubItems]
+          .filter(item => item.url && recentTimestamp(item.updatedAt) > 0)
+          .sort((a, b) => recentTimestamp(b.updatedAt) - recentTimestamp(a.updatedAt) || a.source.localeCompare(b.source) || a.identity.localeCompare(b.identity))
+          .slice(0, RECENT_ACTIVITY_LIMIT);
+      }
+
+      function appendRecentRow(item) {
+        const row = document.createElement('a');
+        row.className = 'recent-row'; row.href = item.url; row.target = '_blank'; row.rel = 'noopener noreferrer';
+        row.setAttribute('aria-label', `${item.source} ${item.identity}: ${item.title}; updated ${formatDateTime(item.updatedAt)}`);
+        const identity = document.createElement('div'); identity.className = 'recent-identity';
+        const badge = document.createElement('span'); badge.className = `recent-source-badge ${item.source.toLowerCase()}`; badge.textContent = item.source;
+        identity.appendChild(badge); identity.append(document.createTextNode(` ${item.identity}`)); identity.title = `${item.source} · ${item.identity}`; row.appendChild(identity);
+        const title = document.createElement('div'); title.className = 'recent-title'; title.textContent = item.title; title.title = item.title; row.appendChild(title);
+        const updated = document.createElement('div'); updated.className = 'recent-updated'; updated.textContent = formatDateTime(item.updatedAt); updated.title = item.updatedAt; row.appendChild(updated);
+        recentRowsEl.appendChild(row);
+      }
+
+      function renderRecent(jiraPayload, githubPayload) {
+        recentRowsEl.replaceChildren();
+        const items = recentActivityItems(jiraPayload, githubPayload);
+        for (const item of items) appendRecentRow(item);
+        if (!items.length) {
+          const empty = document.createElement('div'); empty.className = 'recent-empty'; empty.textContent = 'No recent Jira or GitHub activity is available.'; recentRowsEl.appendChild(empty);
+        }
+        recentSourceEl.textContent = githubPayload ? 'Jira + GitHub · most recently updated' : 'Jira · GitHub feed unavailable';
+      }
+
+      function renderRecentLocked() {
+        recentRowsEl.innerHTML = '<div class="recent-empty">Unlock the dashboard to load recent activity.</div>';
+        recentSourceEl.textContent = 'Encrypted Jira + GitHub feeds';
+      }
+
       function renderGithubLocked(message = 'Unlock the dashboard to load pull requests.') {
         githubRowsEl.innerHTML = `<div class="github-empty">${message}</div>`;
         githubSourceEl.textContent = 'Encrypted GitHub feed';
@@ -444,6 +524,7 @@
         sourceEl.textContent = 'Encrypted Jira feed';
         lockEl.hidden = true;
         renderGithubLocked();
+        renderRecentLocked();
       }
 
       async function getConfig(url) {
@@ -481,6 +562,7 @@
             : 'Unable to load GitHub PR data.';
           renderGithubLocked(message);
         }
+        renderRecent(jiraResult.value, githubResult.status === 'fulfilled' ? githubResult.value : null);
       }
 
       async function onUnlock(event) {
