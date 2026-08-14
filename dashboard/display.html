@@ -157,7 +157,7 @@
       function scheduleRotation() {
         window.clearTimeout(rotationTimer);
         rotationTimer = 0;
-        if (!displayMode || !rotationMs) return;
+        if (!displayMode || !rotationMs || document.hidden) return;
         rotationTimer = window.setTimeout(() => {
           setActiveView(activeIndex + 1, false);
           scheduleRotation();
@@ -210,6 +210,10 @@
         applyActiveView();
         updateControls();
         scheduleRotation();
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) postponeRotation();
+        else scheduleRotation();
       });
       toolbar.addEventListener('pointerdown', postponeRotation, true);
       toolbar.addEventListener('keydown', postponeRotation, true);
