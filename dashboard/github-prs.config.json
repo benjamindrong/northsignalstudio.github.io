@@ -2,8 +2,7 @@
   "repositories": [
     "benjamindrong/MyRAM-iOS",
     "benjamindrong/NearbySyncCore",
-    "benjamindrong/northsignalstudio.github.io",
-    "benjamindrong/Runline"
+    "benjamindrong/northsignalstudio.github.io"
   ],
   "maxPullRequestsPerRepository": 20,
   "dataUrl": "https://raw.githubusercontent.com/benjamindrong/northsignalstudio.github.io/dashboard-data/dashboard/github-prs.enc.json"
