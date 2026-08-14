@@ -48,6 +48,23 @@
     .eyebrow { margin: 0 0 6px; color: var(--accent); font-size: .78rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
     h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1; letter-spacing: -.04em; }
     .subtitle { max-width: 680px; margin: 12px 0 0; color: var(--muted); line-height: 1.55; }
+    .dashboard-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+    .dashboard-action {
+      min-height: 30px;
+      border: 1px solid #3a434d;
+      border-radius: 7px;
+      padding: 5px 9px;
+      background: #0e1115;
+      color: #dfe5ec;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .dashboard-action:hover, .dashboard-action:focus-visible { border-color: var(--accent); outline: none; }
+    .dashboard-action:disabled { cursor: default; opacity: .48; }
+    .dashboard-health { color: var(--muted); font-size: .76rem; line-height: 1.3; }
+    .dashboard-health[data-state="current"] { color: var(--done); }
+    .dashboard-health[data-state="stale"] { color: var(--progress); }
+    .dashboard-health[data-state="failed"] { color: var(--blocked); }
 
     .dashboard-grid { min-width: 0; min-height: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gap); }
     .widget { min-width: 0; min-height: 460px; padding: 20px; border: 1px solid var(--panel-border); border-radius: var(--radius); background: var(--panel); }
@@ -182,6 +199,7 @@
     }
 
     @media (max-width: 470px) {
+      .dashboard-health { flex-basis: 100%; }
       .widget { padding: 14px; }
       .flight-columns, .flight-row { grid-template-columns: 42px minmax(46px, 1fr) 76px 62px; column-gap: 3px; }
       .flight-columns, .flight-row { padding-left: 4px; padding-right: 4px; }
@@ -205,6 +223,11 @@
       <p class="eyebrow">Homepage Dashboard</p>
       <h1>Flight Control</h1>
       <p class="subtitle">A lightweight view of current work across tickets and GitHub.</p>
+      <div class="dashboard-toolbar" aria-label="Dashboard controls">
+        <a class="dashboard-action" href="./display.html">Display Mode</a>
+        <button id="dashboardRefresh" class="dashboard-action" type="button" disabled>Refresh</button>
+        <span id="dashboardHealth" class="dashboard-health" data-state="locked" role="status">Locked · unlock to refresh</span>
+      </div>
     </header>
 
     <div class="dashboard-grid" aria-label="Dashboard widgets">
@@ -264,8 +287,22 @@
       const githubSourceEl = document.getElementById('githubSource');
       const recentRowsEl = document.getElementById('recentRows');
       const recentSourceEl = document.getElementById('recentSource');
+      const refreshEl = document.getElementById('dashboardRefresh');
+      const healthEl = document.getElementById('dashboardHealth');
       const RECENT_ACTIVITY_LIMIT = 12;
+      const AUTO_REFRESH_MS = 60_000;
+      const STALE_AFTER_MS = 120_000;
       const configPromises = new Map();
+      const sourceHealth = {
+        jira: { lastSuccessAt: 0, lastFailureAt: 0, error: '' },
+        github: { lastSuccessAt: 0, lastFailureAt: 0, error: '' }
+      };
+      let jiraPayload = null;
+      let githubPayload = null;
+      let refreshTimer = 0;
+      let refreshPromise = null;
+      let lastRefreshAttemptAt = 0;
+      let sessionVersion = 0;
 
       const statusInfo = status => {
         const value = String(status || '').trim();
@@ -309,6 +346,11 @@
         const month = new Intl.DateTimeFormat(undefined, { month: 'short' }).format(date);
         const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
         return `${day} ${month} ${time}`;
+      }
+
+      function formatClock(value) {
+        if (!value) return 'never';
+        return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
       }
 
       function formatGenerated(value, label) {
@@ -474,12 +516,12 @@
           || a.identity.localeCompare(b.identity);
       }
 
-      function recentActivityItems(jiraPayload, githubPayload) {
-        const jiraItems = (jiraPayload?.issues || []).map(issue => ({
+      function recentActivityItems(jiraPayloadValue, githubPayloadValue) {
+        const jiraItems = (jiraPayloadValue?.issues || []).map(issue => ({
           source: 'JIRA', identity: issue.key || 'Issue', title: issue.summary || 'Untitled issue',
           updatedAt: issue.updatedAt || issue.lastMove || '', url: issue.url || ''
         }));
-        const githubItems = (githubPayload?.pullRequests || [])
+        const githubItems = (githubPayloadValue?.pullRequests || [])
           .filter(pull => String(pull.state || '').toUpperCase() !== 'DRAFT')
           .map(pull => {
             const repository = String(pull.repository || 'Repository').split('/').pop() || 'Repository';
@@ -501,6 +543,7 @@
         }
         return selected;
       }
+
       function appendRecentRow(item) {
         const row = document.createElement('a');
         row.className = 'recent-row'; row.href = item.url; row.target = '_blank'; row.rel = 'noopener noreferrer';
@@ -513,14 +556,14 @@
         recentRowsEl.appendChild(row);
       }
 
-      function renderRecent(jiraPayload, githubPayload) {
+      function renderRecent(jiraPayloadValue, githubPayloadValue) {
         recentRowsEl.replaceChildren();
-        const items = recentActivityItems(jiraPayload, githubPayload);
+        const items = recentActivityItems(jiraPayloadValue, githubPayloadValue);
         for (const item of items) appendRecentRow(item);
         if (!items.length) {
           const empty = document.createElement('div'); empty.className = 'recent-empty'; empty.textContent = 'No recent Jira or GitHub activity is available.'; recentRowsEl.appendChild(empty);
         }
-        recentSourceEl.textContent = githubPayload ? 'Jira + GitHub · most recently updated' : 'Jira · GitHub feed unavailable';
+        recentSourceEl.textContent = githubPayloadValue ? 'Jira + GitHub · most recently updated' : 'Jira · GitHub feed unavailable';
       }
 
       function renderRecentLocked() {
@@ -560,25 +603,155 @@
         return decryptEnvelope(await response.json(), passphrase);
       }
 
-      async function unlock(passphrase) {
-        const [jiraResult, githubResult] = await Promise.allSettled([
+      function fetchDashboardPayloads(passphrase) {
+        return Promise.allSettled([
           fetchEncryptedPayload(JIRA_CONFIG_URL, passphrase, 'Jira'),
           fetchEncryptedPayload(GITHUB_CONFIG_URL, passphrase, 'GitHub')
         ]);
+      }
 
+      function markSourceSuccess(source) {
+        sourceHealth[source].lastSuccessAt = Date.now();
+        sourceHealth[source].error = '';
+      }
+
+      function markSourceFailure(source, failure) {
+        sourceHealth[source].lastFailureAt = Date.now();
+        sourceHealth[source].error = failure instanceof Error ? failure.message : String(failure || 'Refresh failed');
+      }
+
+      function resetHealth() {
+        for (const state of Object.values(sourceHealth)) {
+          state.lastSuccessAt = 0;
+          state.lastFailureAt = 0;
+          state.error = '';
+        }
+        lastRefreshAttemptAt = 0;
+      }
+
+      function sourceState(source, now = Date.now()) {
+        const state = sourceHealth[source];
+        if (state.lastFailureAt > state.lastSuccessAt) return 'failed';
+        if (!state.lastSuccessAt) return 'waiting';
+        if (now - state.lastSuccessAt > STALE_AFTER_MS) return 'stale';
+        return 'current';
+      }
+
+      function refreshStateSnapshot() {
+        const unlocked = Boolean(sessionStorage.getItem('flight-control-passphrase'));
+        if (!unlocked) {
+          return { state: 'locked', text: 'Locked · unlock to refresh', refreshing: false, checkedAt: 0, sources: { jira: 'locked', github: 'locked' } };
+        }
+
+        const now = Date.now();
+        const sources = { jira: sourceState('jira', now), github: sourceState('github', now) };
+        let state = 'current';
+        if (Object.values(sources).includes('failed')) state = 'failed';
+        else if (Object.values(sources).some(value => value === 'stale' || value === 'waiting')) state = 'stale';
+        if (refreshPromise) state = 'refreshing';
+
+        const labels = { current: 'current', stale: 'stale', failed: 'failed', waiting: 'waiting' };
+        const text = refreshPromise
+          ? 'Refreshing Jira + GitHub…'
+          : `Jira ${labels[sources.jira]} · GitHub ${labels[sources.github]} · checked ${formatClock(lastRefreshAttemptAt)}`;
+        return { state, text, refreshing: Boolean(refreshPromise), checkedAt: lastRefreshAttemptAt, sources };
+      }
+
+      function updateHealth() {
+        const detail = refreshStateSnapshot();
+        healthEl.dataset.state = detail.state;
+        healthEl.textContent = detail.text;
+        healthEl.title = [sourceHealth.jira.error && `Jira: ${sourceHealth.jira.error}`, sourceHealth.github.error && `GitHub: ${sourceHealth.github.error}`].filter(Boolean).join('\n');
+        refreshEl.disabled = detail.state === 'locked' || detail.refreshing;
+        window.dispatchEvent(new CustomEvent('dashboard-refresh-state', { detail }));
+      }
+
+      function clearRefreshTimer() {
+        window.clearTimeout(refreshTimer);
+        refreshTimer = 0;
+      }
+
+      function scheduleAutoRefresh() {
+        clearRefreshTimer();
+        if (!sessionStorage.getItem('flight-control-passphrase') || document.hidden) return;
+        const elapsed = lastRefreshAttemptAt ? Date.now() - lastRefreshAttemptAt : 0;
+        const delay = lastRefreshAttemptAt ? Math.max(1_000, AUTO_REFRESH_MS - elapsed) : AUTO_REFRESH_MS;
+        refreshTimer = window.setTimeout(() => {
+          refreshUnlocked();
+        }, delay);
+      }
+
+      async function unlock(passphrase) {
+        const [jiraResult, githubResult] = await fetchDashboardPayloads(passphrase);
         if (jiraResult.status === 'rejected') throw jiraResult.reason;
+
+        sessionVersion += 1;
         sessionStorage.setItem('flight-control-passphrase', passphrase);
-        renderJira(jiraResult.value);
+        lastRefreshAttemptAt = Date.now();
+
+        jiraPayload = jiraResult.value;
+        markSourceSuccess('jira');
+        renderJira(jiraPayload);
 
         if (githubResult.status === 'fulfilled') {
-          renderGithub(githubResult.value);
+          githubPayload = githubResult.value;
+          markSourceSuccess('github');
+          renderGithub(githubPayload);
         } else {
+          githubPayload = null;
+          markSourceFailure('github', githubResult.reason);
           const message = githubResult.reason instanceof Error && githubResult.reason.message.includes('not available')
             ? githubResult.reason.message
             : 'Unable to load GitHub PR data.';
           renderGithubLocked(message);
         }
-        renderRecent(jiraResult.value, githubResult.status === 'fulfilled' ? githubResult.value : null);
+        renderRecent(jiraPayload, githubPayload);
+        updateHealth();
+        scheduleAutoRefresh();
+      }
+
+      async function refreshUnlocked() {
+        if (refreshPromise) return refreshPromise;
+        const passphrase = sessionStorage.getItem('flight-control-passphrase');
+        if (!passphrase) {
+          updateHealth();
+          return null;
+        }
+
+        const version = sessionVersion;
+        lastRefreshAttemptAt = Date.now();
+        refreshPromise = (async () => {
+          const [jiraResult, githubResult] = await fetchDashboardPayloads(passphrase);
+          if (version !== sessionVersion || sessionStorage.getItem('flight-control-passphrase') !== passphrase) return null;
+
+          if (jiraResult.status === 'fulfilled') {
+            jiraPayload = jiraResult.value;
+            markSourceSuccess('jira');
+            renderJira(jiraPayload);
+          } else {
+            markSourceFailure('jira', jiraResult.reason);
+          }
+
+          if (githubResult.status === 'fulfilled') {
+            githubPayload = githubResult.value;
+            markSourceSuccess('github');
+            renderGithub(githubPayload);
+          } else {
+            markSourceFailure('github', githubResult.reason);
+          }
+
+          if (jiraPayload) renderRecent(jiraPayload, githubPayload);
+          return { jira: jiraResult.status, github: githubResult.status };
+        })();
+        updateHealth();
+
+        try {
+          return await refreshPromise;
+        } finally {
+          refreshPromise = null;
+          updateHealth();
+          scheduleAutoRefresh();
+        }
       }
 
       async function onUnlock(event) {
@@ -590,22 +763,50 @@
           await unlock(input.value);
         } catch (failure) {
           sessionStorage.removeItem('flight-control-passphrase');
+          resetHealth();
+          updateHealth();
           error.textContent = failure instanceof Error && failure.message.includes('not available') ? failure.message : 'Unable to unlock dashboard data.';
           input.select();
         }
       }
 
-      lockEl.addEventListener('click', () => {
+      function lockDashboard() {
+        sessionVersion += 1;
         sessionStorage.removeItem('flight-control-passphrase');
+        clearRefreshTimer();
+        jiraPayload = null;
+        githubPayload = null;
+        resetHealth();
         renderUnlock();
+        updateHealth();
+      }
+
+      lockEl.addEventListener('click', lockDashboard);
+      refreshEl.addEventListener('click', () => refreshUnlocked());
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          clearRefreshTimer();
+          updateHealth();
+          return;
+        }
+        updateHealth();
+        if (sessionStorage.getItem('flight-control-passphrase') && Date.now() - lastRefreshAttemptAt >= AUTO_REFRESH_MS) refreshUnlocked();
+        else scheduleAutoRefresh();
       });
 
+      window.dashboardRefresh = refreshUnlocked;
+      window.dashboardRefreshState = refreshStateSnapshot;
+
       document.getElementById('unlockForm').addEventListener('submit', onUnlock);
+      updateHealth();
       const saved = sessionStorage.getItem('flight-control-passphrase');
       if (saved) {
         unlock(saved).catch(() => {
+          sessionVersion += 1;
           sessionStorage.removeItem('flight-control-passphrase');
+          resetHealth();
           renderUnlock('Stored unlock key is no longer valid.');
+          updateHealth();
         });
       }
     })();
