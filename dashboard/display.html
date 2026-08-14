@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b0d10" />
+  <title>Flight Control Display</title>
+  <link rel="icon" type="image/png" href="../icon.png" />
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b0d10;
+      color: #f5f7fa;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #0b0d10; }
+    button, select { font: inherit; }
+    .display-shell { width: 100%; height: 100%; min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+    .display-toolbar {
+      min-width: 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid #262d35;
+      background: #13171c;
+    }
+    .display-brand { min-width: 0; margin-right: auto; display: flex; align-items: baseline; gap: 8px; }
+    .display-brand strong { font-size: .9rem; letter-spacing: -.01em; }
+    .display-brand span { color: #8f99a6; font-size: .72rem; white-space: nowrap; }
+    .display-controls, .display-views { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .display-toolbar button, .display-toolbar select {
+      min-height: 30px;
+      border: 1px solid #3a434d;
+      border-radius: 7px;
+      padding: 5px 9px;
+      background: #0e1115;
+      color: #dfe5ec;
+    }
+    .display-toolbar button { cursor: pointer; }
+    .display-toolbar button:hover, .display-toolbar button:focus-visible, .display-toolbar select:focus-visible { border-color: #8bb8ff; outline: none; }
+    .display-toolbar button[data-active="true"] { border-color: #8bb8ff; color: #f5f7fa; background: #172131; }
+    .display-toolbar label { display: flex; align-items: center; gap: 6px; color: #8f99a6; font-size: .72rem; }
+    .display-frame-wrap { min-width: 0; min-height: 0; overflow: hidden; }
+    .display-frame { display: block; width: 100%; height: 100%; border: 0; background: #0b0d10; }
+    @media (max-width: 720px) {
+      .display-brand { flex: 1 0 100%; }
+      .display-controls, .display-views { flex: 1 1 auto; }
+      .display-toolbar { padding: 7px; gap: 6px; }
+      .display-toolbar button, .display-toolbar select { min-height: 28px; padding: 4px 7px; font-size: .78rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="display-shell">
+    <nav id="displayToolbar" class="display-toolbar" aria-label="Dashboard display controls">
+      <div class="display-brand"><strong>Flight Control</strong><span id="displayState">Display Mode · Ticket Flight Control</span></div>
+      <div class="display-views" aria-label="Choose dashboard view">
+        <button type="button" data-view="0" data-active="true" aria-pressed="true">Flight Control</button>
+        <button type="button" data-view="1" data-active="false" aria-pressed="false">Code Review</button>
+        <button type="button" data-view="2" data-active="false" aria-pressed="false">Recently Active</button>
+      </div>
+      <div class="display-controls">
+        <button id="previousView" type="button" aria-label="Previous dashboard view">‹</button>
+        <button id="nextView" type="button" aria-label="Next dashboard view">›</button>
+        <label>Auto
+          <select id="rotationInterval" aria-label="Automatic rotation interval">
+            <option value="0">Off</option>
+            <option value="15000">15s</option>
+            <option value="30000">30s</option>
+            <option value="60000">60s</option>
+          </select>
+        </label>
+        <button id="modeToggle" type="button">Show Full Dashboard</button>
+      </div>
+    </nav>
+    <div class="display-frame-wrap">
+      <iframe id="dashboardFrame" class="display-frame" src="./index.html" title="Homepage Dashboard"></iframe>
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const views = [
+        { selector: '.widget--tickets', label: 'Ticket Flight Control' },
+        { selector: '.widget--github', label: 'Code Review' },
+        { selector: '.widget--recent', label: 'Recently Active' }
+      ];
+      const frame = document.getElementById('dashboardFrame');
+      const toolbar = document.getElementById('displayToolbar');
+      const displayState = document.getElementById('displayState');
+      const modeToggle = document.getElementById('modeToggle');
+      const rotationInterval = document.getElementById('rotationInterval');
+      const viewButtons = [...document.querySelectorAll('[data-view]')];
+      let activeIndex = 0;
+      let displayMode = true;
+      let rotationMs = 0;
+      let rotationTimer = 0;
+
+      function frameDocument() {
+        try { return frame.contentDocument; } catch { return null; }
+      }
+
+      function removeOverrides(doc) {
+        doc?.getElementById('display-mode-overrides')?.remove();
+        for (const view of views) doc?.querySelector(view.selector)?.removeAttribute('data-display-active');
+      }
+
+      function ensureOverrides(doc) {
+        let style = doc.getElementById('display-mode-overrides');
+        if (!style) {
+          style = doc.createElement('style');
+          style.id = 'display-mode-overrides';
+          style.textContent = `
+            html, body { height: 100%; min-height: 0; overflow: hidden; }
+            .page { height: 100vh !important; height: 100dvh !important; min-height: 0 !important; padding: 10px !important; grid-template-rows: minmax(0, 1fr) !important; }
+            .page-header { display: none !important; }
+            .dashboard-grid { height: 100%; min-height: 0; display: block !important; }
+            .widget { display: none !important; width: 100% !important; height: 100% !important; min-height: 0 !important; grid-column: auto !important; padding: 14px !important; border-radius: 12px !important; }
+            .widget[data-display-active="true"] { display: flex !important; flex-direction: column !important; }
+            .widget--tickets, .widget--github, .widget--recent { height: 100% !important; min-height: 0 !important; }
+            .widget-header { padding-bottom: 10px !important; }
+            .flight-board, .github-board, .recent-board { margin-top: 10px !important; min-height: 0 !important; flex: 1 1 auto !important; }
+          `;
+          doc.head.appendChild(style);
+        }
+      }
+
+      function updateControls() {
+        displayState.textContent = `${displayMode ? 'Display Mode' : 'Full Dashboard'} · ${views[activeIndex].label}`;
+        modeToggle.textContent = displayMode ? 'Show Full Dashboard' : 'Return to Display';
+        for (const button of viewButtons) {
+          const active = Number(button.dataset.view) === activeIndex;
+          button.dataset.active = String(active);
+          button.setAttribute('aria-pressed', String(active));
+        }
+      }
+
+      function applyActiveView() {
+        const doc = frameDocument();
+        if (!doc) return;
+        if (!displayMode) {
+          removeOverrides(doc);
+          return;
+        }
+        ensureOverrides(doc);
+        views.forEach((view, index) => {
+          const widget = doc.querySelector(view.selector);
+          if (widget) widget.setAttribute('data-display-active', String(index === activeIndex));
+        });
+      }
+
+      function scheduleRotation() {
+        window.clearTimeout(rotationTimer);
+        rotationTimer = 0;
+        if (!displayMode || !rotationMs || document.hidden) return;
+        rotationTimer = window.setTimeout(() => {
+          setActiveView(activeIndex + 1, false);
+          scheduleRotation();
+        }, rotationMs);
+      }
+
+      function postponeRotation() {
+        if (rotationMs && displayMode) scheduleRotation();
+      }
+
+      function setActiveView(index, userInitiated = true) {
+        activeIndex = (index + views.length) % views.length;
+        if (userInitiated && !displayMode) displayMode = true;
+        applyActiveView();
+        updateControls();
+        if (userInitiated) postponeRotation();
+      }
+
+      function setDisplayMode(enabled) {
+        displayMode = enabled;
+        applyActiveView();
+        updateControls();
+        scheduleRotation();
+      }
+
+      function attachFrameInteractionGuards() {
+        const doc = frameDocument();
+        if (!doc || doc.documentElement.dataset.displayGuards === 'true') return;
+        doc.documentElement.dataset.displayGuards = 'true';
+        for (const eventName of ['pointerdown', 'keydown', 'focusin']) doc.addEventListener(eventName, postponeRotation, true);
+        doc.addEventListener('wheel', postponeRotation, { capture: true, passive: true });
+      }
+
+      frame.addEventListener('load', () => {
+        applyActiveView();
+        attachFrameInteractionGuards();
+        updateControls();
+        scheduleRotation();
+      });
+
+      for (const button of viewButtons) {
+        button.addEventListener('click', () => setActiveView(Number(button.dataset.view)));
+      }
+      document.getElementById('previousView').addEventListener('click', () => setActiveView(activeIndex - 1));
+      document.getElementById('nextView').addEventListener('click', () => setActiveView(activeIndex + 1));
+      modeToggle.addEventListener('click', () => setDisplayMode(!displayMode));
+      rotationInterval.addEventListener('change', () => {
+        rotationMs = Number(rotationInterval.value) || 0;
+        if (rotationMs && !displayMode) displayMode = true;
+        applyActiveView();
+        updateControls();
+        scheduleRotation();
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) postponeRotation();
+        else scheduleRotation();
+      });
+      toolbar.addEventListener('pointerdown', postponeRotation, true);
+      toolbar.addEventListener('keydown', postponeRotation, true);
+      updateControls();
+    })();
+  </script>
+</body>
+</html>
