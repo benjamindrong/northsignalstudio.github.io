@@ -5,7 +5,7 @@ on:
     branches:
       - HOME-6-Add-combined-Recently-Active-widget
     paths:
-      - ".github/home6-source-balance-trigger-v2.txt"
+      - ".github/home6-source-balance-trigger-v3.txt"
 
 permissions:
   contents: write
@@ -21,98 +21,34 @@ jobs:
 
       - name: Apply narrow HOME-6 remediation
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          path = Path('dashboard/index.html')
-          source = path.read_text()
-          replacement = "\n".join([
-              "      function recentActivityCompare(a, b) {",
-              "        return recentTimestamp(b.updatedAt) - recentTimestamp(a.updatedAt)",
-              "          || a.source.localeCompare(b.source)",
-              "          || a.identity.localeCompare(b.identity);",
-              "      }",
-              "",
-              "      function recentActivityItems(jiraPayload, githubPayload) {",
-              "        const jiraItems = (jiraPayload?.issues || []).map(issue => ({",
-              "          source: 'JIRA', identity: issue.key || 'Issue', title: issue.summary || 'Untitled issue',",
-              "          updatedAt: issue.updatedAt || issue.lastMove || '', url: issue.url || ''",
-              "        }));",
-              "        const githubItems = (githubPayload?.pullRequests || [])",
-              "          .filter(pull => String(pull.state || '').toUpperCase() !== 'DRAFT')",
-              "          .map(pull => {",
-              "            const repository = String(pull.repository || 'Repository').split('/').pop() || 'Repository';",
-              "            return { source: 'GITHUB', identity: `${repository} #${pull.number}`, title: pull.title || 'Untitled pull request', updatedAt: pull.updatedAt || '', url: pull.url || '' };",
-              "          });",
-              "        const ordered = [...jiraItems, ...githubItems]",
-              "          .filter(item => item.url && recentTimestamp(item.updatedAt) > 0)",
-              "          .sort(recentActivityCompare);",
-              "        const selected = ordered.slice(0, RECENT_ACTIVITY_LIMIT);",
-              "        const availableSources = new Set(ordered.map(item => item.source));",
-              "",
-              "        if (availableSources.size > 1 && selected.length === RECENT_ACTIVITY_LIMIT) {",
-              "          for (const source of availableSources) {",
-              "            if (selected.some(item => item.source === source)) continue;",
-              "            const representative = ordered.find(item => item.source === source);",
-              "            if (representative) selected[selected.length - 1] = representative;",
-              "          }",
-              "          selected.sort(recentActivityCompare);",
-              "        }",
-              "        return selected;",
-              "      }",
-              "",
-          ])
-          pattern = r"      function recentActivityItems\(jiraPayload, githubPayload\) \{\n.*?\n      \}\n\n(?=      function appendRecentRow)"
-          updated, count = re.subn(pattern, replacement, source, count=1, flags=re.S)
-          if count != 1:
-              raise SystemExit(f'unexpected HOME-6 recentActivityItems match count: {count}')
-          path.write_text(updated)
-          PY
+          python3 -c "from pathlib import Path; import base64,re; p=Path('dashboard/index.html'); s=p.read_text(); r=base64.b64decode('ICAgICAgZnVuY3Rpb24gcmVjZW50QWN0aXZpdHlDb21wYXJlKGEsIGIpIHsKICAgICAgICByZXR1cm4gcmVjZW50VGltZXN0YW1wKGIudXBkYXRlZEF0KSAtIHJlY2VudFRpbWVzdGFtcChhLnVwZGF0ZWRBdCkKICAgICAgICAgIHx8IGEuc291cmNlLmxvY2FsZUNvbXBhcmUoYi5zb3VyY2UpCiAgICAgICAgICB8fCBhLmlkZW50aXR5LmxvY2FsZUNvbXBhcmUoYi5pZGVudGl0eSk7CiAgICAgIH0KCiAgICAgIGZ1bmN0aW9uIHJlY2VudEFjdGl2aXR5SXRlbXMoamlyYVBheWxvYWQsIGdpdGh1YlBheWxvYWQpIHsKICAgICAgICBjb25zdCBqaXJhSXRlbXMgPSAoamlyYVBheWxvYWQ/Lmlzc3VlcyB8fCBbXSkubWFwKGlzc3VlID0+ICh7CiAgICAgICAgICBzb3VyY2U6ICdKSVJBJywgaWRlbnRpdHk6IGlzc3VlLmtleSB8fCAnSXNzdWUnLCB0aXRsZTogaXNzdWUuc3VtbWFyeSB8fCAnVW50aXRsZWQgaXNzdWUnLAogICAgICAgICAgdXBkYXRlZEF0OiBpc3N1ZS51cGRhdGVkQXQgfHwgaXNzdWUubGFzdE1vdmUgfHwgJycsIHVybDogaXNzdWUudXJsIHx8ICcnCiAgICAgICAgfSkpOwogICAgICAgIGNvbnN0IGdpdGh1Ykl0ZW1zID0gKGdpdGh1YlBheWxvYWQ/LnB1bGxSZXF1ZXN0cyB8fCBbXSkKICAgICAgICAgIC5maWx0ZXIocHVsbCA9PiBTdHJpbmcocHVsbC5zdGF0ZSB8fCAnJykudG9VcHBlckNhc2UoKSAhPT0gJ0RSQUZUJykKICAgICAgICAgIC5tYXAocHVsbCA9PiB7CiAgICAgICAgICAgIGNvbnN0IHJlcG9zaXRvcnkgPSBTdHJpbmcocHVsbC5yZXBvc2l0b3J5IHx8ICdSZXBvc2l0b3J5Jykuc3BsaXQoJy8nKS5wb3AoKSB8fCAnUmVwb3NpdG9yeSc7CiAgICAgICAgICAgIHJldHVybiB7IHNvdXJjZTogJ0dJVEhVQicsIGlkZW50aXR5OiBgJHtyZXBvc2l0b3J5fSAjJHtwdWxsLm51bWJlcn1gLCB0aXRsZTogcHVsbC50aXRsZSB8fCAnVW50aXRsZWQgcHVsbCByZXF1ZXN0JywgdXBkYXRlZEF0OiBwdWxsLnVwZGF0ZWRBdCB8fCAnJywgdXJsOiBwdWxsLnVybCB8fCAnJyB9OwogICAgICAgICAgfSk7CiAgICAgICAgY29uc3Qgb3JkZXJlZCA9IFsuLi5qaXJhSXRlbXMsIC4uLmdpdGh1Ykl0ZW1zXQogICAgICAgICAgLmZpbHRlcihpdGVtID0+IGl0ZW0udXJsICYmIHJlY2VudFRpbWVzdGFtcChpdGVtLnVwZGF0ZWRBdCkgPiAwKQogICAgICAgICAgLnNvcnQocmVjZW50QWN0aXZpdHlDb21wYXJlKTsKICAgICAgICBjb25zdCBzZWxlY3RlZCA9IG9yZGVyZWQuc2xpY2UoMCwgUkVDRU5UX0FDVElWSVRZX0xJTUlUKTsKICAgICAgICBjb25zdCBhdmFpbGFibGVTb3VyY2VzID0gbmV3IFNldChvcmRlcmVkLm1hcChpdGVtID0+IGl0ZW0uc291cmNlKSk7CgogICAgICAgIGlmIChhdmFpbGFibGVTb3VyY2VzLnNpemUgPiAxICYmIHNlbGVjdGVkLmxlbmd0aCA9PT0gUkVDRU5UX0FDVElWSVRZX0xJTUlUKSB7CiAgICAgICAgICBmb3IgKGNvbnN0IHNvdXJjZSBvZiBhdmFpbGFibGVTb3VyY2VzKSB7CiAgICAgICAgICAgIGlmIChzZWxlY3RlZC5zb21lKGl0ZW0gPT4gaXRlbS5zb3VyY2UgPT09IHNvdXJjZSkpIGNvbnRpbnVlOwogICAgICAgICAgICBjb25zdCByZXByZXNlbnRhdGl2ZSA9IG9yZGVyZWQuZmluZChpdGVtID0+IGl0ZW0uc291cmNlID09PSBzb3VyY2UpOwogICAgICAgICAgICBpZiAocmVwcmVzZW50YXRpdmUpIHNlbGVjdGVkW3NlbGVjdGVkLmxlbmd0aCAtIDFdID0gcmVwcmVzZW50YXRpdmU7CiAgICAgICAgICB9CiAgICAgICAgICBzZWxlY3RlZC5zb3J0KHJlY2VudEFjdGl2aXR5Q29tcGFyZSk7CiAgICAgICAgfQogICAgICAgIHJldHVybiBzZWxlY3RlZDsKICAgICAgfQoK').decode(); pattern=r'      function recentActivityItems\(jiraPayload, githubPayload\) \{\n.*?\n      \}\n\n(?=      function appendRecentRow)'; u,n=re.subn(pattern,r,s,count=1,flags=re.S); assert n==1, n; p.write_text(u)"
 
       - name: Run focused regression and static checks
         run: |
           node scripts/refresh-jira-flight-control.mjs --self-test
           node scripts/refresh-github-prs.mjs --self-test
           git diff --check
-          node <<'NODE'
+          cat > /tmp/home6-source-balance-test.js <<'NODE'
           const fs = require('fs');
           const html = fs.readFileSync('dashboard/index.html', 'utf8');
           const match = html.match(/function recentTimestamp\(value\) \{[\s\S]*?(?=\n      function appendRecentRow)/);
           if (!match) throw new Error('HOME-6 activity function block missing');
-          const factory = new Function(`${'const RECENT_ACTIVITY_LIMIT = 12;'}\n${match[0]}\nreturn recentActivityItems;`);
-          const recentActivityItems = factory();
-          const jiraNewer = Array.from({length: 12}, (_, index) => ({
-            key: `HOME-${index + 1}`,
-            summary: `Jira ${index + 1}`,
-            updatedAt: `2026-08-13T${String(23 - index).padStart(2, '0')}:00:00Z`,
-            url: `https://example.test/jira/${index + 1}`
-          }));
-          const githubNewer = Array.from({length: 12}, (_, index) => ({
-            repository: 'benjamindrong/Repo',
-            number: index + 1,
-            title: `GitHub ${index + 1}`,
-            updatedAt: `2026-08-13T${String(23 - index).padStart(2, '0')}:00:00Z`,
-            url: `https://example.test/github/${index + 1}`,
-            state: 'OPEN'
-          }));
-          const jiraCrowd = recentActivityItems(
-            {issues: jiraNewer},
-            {pullRequests: [{repository: 'benjamindrong/Repo', number: 99, title: 'Older GitHub', updatedAt: '2026-08-12T12:00:00Z', url: 'https://example.test/github/99', state: 'OPEN'}]}
-          );
-          const githubCrowd = recentActivityItems(
-            {issues: [{key: 'HOME-99', summary: 'Older Jira', updatedAt: '2026-08-12T12:00:00Z', url: 'https://example.test/jira/99'}]},
-            {pullRequests: githubNewer}
-          );
-          for (const [label, items] of [['jira-crowd', jiraCrowd], ['github-crowd', githubCrowd]]) {
-            if (items.length !== 12) throw new Error(`${label} exceeded or missed the 12-row cap`);
+          const recentActivityItems = new Function(`const RECENT_ACTIVITY_LIMIT = 12;\n${match[0]}\nreturn recentActivityItems;`)();
+          const jiraNewer = Array.from({length: 12}, (_, i) => ({key:`HOME-${i+1}`,summary:`Jira ${i+1}`,updatedAt:`2026-08-13T${String(23-i).padStart(2,'0')}:00:00Z`,url:`https://example.test/jira/${i+1}`}));
+          const githubNewer = Array.from({length: 12}, (_, i) => ({repository:'benjamindrong/Repo',number:i+1,title:`GitHub ${i+1}`,updatedAt:`2026-08-13T${String(23-i).padStart(2,'0')}:00:00Z`,url:`https://example.test/github/${i+1}`,state:'OPEN'}));
+          const cases = [
+            ['jira-crowd', recentActivityItems({issues:jiraNewer},{pullRequests:[{repository:'benjamindrong/Repo',number:99,title:'Older GitHub',updatedAt:'2026-08-12T12:00:00Z',url:'https://example.test/github/99',state:'OPEN'}]})],
+            ['github-crowd', recentActivityItems({issues:[{key:'HOME-99',summary:'Older Jira',updatedAt:'2026-08-12T12:00:00Z',url:'https://example.test/jira/99'}]},{pullRequests:githubNewer})]
+          ];
+          for (const [label, items] of cases) {
+            if (items.length !== 12) throw new Error(`${label}: expected 12 rows`);
             const sources = new Set(items.map(item => item.source));
-            if (!sources.has('JIRA') || !sources.has('GITHUB')) throw new Error(`${label} starved one source: ${[...sources]}`);
-            for (let i = 1; i < items.length; i += 1) {
-              if (Date.parse(items[i - 1].updatedAt) < Date.parse(items[i].updatedAt)) throw new Error(`${label} lost descending recency order`);
-            }
+            if (!sources.has('JIRA') || !sources.has('GITHUB')) throw new Error(`${label}: one source was starved`);
+            for (let i = 1; i < items.length; i++) if (Date.parse(items[i-1].updatedAt) < Date.parse(items[i].updatedAt)) throw new Error(`${label}: recency order broken`);
           }
           console.log('HOME-6 source balance regression passed');
           NODE
+          node /tmp/home6-source-balance-test.js
 
       - name: Commit remediation
         run: |
