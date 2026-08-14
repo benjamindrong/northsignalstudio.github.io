@@ -5,7 +5,7 @@ on:
     branches:
       - HOME-6-Add-combined-Recently-Active-widget
     paths:
-      - ".github/home6-source-balance-trigger.txt"
+      - ".github/home6-source-balance-trigger-v2.txt"
 
 permissions:
   contents: write
@@ -23,62 +23,50 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           path = Path('dashboard/index.html')
           source = path.read_text()
-          old = """      function recentActivityItems(jiraPayload, githubPayload) {
-        const jiraItems = (jiraPayload?.issues || []).map(issue => ({
-          source: 'JIRA', identity: issue.key || 'Issue', title: issue.summary || 'Untitled issue',
-          updatedAt: issue.updatedAt || issue.lastMove || '', url: issue.url || ''
-        }));
-        const githubItems = (githubPayload?.pullRequests || [])
-          .filter(pull => String(pull.state || '').toUpperCase() !== 'DRAFT')
-          .map(pull => {
-            const repository = String(pull.repository || 'Repository').split('/').pop() || 'Repository';
-            return { source: 'GITHUB', identity: `${repository} #${pull.number}`, title: pull.title || 'Untitled pull request', updatedAt: pull.updatedAt || '', url: pull.url || '' };
-          });
-        return [...jiraItems, ...githubItems]
-          .filter(item => item.url && recentTimestamp(item.updatedAt) > 0)
-          .sort((a, b) => recentTimestamp(b.updatedAt) - recentTimestamp(a.updatedAt) || a.source.localeCompare(b.source) || a.identity.localeCompare(b.identity))
-          .slice(0, RECENT_ACTIVITY_LIMIT);
-      }
-"""
-          new = """      function recentActivityCompare(a, b) {
-        return recentTimestamp(b.updatedAt) - recentTimestamp(a.updatedAt)
-          || a.source.localeCompare(b.source)
-          || a.identity.localeCompare(b.identity);
-      }
-
-      function recentActivityItems(jiraPayload, githubPayload) {
-        const jiraItems = (jiraPayload?.issues || []).map(issue => ({
-          source: 'JIRA', identity: issue.key || 'Issue', title: issue.summary || 'Untitled issue',
-          updatedAt: issue.updatedAt || issue.lastMove || '', url: issue.url || ''
-        }));
-        const githubItems = (githubPayload?.pullRequests || [])
-          .filter(pull => String(pull.state || '').toUpperCase() !== 'DRAFT')
-          .map(pull => {
-            const repository = String(pull.repository || 'Repository').split('/').pop() || 'Repository';
-            return { source: 'GITHUB', identity: `${repository} #${pull.number}`, title: pull.title || 'Untitled pull request', updatedAt: pull.updatedAt || '', url: pull.url || '' };
-          });
-        const ordered = [...jiraItems, ...githubItems]
-          .filter(item => item.url && recentTimestamp(item.updatedAt) > 0)
-          .sort(recentActivityCompare);
-        const selected = ordered.slice(0, RECENT_ACTIVITY_LIMIT);
-        const availableSources = new Set(ordered.map(item => item.source));
-
-        if (availableSources.size > 1 && selected.length === RECENT_ACTIVITY_LIMIT) {
-          for (const source of availableSources) {
-            if (selected.some(item => item.source === source)) continue;
-            const representative = ordered.find(item => item.source === source);
-            if (representative) selected[selected.length - 1] = representative;
-          }
-          selected.sort(recentActivityCompare);
-        }
-        return selected;
-      }
-"""
-          if source.count(old) != 1:
-            raise SystemExit('unexpected HOME-6 recentActivityItems preimage')
-          path.write_text(source.replace(old, new))
+          replacement = "\n".join([
+              "      function recentActivityCompare(a, b) {",
+              "        return recentTimestamp(b.updatedAt) - recentTimestamp(a.updatedAt)",
+              "          || a.source.localeCompare(b.source)",
+              "          || a.identity.localeCompare(b.identity);",
+              "      }",
+              "",
+              "      function recentActivityItems(jiraPayload, githubPayload) {",
+              "        const jiraItems = (jiraPayload?.issues || []).map(issue => ({",
+              "          source: 'JIRA', identity: issue.key || 'Issue', title: issue.summary || 'Untitled issue',",
+              "          updatedAt: issue.updatedAt || issue.lastMove || '', url: issue.url || ''",
+              "        }));",
+              "        const githubItems = (githubPayload?.pullRequests || [])",
+              "          .filter(pull => String(pull.state || '').toUpperCase() !== 'DRAFT')",
+              "          .map(pull => {",
+              "            const repository = String(pull.repository || 'Repository').split('/').pop() || 'Repository';",
+              "            return { source: 'GITHUB', identity: `${repository} #${pull.number}`, title: pull.title || 'Untitled pull request', updatedAt: pull.updatedAt || '', url: pull.url || '' };",
+              "          });",
+              "        const ordered = [...jiraItems, ...githubItems]",
+              "          .filter(item => item.url && recentTimestamp(item.updatedAt) > 0)",
+              "          .sort(recentActivityCompare);",
+              "        const selected = ordered.slice(0, RECENT_ACTIVITY_LIMIT);",
+              "        const availableSources = new Set(ordered.map(item => item.source));",
+              "",
+              "        if (availableSources.size > 1 && selected.length === RECENT_ACTIVITY_LIMIT) {",
+              "          for (const source of availableSources) {",
+              "            if (selected.some(item => item.source === source)) continue;",
+              "            const representative = ordered.find(item => item.source === source);",
+              "            if (representative) selected[selected.length - 1] = representative;",
+              "          }",
+              "          selected.sort(recentActivityCompare);",
+              "        }",
+              "        return selected;",
+              "      }",
+              "",
+          ])
+          pattern = r"      function recentActivityItems\(jiraPayload, githubPayload\) \{\n.*?\n      \}\n\n(?=      function appendRecentRow)"
+          updated, count = re.subn(pattern, replacement, source, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit(f'unexpected HOME-6 recentActivityItems match count: {count}')
+          path.write_text(updated)
           PY
 
       - name: Run focused regression and static checks
@@ -86,66 +74,45 @@ jobs:
           node scripts/refresh-jira-flight-control.mjs --self-test
           node scripts/refresh-github-prs.mjs --self-test
           git diff --check
-          python3 - <<'PY'
-          from pathlib import Path
-          import html, json, re, shutil, subprocess, tempfile
-
-          chrome = next((p for p in ('google-chrome', 'chromium', 'chromium-browser') if shutil.which(p)), None)
-          if not chrome:
-            raise SystemExit('Chrome/Chromium unavailable')
-
-          source = Path('dashboard/index.html').read_text()
-          marker = "document.getElementById('unlockForm').addEventListener('submit', onUnlock);"
-          parts = source.rsplit(marker, 1)
-          if len(parts) != 2:
-            raise SystemExit('HOME-6 exposure marker missing')
-          source = parts[0] + "window.__home6 = { recentActivityItems };\n      " + marker + parts[1]
-
-          jira_newer = ','.join(
-            "{key:'HOME-%d',summary:'Jira %d',updatedAt:'2026-08-13T%02d:00:00Z',url:'https://example.test/jira/%d'}" % (i, i, 23 - i, i)
-            for i in range(1, 13)
-          )
-          github_newer = ','.join(
-            "{repository:'benjamindrong/Repo',number:%d,title:'GitHub %d',updatedAt:'2026-08-13T%02d:00:00Z',url:'https://example.test/github/%d',state:'OPEN'}" % (i, i, 23 - i, i)
-            for i in range(1, 13)
-          )
-          sample = f'''<script>
-          const jiraCrowd = window.__home6.recentActivityItems(
-            {{issues:[{jira_newer}]}},
-            {{pullRequests:[{{repository:'benjamindrong/Repo',number:99,title:'Older GitHub',updatedAt:'2026-08-12T12:00:00Z',url:'https://example.test/github/99',state:'OPEN'}}]}}
+          node <<'NODE'
+          const fs = require('fs');
+          const html = fs.readFileSync('dashboard/index.html', 'utf8');
+          const match = html.match(/function recentTimestamp\(value\) \{[\s\S]*?(?=\n      function appendRecentRow)/);
+          if (!match) throw new Error('HOME-6 activity function block missing');
+          const factory = new Function(`${'const RECENT_ACTIVITY_LIMIT = 12;'}\n${match[0]}\nreturn recentActivityItems;`);
+          const recentActivityItems = factory();
+          const jiraNewer = Array.from({length: 12}, (_, index) => ({
+            key: `HOME-${index + 1}`,
+            summary: `Jira ${index + 1}`,
+            updatedAt: `2026-08-13T${String(23 - index).padStart(2, '0')}:00:00Z`,
+            url: `https://example.test/jira/${index + 1}`
+          }));
+          const githubNewer = Array.from({length: 12}, (_, index) => ({
+            repository: 'benjamindrong/Repo',
+            number: index + 1,
+            title: `GitHub ${index + 1}`,
+            updatedAt: `2026-08-13T${String(23 - index).padStart(2, '0')}:00:00Z`,
+            url: `https://example.test/github/${index + 1}`,
+            state: 'OPEN'
+          }));
+          const jiraCrowd = recentActivityItems(
+            {issues: jiraNewer},
+            {pullRequests: [{repository: 'benjamindrong/Repo', number: 99, title: 'Older GitHub', updatedAt: '2026-08-12T12:00:00Z', url: 'https://example.test/github/99', state: 'OPEN'}]}
           );
-          const githubCrowd = window.__home6.recentActivityItems(
-            {{issues:[{{key:'HOME-99',summary:'Older Jira',updatedAt:'2026-08-12T12:00:00Z',url:'https://example.test/jira/99'}}]}},
-            {{pullRequests:[{github_newer}]}}
+          const githubCrowd = recentActivityItems(
+            {issues: [{key: 'HOME-99', summary: 'Older Jira', updatedAt: '2026-08-12T12:00:00Z', url: 'https://example.test/jira/99'}]},
+            {pullRequests: githubNewer}
           );
-          document.documentElement.setAttribute('data-home6-balance', JSON.stringify({{
-            jiraCrowd:jiraCrowd.map(item => item.source),
-            githubCrowd:githubCrowd.map(item => item.source),
-            jiraCount:jiraCrowd.length,
-            githubCount:githubCrowd.length
-          }}));
-          </script>'''
-          source = source.replace('</body>', sample + '\n</body>', 1)
-
-          with tempfile.TemporaryDirectory() as tmp:
-            page = Path(tmp) / 'index.html'
-            page.write_text(source)
-            proc = subprocess.run(
-              [chrome, '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--no-first-run', '--window-size=860,900', '--dump-dom', page.as_uri()],
-              check=True, capture_output=True, text=True, timeout=30
-            )
-            match = re.search(r'data-home6-balance="([^"]+)"', proc.stdout)
-            if not match:
-              raise SystemExit('HOME-6 source-balance output missing')
-            data = json.loads(html.unescape(match.group(1)))
-            if data['jiraCount'] != 12 or data['githubCount'] != 12:
-              raise SystemExit(f'activity cap regression: {data}')
-            if set(data['jiraCrowd']) != {'JIRA', 'GITHUB'}:
-              raise SystemExit(f'GitHub source starved by Jira: {data}')
-            if set(data['githubCrowd']) != {'JIRA', 'GITHUB'}:
-              raise SystemExit(f'Jira source starved by GitHub: {data}')
-            print(data)
-          PY
+          for (const [label, items] of [['jira-crowd', jiraCrowd], ['github-crowd', githubCrowd]]) {
+            if (items.length !== 12) throw new Error(`${label} exceeded or missed the 12-row cap`);
+            const sources = new Set(items.map(item => item.source));
+            if (!sources.has('JIRA') || !sources.has('GITHUB')) throw new Error(`${label} starved one source: ${[...sources]}`);
+            for (let i = 1; i < items.length; i += 1) {
+              if (Date.parse(items[i - 1].updatedAt) < Date.parse(items[i].updatedAt)) throw new Error(`${label} lost descending recency order`);
+            }
+          }
+          console.log('HOME-6 source balance regression passed');
+          NODE
 
       - name: Commit remediation
         run: |
