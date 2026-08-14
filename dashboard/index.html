@@ -468,6 +468,12 @@
         return Number.isNaN(timestamp) ? 0 : timestamp;
       }
 
+      function recentActivityCompare(a, b) {
+        return recentTimestamp(b.updatedAt) - recentTimestamp(a.updatedAt)
+          || a.source.localeCompare(b.source)
+          || a.identity.localeCompare(b.identity);
+      }
+
       function recentActivityItems(jiraPayload, githubPayload) {
         const jiraItems = (jiraPayload?.issues || []).map(issue => ({
           source: 'JIRA', identity: issue.key || 'Issue', title: issue.summary || 'Untitled issue',
@@ -479,12 +485,22 @@
             const repository = String(pull.repository || 'Repository').split('/').pop() || 'Repository';
             return { source: 'GITHUB', identity: `${repository} #${pull.number}`, title: pull.title || 'Untitled pull request', updatedAt: pull.updatedAt || '', url: pull.url || '' };
           });
-        return [...jiraItems, ...githubItems]
+        const ordered = [...jiraItems, ...githubItems]
           .filter(item => item.url && recentTimestamp(item.updatedAt) > 0)
-          .sort((a, b) => recentTimestamp(b.updatedAt) - recentTimestamp(a.updatedAt) || a.source.localeCompare(b.source) || a.identity.localeCompare(b.identity))
-          .slice(0, RECENT_ACTIVITY_LIMIT);
-      }
+          .sort(recentActivityCompare);
+        const selected = ordered.slice(0, RECENT_ACTIVITY_LIMIT);
+        const availableSources = new Set(ordered.map(item => item.source));
 
+        if (availableSources.size > 1 && selected.length === RECENT_ACTIVITY_LIMIT) {
+          for (const source of availableSources) {
+            if (selected.some(item => item.source === source)) continue;
+            const representative = ordered.find(item => item.source === source);
+            if (representative) selected[selected.length - 1] = representative;
+          }
+          selected.sort(recentActivityCompare);
+        }
+        return selected;
+      }
       function appendRecentRow(item) {
         const row = document.createElement('a');
         row.className = 'recent-row'; row.href = item.url; row.target = '_blank'; row.rel = 'noopener noreferrer';
