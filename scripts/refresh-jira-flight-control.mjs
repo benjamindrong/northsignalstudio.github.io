@@ -147,7 +147,7 @@ async function fetchStatusChangelogs(baseUrl, authHeader, issues) {
 }
 
 function contentHash(payload) {
-  const stable = { version: payload.version, projects: payload.projects, issues: payload.issues };
+  const stable = { version: payload.version, generatedAt: payload.generatedAt, projects: payload.projects, issues: payload.issues };
   return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex');
 }
 
@@ -201,10 +201,6 @@ function canReuseEnvelope(previous, expectedHash, passphrase) {
   }
 }
 
-function refreshEnvelopeHeartbeat(previous, generatedAt) {
-  return { ...previous, generatedAt };
-}
-
 async function readJson(filePath) {
   return JSON.parse(await fs.readFile(filePath, 'utf8'));
 }
@@ -233,15 +229,8 @@ async function runSelfTest() {
   if (!canReuseEnvelope(envelope, hash, passphrase)) throw new Error('same-key envelope reuse self-test failed');
   if (canReuseEnvelope(envelope, hash, 'rotated dashboard passphrase')) throw new Error('passphrase rotation self-test failed');
 
-  const heartbeatAt = '2026-08-12T12:15:00.000Z';
-  const refreshedEnvelope = refreshEnvelopeHeartbeat(envelope, heartbeatAt);
-  if (refreshedEnvelope.generatedAt !== heartbeatAt) throw new Error('refresh heartbeat self-test failed');
-  if (refreshedEnvelope.ciphertext !== envelope.ciphertext || refreshedEnvelope.contentSha256 !== envelope.contentSha256) {
-    throw new Error('refresh heartbeat must preserve encrypted content');
-  }
-  if (JSON.stringify(decryptPayload(refreshedEnvelope, passphrase)) !== JSON.stringify(payload)) {
-    throw new Error('refresh heartbeat must not alter decrypted payload');
-  }
+  const newerPayload = { ...payload, generatedAt: '2026-08-12T12:15:00.000Z' };
+  if (contentHash(newerPayload) === hash) throw new Error('generatedAt must participate in snapshot identity');
 
   const activeJql = buildActiveJql(['MYR', 'HOME']);
   if (
@@ -269,7 +258,7 @@ async function verifyOutput(filePath) {
   const baseUrl = normalizeBaseUrl(config.jiraBaseUrl);
   const passphrase = requiredEnv('DASHBOARD_DATA_PASSPHRASE');
   const envelope = await readJson(filePath);
-  if (Number.isNaN(Date.parse(envelope.generatedAt || ''))) throw new Error('Encrypted snapshot refresh heartbeat must be a valid generatedAt timestamp.');
+  if (Number.isNaN(Date.parse(envelope.generatedAt || ''))) throw new Error('Encrypted snapshot generatedAt must be a valid timestamp.');
   const payload = decryptPayload(envelope, passphrase);
 
   if (JSON.stringify(payload.projects) !== JSON.stringify(config.projects)) {
@@ -345,7 +334,7 @@ async function main() {
   const previous = await readPreviousEnvelope(previousPath);
   const hash = contentHash(payload);
   const envelope = canReuseEnvelope(previous, hash, passphrase)
-    ? refreshEnvelopeHeartbeat(previous, payload.generatedAt)
+    ? previous
     : encryptPayload(payload, passphrase);
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
