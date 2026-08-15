@@ -258,8 +258,9 @@ async function verifyOutput(filePath) {
   const baseUrl = normalizeBaseUrl(config.jiraBaseUrl);
   const passphrase = requiredEnv('DASHBOARD_DATA_PASSPHRASE');
   const envelope = await readJson(filePath);
-  if (Number.isNaN(Date.parse(envelope.generatedAt || ''))) throw new Error('Encrypted snapshot generatedAt must be a valid timestamp.');
   const payload = decryptPayload(envelope, passphrase);
+  if (Number.isNaN(Date.parse(payload.generatedAt || ''))) throw new Error('Encrypted snapshot payload generatedAt must be a valid timestamp.');
+  if (payload.generatedAt !== envelope.generatedAt) throw new Error('Encrypted snapshot generatedAt metadata must match the decrypted payload.');
 
   if (JSON.stringify(payload.projects) !== JSON.stringify(config.projects)) {
     throw new Error('Encrypted snapshot project configuration does not match the dashboard config.');
