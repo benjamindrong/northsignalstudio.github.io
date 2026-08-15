@@ -227,8 +227,9 @@ async function verifyOutput(filePath) {
   const passphrase = requiredEnv('DASHBOARD_DATA_PASSPHRASE');
   const repositories = configuredRepositories(config);
   const envelope = await readJson(filePath);
-  if (Number.isNaN(Date.parse(envelope.generatedAt || ''))) throw new Error('Encrypted snapshot generatedAt must be a valid timestamp.');
   const payload = decryptPayload(envelope, passphrase);
+  if (Number.isNaN(Date.parse(payload.generatedAt || ''))) throw new Error('Encrypted snapshot payload generatedAt must be a valid timestamp.');
+  if (payload.generatedAt !== envelope.generatedAt) throw new Error('Encrypted snapshot generatedAt metadata must match the decrypted payload.');
 
   if (JSON.stringify(payload.repositories) !== JSON.stringify(repositories)) throw new Error('Encrypted snapshot repository configuration does not match the effective configuration.');
   if (!Array.isArray(payload.pullRequests)) throw new Error('Encrypted snapshot pullRequests must be an array.');
