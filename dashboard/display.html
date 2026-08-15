@@ -30,6 +30,10 @@
     .display-brand { min-width: 0; margin-right: auto; display: flex; align-items: baseline; gap: 8px; }
     .display-brand strong { font-size: .9rem; letter-spacing: -.01em; }
     .display-brand span { color: #8f99a6; font-size: .72rem; white-space: nowrap; }
+    .display-health { color: #8f99a6; font-size: .7rem; line-height: 1.2; }
+    .display-health[data-state="current"] { color: #8fd694; }
+    .display-health[data-state="stale"] { color: #ffd166; }
+    .display-health[data-state="failed"] { color: #ff786f; }
     .display-controls, .display-views { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
     .display-toolbar button, .display-toolbar select {
       min-height: 30px;
@@ -40,13 +44,14 @@
       color: #dfe5ec;
     }
     .display-toolbar button { cursor: pointer; }
+    .display-toolbar button:disabled { cursor: default; opacity: .48; }
     .display-toolbar button:hover, .display-toolbar button:focus-visible, .display-toolbar select:focus-visible { border-color: #8bb8ff; outline: none; }
     .display-toolbar button[data-active="true"] { border-color: #8bb8ff; color: #f5f7fa; background: #172131; }
     .display-toolbar label { display: flex; align-items: center; gap: 6px; color: #8f99a6; font-size: .72rem; }
     .display-frame-wrap { min-width: 0; min-height: 0; overflow: hidden; }
     .display-frame { display: block; width: 100%; height: 100%; border: 0; background: #0b0d10; }
     @media (max-width: 720px) {
-      .display-brand { flex: 1 0 100%; }
+      .display-brand, .display-health { flex: 1 0 100%; }
       .display-controls, .display-views { flex: 1 1 auto; }
       .display-toolbar { padding: 7px; gap: 6px; }
       .display-toolbar button, .display-toolbar select { min-height: 28px; padding: 4px 7px; font-size: .78rem; }
@@ -57,6 +62,7 @@
   <main class="display-shell">
     <nav id="displayToolbar" class="display-toolbar" aria-label="Dashboard display controls">
       <div class="display-brand"><strong>Flight Control</strong><span id="displayState">Display Mode · Ticket Flight Control</span></div>
+      <span id="displayHealth" class="display-health" data-state="locked" role="status">Locked · unlock to refresh</span>
       <div class="display-views" aria-label="Choose dashboard view">
         <button type="button" data-view="0" data-active="true" aria-pressed="true">Flight Control</button>
         <button type="button" data-view="1" data-active="false" aria-pressed="false">Code Review</button>
@@ -65,6 +71,7 @@
       <div class="display-controls">
         <button id="previousView" type="button" aria-label="Previous dashboard view">‹</button>
         <button id="nextView" type="button" aria-label="Next dashboard view">›</button>
+        <button id="refreshDashboard" type="button" disabled>Refresh</button>
         <label>Auto
           <select id="rotationInterval" aria-label="Automatic rotation interval">
             <option value="0">Off</option>
@@ -93,6 +100,8 @@
       const frame = document.getElementById('dashboardFrame');
       const toolbar = document.getElementById('displayToolbar');
       const displayState = document.getElementById('displayState');
+      const displayHealth = document.getElementById('displayHealth');
+      const refreshDashboard = document.getElementById('refreshDashboard');
       const modeToggle = document.getElementById('modeToggle');
       const rotationInterval = document.getElementById('rotationInterval');
       const viewButtons = [...document.querySelectorAll('[data-view]')];
@@ -183,6 +192,20 @@
         scheduleRotation();
       }
 
+      function setDisplayHealth(detail) {
+        if (!detail) return;
+        displayHealth.dataset.state = detail.state || 'locked';
+        displayHealth.textContent = detail.text || 'Dashboard refresh status unavailable';
+        refreshDashboard.disabled = detail.state === 'locked' || Boolean(detail.refreshing);
+      }
+
+      function attachFrameRefreshBridge() {
+        const child = frame.contentWindow;
+        if (!child) return;
+        child.addEventListener('dashboard-refresh-state', event => setDisplayHealth(event.detail));
+        if (typeof child.dashboardRefreshState === 'function') setDisplayHealth(child.dashboardRefreshState());
+      }
+
       function attachFrameInteractionGuards() {
         const doc = frameDocument();
         if (!doc || doc.documentElement.dataset.displayGuards === 'true') return;
@@ -193,6 +216,7 @@
 
       frame.addEventListener('load', () => {
         applyActiveView();
+        attachFrameRefreshBridge();
         attachFrameInteractionGuards();
         updateControls();
         scheduleRotation();
@@ -203,6 +227,11 @@
       }
       document.getElementById('previousView').addEventListener('click', () => setActiveView(activeIndex - 1));
       document.getElementById('nextView').addEventListener('click', () => setActiveView(activeIndex + 1));
+      refreshDashboard.addEventListener('click', () => {
+        const refresh = frame.contentWindow?.dashboardRefresh;
+        if (typeof refresh === 'function') refresh();
+        postponeRotation();
+      });
       modeToggle.addEventListener('click', () => setDisplayMode(!displayMode));
       rotationInterval.addEventListener('change', () => {
         rotationMs = Number(rotationInterval.value) || 0;

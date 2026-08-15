@@ -4,8 +4,10 @@ on:
   pull_request:
     paths:
       - "dashboard/index.html"
+      - "dashboard/refresh-health.js"
       - "dashboard/github-prs.config.json"
       - "scripts/refresh-github-prs.mjs"
+      - "scripts/test-dashboard-refresh.mjs"
       - ".github/workflows/refresh-github-prs.yml"
   schedule:
     - cron: "7,22,37,52 * * * *"
@@ -38,6 +40,12 @@ jobs:
       - name: Verify refresh logic
         run: node scripts/refresh-github-prs.mjs --self-test
 
+      - name: Verify dashboard refresh health
+        run: |
+          node --check dashboard/refresh-health.js
+          node --check scripts/test-dashboard-refresh.mjs
+          node scripts/test-dashboard-refresh.mjs
+
       - name: Verify candidate diff
         run: |
           git fetch --no-tags origin main
@@ -53,7 +61,6 @@ jobs:
           DASHBOARD_GITHUB_PRIVATE_REPOSITORIES: ${{ secrets.DASHBOARD_GITHUB_PRIVATE_REPOSITORIES }}
           DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
           OUTPUT_PATH: /tmp/github-prs.enc.json
-          VERIFY_OPEN_REPOSITORIES: 2
         run: |
           node scripts/refresh-github-prs.mjs
           node scripts/refresh-github-prs.mjs --verify-output "$OUTPUT_PATH"

@@ -124,7 +124,7 @@ async function fetchPullRequestsForRepository(repository, token, maxPullRequests
 }
 
 function contentHash(payload) {
-  const stable = { version: payload.version, repositories: payload.repositories, pullRequests: payload.pullRequests };
+  const stable = { version: payload.version, generatedAt: payload.generatedAt, repositories: payload.repositories, pullRequests: payload.pullRequests };
   return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex');
 }
 
@@ -215,6 +215,9 @@ async function runSelfTest() {
   const hash = contentHash(payload);
   if (!canReuseEnvelope(envelope, hash, passphrase)) throw new Error('same-key envelope reuse self-test failed');
   if (canReuseEnvelope(envelope, hash, 'rotated passphrase')) throw new Error('passphrase rotation self-test failed');
+
+  const newerPayload = { ...payload, generatedAt: '2026-08-12T12:15:00.000Z' };
+  if (contentHash(newerPayload) === hash) throw new Error('generatedAt must participate in snapshot identity');
   console.log('refresh-github-prs self-test passed');
 }
 
@@ -223,7 +226,10 @@ async function verifyOutput(filePath) {
   const config = await readJson(process.env.CONFIG_PATH || DEFAULT_CONFIG);
   const passphrase = requiredEnv('DASHBOARD_DATA_PASSPHRASE');
   const repositories = configuredRepositories(config);
-  const payload = decryptPayload(await readJson(filePath), passphrase);
+  const envelope = await readJson(filePath);
+  const payload = decryptPayload(envelope, passphrase);
+  if (Number.isNaN(Date.parse(payload.generatedAt || ''))) throw new Error('Encrypted snapshot payload generatedAt must be a valid timestamp.');
+  if (payload.generatedAt !== envelope.generatedAt) throw new Error('Encrypted snapshot generatedAt metadata must match the decrypted payload.');
 
   if (JSON.stringify(payload.repositories) !== JSON.stringify(repositories)) throw new Error('Encrypted snapshot repository configuration does not match the effective configuration.');
   if (!Array.isArray(payload.pullRequests)) throw new Error('Encrypted snapshot pullRequests must be an array.');

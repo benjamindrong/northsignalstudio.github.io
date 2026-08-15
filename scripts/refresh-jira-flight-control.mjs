@@ -147,7 +147,7 @@ async function fetchStatusChangelogs(baseUrl, authHeader, issues) {
 }
 
 function contentHash(payload) {
-  const stable = { version: payload.version, projects: payload.projects, issues: payload.issues };
+  const stable = { version: payload.version, generatedAt: payload.generatedAt, projects: payload.projects, issues: payload.issues };
   return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex');
 }
 
@@ -229,6 +229,9 @@ async function runSelfTest() {
   if (!canReuseEnvelope(envelope, hash, passphrase)) throw new Error('same-key envelope reuse self-test failed');
   if (canReuseEnvelope(envelope, hash, 'rotated dashboard passphrase')) throw new Error('passphrase rotation self-test failed');
 
+  const newerPayload = { ...payload, generatedAt: '2026-08-12T12:15:00.000Z' };
+  if (contentHash(newerPayload) === hash) throw new Error('generatedAt must participate in snapshot identity');
+
   const activeJql = buildActiveJql(['MYR', 'HOME']);
   if (
     !activeJql.includes('project in ("MYR", "HOME")')
@@ -254,7 +257,10 @@ async function verifyOutput(filePath) {
   const config = await readJson(configPath);
   const baseUrl = normalizeBaseUrl(config.jiraBaseUrl);
   const passphrase = requiredEnv('DASHBOARD_DATA_PASSPHRASE');
-  const payload = decryptPayload(await readJson(filePath), passphrase);
+  const envelope = await readJson(filePath);
+  const payload = decryptPayload(envelope, passphrase);
+  if (Number.isNaN(Date.parse(payload.generatedAt || ''))) throw new Error('Encrypted snapshot payload generatedAt must be a valid timestamp.');
+  if (payload.generatedAt !== envelope.generatedAt) throw new Error('Encrypted snapshot generatedAt metadata must match the decrypted payload.');
 
   if (JSON.stringify(payload.projects) !== JSON.stringify(config.projects)) {
     throw new Error('Encrypted snapshot project configuration does not match the dashboard config.');
