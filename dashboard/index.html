@@ -274,6 +274,7 @@
     </div>
   </main>
 
+  <script src="./refresh-health.js"></script>
   <script>
     (() => {
       'use strict';
@@ -289,13 +290,13 @@
       const recentSourceEl = document.getElementById('recentSource');
       const refreshEl = document.getElementById('dashboardRefresh');
       const healthEl = document.getElementById('dashboardHealth');
+      const RefreshHealth = window.DashboardRefreshHealth;
       const RECENT_ACTIVITY_LIMIT = 12;
       const AUTO_REFRESH_MS = 60_000;
-      const STALE_AFTER_MS = 120_000;
       const configPromises = new Map();
       const sourceHealth = {
-        jira: { lastSuccessAt: 0, lastFailureAt: 0, error: '' },
-        github: { lastSuccessAt: 0, lastFailureAt: 0, error: '' }
+        jira: RefreshHealth.emptySourceState(),
+        github: RefreshHealth.emptySourceState()
       };
       let jiraPayload = null;
       let githubPayload = null;
@@ -610,31 +611,22 @@
         ]);
       }
 
-      function markSourceSuccess(source) {
-        sourceHealth[source].lastSuccessAt = Date.now();
-        sourceHealth[source].error = '';
+      function markSourceSuccess(source, payload) {
+        sourceHealth[source] = RefreshHealth.markSourceSuccess(sourceHealth[source], payload);
       }
 
       function markSourceFailure(source, failure) {
-        sourceHealth[source].lastFailureAt = Date.now();
-        sourceHealth[source].error = failure instanceof Error ? failure.message : String(failure || 'Refresh failed');
+        sourceHealth[source] = RefreshHealth.markSourceFailure(sourceHealth[source], failure);
       }
 
       function resetHealth() {
-        for (const state of Object.values(sourceHealth)) {
-          state.lastSuccessAt = 0;
-          state.lastFailureAt = 0;
-          state.error = '';
-        }
+        sourceHealth.jira = RefreshHealth.emptySourceState();
+        sourceHealth.github = RefreshHealth.emptySourceState();
         lastRefreshAttemptAt = 0;
       }
 
       function sourceState(source, now = Date.now()) {
-        const state = sourceHealth[source];
-        if (state.lastFailureAt > state.lastSuccessAt) return 'failed';
-        if (!state.lastSuccessAt) return 'waiting';
-        if (now - state.lastSuccessAt > STALE_AFTER_MS) return 'stale';
-        return 'current';
+        return RefreshHealth.sourceState(sourceHealth[source], now);
       }
 
       function refreshStateSnapshot() {
@@ -645,9 +637,7 @@
 
         const now = Date.now();
         const sources = { jira: sourceState('jira', now), github: sourceState('github', now) };
-        let state = 'current';
-        if (Object.values(sources).includes('failed')) state = 'failed';
-        else if (Object.values(sources).some(value => value === 'stale' || value === 'waiting')) state = 'stale';
+        let state = RefreshHealth.overallState(sources);
         if (refreshPromise) state = 'refreshing';
 
         const labels = { current: 'current', stale: 'stale', failed: 'failed', waiting: 'waiting' };
@@ -681,52 +671,27 @@
         }, delay);
       }
 
-      async function unlock(passphrase) {
-        const [jiraResult, githubResult] = await fetchDashboardPayloads(passphrase);
-        if (jiraResult.status === 'rejected') throw jiraResult.reason;
-
-        sessionVersion += 1;
-        sessionStorage.setItem('flight-control-passphrase', passphrase);
-        lastRefreshAttemptAt = Date.now();
-
-        jiraPayload = jiraResult.value;
-        markSourceSuccess('jira');
-        renderJira(jiraPayload);
-
-        if (githubResult.status === 'fulfilled') {
-          githubPayload = githubResult.value;
-          markSourceSuccess('github');
-          renderGithub(githubPayload);
-        } else {
-          githubPayload = null;
-          markSourceFailure('github', githubResult.reason);
-          const message = githubResult.reason instanceof Error && githubResult.reason.message.includes('not available')
-            ? githubResult.reason.message
-            : 'Unable to load GitHub PR data.';
-          renderGithubLocked(message);
-        }
-        renderRecent(jiraPayload, githubPayload);
-        updateHealth();
-        scheduleAutoRefresh();
-      }
-
-      async function refreshUnlocked() {
+      async function refreshWithPassphrase(passphrase, { establishSession = false, requireJira = false } = {}) {
         if (refreshPromise) return refreshPromise;
-        const passphrase = sessionStorage.getItem('flight-control-passphrase');
-        if (!passphrase) {
-          updateHealth();
-          return null;
-        }
 
         const version = sessionVersion;
         lastRefreshAttemptAt = Date.now();
         refreshPromise = (async () => {
           const [jiraResult, githubResult] = await fetchDashboardPayloads(passphrase);
-          if (version !== sessionVersion || sessionStorage.getItem('flight-control-passphrase') !== passphrase) return null;
+          if (version !== sessionVersion) return null;
+          if (!establishSession && sessionStorage.getItem('flight-control-passphrase') !== passphrase) return null;
+          if (requireJira && jiraResult.status === 'rejected') {
+            return { jira: jiraResult.status, github: githubResult.status, unlockFailure: jiraResult.reason };
+          }
+
+          if (establishSession) {
+            sessionVersion += 1;
+            sessionStorage.setItem('flight-control-passphrase', passphrase);
+          }
 
           if (jiraResult.status === 'fulfilled') {
             jiraPayload = jiraResult.value;
-            markSourceSuccess('jira');
+            markSourceSuccess('jira', jiraPayload);
             renderJira(jiraPayload);
           } else {
             markSourceFailure('jira', jiraResult.reason);
@@ -734,10 +699,16 @@
 
           if (githubResult.status === 'fulfilled') {
             githubPayload = githubResult.value;
-            markSourceSuccess('github');
+            markSourceSuccess('github', githubPayload);
             renderGithub(githubPayload);
           } else {
             markSourceFailure('github', githubResult.reason);
+            if (!githubPayload) {
+              const message = githubResult.reason instanceof Error && githubResult.reason.message.includes('not available')
+                ? githubResult.reason.message
+                : 'Unable to load GitHub PR data.';
+              renderGithubLocked(message);
+            }
           }
 
           if (jiraPayload) renderRecent(jiraPayload, githubPayload);
@@ -752,6 +723,25 @@
           updateHealth();
           scheduleAutoRefresh();
         }
+      }
+
+      async function unlock(passphrase) {
+        const result = await refreshWithPassphrase(passphrase, { establishSession: true, requireJira: true });
+        if (result?.unlockFailure) throw result.unlockFailure;
+      }
+
+      async function restoreSavedSession(passphrase) {
+        const result = await refreshWithPassphrase(passphrase, { requireJira: true });
+        if (result?.unlockFailure) throw result.unlockFailure;
+      }
+
+      async function refreshUnlocked() {
+        const passphrase = sessionStorage.getItem('flight-control-passphrase');
+        if (!passphrase) {
+          updateHealth();
+          return null;
+        }
+        return refreshWithPassphrase(passphrase);
       }
 
       async function onUnlock(event) {
@@ -798,16 +788,17 @@
       window.dashboardRefreshState = refreshStateSnapshot;
 
       document.getElementById('unlockForm').addEventListener('submit', onUnlock);
-      updateHealth();
       const saved = sessionStorage.getItem('flight-control-passphrase');
       if (saved) {
-        unlock(saved).catch(() => {
+        restoreSavedSession(saved).catch(() => {
           sessionVersion += 1;
           sessionStorage.removeItem('flight-control-passphrase');
           resetHealth();
           renderUnlock('Stored unlock key is no longer valid.');
           updateHealth();
         });
+      } else {
+        updateHealth();
       }
     })();
   </script>
