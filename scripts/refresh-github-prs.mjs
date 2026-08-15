@@ -124,7 +124,7 @@ async function fetchPullRequestsForRepository(repository, token, maxPullRequests
 }
 
 function contentHash(payload) {
-  const stable = { version: payload.version, repositories: payload.repositories, pullRequests: payload.pullRequests };
+  const stable = { version: payload.version, generatedAt: payload.generatedAt, repositories: payload.repositories, pullRequests: payload.pullRequests };
   return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex');
 }
 
@@ -236,7 +236,6 @@ async function verifyOutput(filePath) {
   if (!filePath) throw new Error('--verify-output requires an encrypted snapshot path.');
   const config = await readJson(process.env.CONFIG_PATH || DEFAULT_CONFIG);
   const passphrase = requiredEnv('DASHBOARD_DATA_PASSPHRASE');
-  const repositories = configuredRepositories(config);
   const envelope = await readJson(filePath);
   if (Number.isNaN(Date.parse(envelope.generatedAt || ''))) throw new Error('Encrypted snapshot refresh heartbeat must be a valid generatedAt timestamp.');
   const payload = decryptPayload(envelope, passphrase);
