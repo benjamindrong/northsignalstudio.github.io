@@ -8,19 +8,19 @@
   const STALE_AFTER_MS = 30 * 60 * 1000;
 
   function emptySourceState() {
-    return { lastSuccessAt: 0, lastFailureAt: 0, refreshedAt: 0, error: '' };
+    return { lastSuccessAt: 0, lastFailureAt: 0, generatedAt: 0, error: '' };
   }
 
-  function refreshedAtTimestamp(value) {
-    const timestamp = Date.parse(value || '');
+  function generatedAtTimestamp(payload) {
+    const timestamp = Date.parse(payload?.generatedAt || '');
     return Number.isNaN(timestamp) ? 0 : timestamp;
   }
 
-  function markSourceSuccess(state, refreshedAt, now = Date.now()) {
+  function markSourceSuccess(state, payload, now = Date.now()) {
     return {
       ...state,
       lastSuccessAt: now,
-      refreshedAt: refreshedAtTimestamp(refreshedAt),
+      generatedAt: generatedAtTimestamp(payload),
       error: ''
     };
   }
@@ -36,7 +36,7 @@
   function sourceState(state, now = Date.now()) {
     if (state.error) return 'failed';
     if (!state.lastSuccessAt) return 'waiting';
-    if (!state.refreshedAt || now - state.refreshedAt > STALE_AFTER_MS) return 'stale';
+    if (!state.generatedAt || now - state.generatedAt > STALE_AFTER_MS) return 'stale';
     return 'current';
   }
 
