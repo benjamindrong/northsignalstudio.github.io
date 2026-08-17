@@ -1,0 +1,1 @@
+white #FFFFFF + blue #007AFF; transparent elsewhere
