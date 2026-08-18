@@ -5,6 +5,7 @@ on:
     paths:
       - "dashboard/index.html"
       - "dashboard/display.html"
+      - "dashboard/benchmark-review.js"
       - "dashboard/jira-flight-control.config.json"
       - "scripts/benchmark-registry.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
@@ -17,6 +18,7 @@ on:
     paths:
       - "dashboard/index.html"
       - "dashboard/display.html"
+      - "dashboard/benchmark-review.js"
       - "dashboard/jira-flight-control.config.json"
       - "scripts/benchmark-registry.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
