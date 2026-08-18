@@ -1,13 +1,49 @@
 (function (root, factory) {
-  const api = factory();
+  const api = factory(root);
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.DashboardRefreshHealth = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, () => {
+})(typeof globalThis !== 'undefined' ? globalThis : this, root => {
   'use strict';
 
   const STALE_AFTER_MS = 30 * 60 * 1000;
+  let pendingBenchmarkRegistry = null;
+
+  function loadBenchmarkReview() {
+    if (!root || typeof document === 'undefined') return;
+    if (root.DashboardBenchmarkReview) return;
+    if (document.getElementById('benchmark-review-script')) return;
+
+    const script = document.createElement('script');
+    script.id = 'benchmark-review-script';
+    script.src = './benchmark-review.js';
+    script.addEventListener('load', () => {
+      if (pendingBenchmarkRegistry) {
+        root.DashboardBenchmarkReview?.render(pendingBenchmarkRegistry);
+        pendingBenchmarkRegistry = null;
+      }
+    });
+    document.head.appendChild(script);
+  }
+
+  function renderBenchmarkReview(registry) {
+    if (!root || typeof document === 'undefined') return;
+    if (root.DashboardBenchmarkReview?.render) {
+      root.DashboardBenchmarkReview.render(registry);
+      return;
+    }
+    pendingBenchmarkRegistry = registry;
+    loadBenchmarkReview();
+  }
+
+  function lockBenchmarkReview() {
+    if (!root || typeof document === 'undefined') return;
+    pendingBenchmarkRegistry = null;
+    if (root.DashboardBenchmarkReview?.locked) root.DashboardBenchmarkReview.locked();
+    else loadBenchmarkReview();
+  }
 
   function emptySourceState() {
+    lockBenchmarkReview();
     return { lastSuccessAt: 0, lastFailureAt: 0, generatedAt: 0, error: '' };
   }
 
@@ -17,6 +53,13 @@
   }
 
   function markSourceSuccess(state, payload, now = Date.now()) {
+    if (Array.isArray(payload?.issues)) {
+      renderBenchmarkReview(payload.benchmarkReview || {
+        state: 'unavailable',
+        sourceKey: 'BEN-8',
+        message: 'Benchmark registry is unavailable in the current Jira snapshot.'
+      });
+    }
     return {
       ...state,
       lastSuccessAt: now,
@@ -47,5 +90,6 @@
     return 'current';
   }
 
+  loadBenchmarkReview();
   return { STALE_AFTER_MS, emptySourceState, markSourceSuccess, markSourceFailure, sourceState, overallState };
 });
