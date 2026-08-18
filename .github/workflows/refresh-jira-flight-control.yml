@@ -69,6 +69,29 @@ jobs:
           console.log('Benchmark Review UI seam checks passed');
           NODE
 
+      - name: Verify Benchmark Review browser smoke
+        run: |
+          python3 -m http.server 8000 >/tmp/dashboard-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:8000/dashboard/index.html >/dev/null; then break; fi
+            sleep 0.2
+          done
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          if [ -z "$browser" ]; then
+            echo "No supported headless Chrome/Chromium executable is available."
+            exit 1
+          fi
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom \
+            http://127.0.0.1:8000/dashboard/index.html > /tmp/dashboard-index-dom.html
+          grep -F 'widget widget--benchmark' /tmp/dashboard-index-dom.html
+          grep -F 'Unlock the dashboard to load Benchmark Review.' /tmp/dashboard-index-dom.html
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom \
+            http://127.0.0.1:8000/dashboard/display.html > /tmp/dashboard-display-dom.html
+          grep -F 'data-view="3"' /tmp/dashboard-display-dom.html
+          grep -F '>Benchmark Review</button>' /tmp/dashboard-display-dom.html
+
       - name: Verify candidate diff
         run: |
           git fetch --no-tags origin main
