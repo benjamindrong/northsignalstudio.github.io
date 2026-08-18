@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - "dashboard/index.html"
+      - "dashboard/display.html"
       - "dashboard/jira-flight-control.config.json"
+      - "scripts/benchmark-registry.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
   schedule:
@@ -13,7 +15,10 @@ on:
   push:
     branches: [main]
     paths:
+      - "dashboard/index.html"
+      - "dashboard/display.html"
       - "dashboard/jira-flight-control.config.json"
+      - "scripts/benchmark-registry.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
 
@@ -54,6 +59,7 @@ jobs:
           DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
           OUTPUT_PATH: /tmp/jira-flight-control.enc.json
           VERIFY_PROJECTS: MYR,LAN
+          VERIFY_BENCHMARK_REGISTRY: BEN-8
         run: |
           node scripts/refresh-jira-flight-control.mjs
           node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
