@@ -67,6 +67,7 @@
         <button type="button" data-view="0" data-active="true" aria-pressed="true">Flight Control</button>
         <button type="button" data-view="1" data-active="false" aria-pressed="false">Code Review</button>
         <button type="button" data-view="2" data-active="false" aria-pressed="false">Recently Active</button>
+        <button type="button" data-view="3" data-active="false" aria-pressed="false">Benchmark Review</button>
       </div>
       <div class="display-controls">
         <button id="previousView" type="button" aria-label="Previous dashboard view">‹</button>
@@ -95,7 +96,8 @@
       const views = [
         { selector: '.widget--tickets', label: 'Ticket Flight Control' },
         { selector: '.widget--github', label: 'Code Review' },
-        { selector: '.widget--recent', label: 'Recently Active' }
+        { selector: '.widget--recent', label: 'Recently Active' },
+        { selector: '.widget--benchmark', label: 'Benchmark Review' }
       ];
       const frame = document.getElementById('dashboardFrame');
       const toolbar = document.getElementById('displayToolbar');
@@ -109,6 +111,7 @@
       let displayMode = true;
       let rotationMs = 0;
       let rotationTimer = 0;
+      let dashboardObserver = null;
 
       function frameDocument() {
         try { return frame.contentDocument; } catch { return null; }
@@ -131,9 +134,9 @@
             .dashboard-grid { height: 100%; min-height: 0; display: block !important; }
             .widget { display: none !important; width: 100% !important; height: 100% !important; min-height: 0 !important; grid-column: auto !important; padding: 14px !important; border-radius: 12px !important; }
             .widget[data-display-active="true"] { display: flex !important; flex-direction: column !important; }
-            .widget--tickets, .widget--github, .widget--recent { height: 100% !important; min-height: 0 !important; }
+            .widget--tickets, .widget--github, .widget--recent, .widget--benchmark { height: 100% !important; min-height: 0 !important; }
             .widget-header { padding-bottom: 10px !important; }
-            .flight-board, .github-board, .recent-board { margin-top: 10px !important; min-height: 0 !important; flex: 1 1 auto !important; }
+            .flight-board, .github-board, .recent-board, .benchmark-board { margin-top: 10px !important; min-height: 0 !important; flex: 1 1 auto !important; }
           `;
           doc.head.appendChild(style);
         }
@@ -161,6 +164,15 @@
           const widget = doc.querySelector(view.selector);
           if (widget) widget.setAttribute('data-display-active', String(index === activeIndex));
         });
+      }
+
+      function observeDashboardViews() {
+        const doc = frameDocument();
+        const grid = doc?.querySelector('.dashboard-grid');
+        if (!grid) return;
+        dashboardObserver?.disconnect();
+        dashboardObserver = new MutationObserver(() => applyActiveView());
+        dashboardObserver.observe(grid, { childList: true });
       }
 
       function scheduleRotation() {
@@ -216,6 +228,7 @@
 
       frame.addEventListener('load', () => {
         applyActiveView();
+        observeDashboardViews();
         attachFrameRefreshBridge();
         attachFrameInteractionGuards();
         updateControls();
