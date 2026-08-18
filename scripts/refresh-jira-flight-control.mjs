@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { projectBenchmarkRegistry } from './benchmark-registry.mjs';
 
 const DEFAULT_CONFIG = 'dashboard/jira-flight-control.config.json';
 const DEFAULT_OUTPUT = 'dashboard/jira-flight-control.enc.json';
@@ -116,6 +117,27 @@ async function searchIssues(baseUrl, authHeader, projects, maxIssues) {
   return [...active, ...recentDone];
 }
 
+async function fetchBenchmarkRegistry(baseUrl, authHeader, registryKey) {
+  if (!registryKey) {
+    return { state: 'unavailable', sourceKey: '', updatedAt: '', message: 'Benchmark registry key is not configured.' };
+  }
+
+  try {
+    const issue = await jiraFetch(
+      `${baseUrl}/rest/api/3/issue/${encodeURIComponent(registryKey)}?fields=description,updated,summary`,
+      {},
+      authHeader
+    );
+    return projectBenchmarkRegistry(issue.fields?.description, {
+      sourceKey: issue.key || registryKey,
+      updatedAt: issue.fields?.updated || ''
+    });
+  } catch (error) {
+    console.warn(`Benchmark registry ${registryKey} is unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    return { state: 'unavailable', sourceKey: registryKey, updatedAt: '', message: 'Benchmark registry is unavailable.' };
+  }
+}
+
 async function fetchStatusChangelogs(baseUrl, authHeader, issues) {
   if (!issues.length) return new Map();
 
@@ -147,7 +169,13 @@ async function fetchStatusChangelogs(baseUrl, authHeader, issues) {
 }
 
 function contentHash(payload) {
-  const stable = { version: payload.version, generatedAt: payload.generatedAt, projects: payload.projects, issues: payload.issues };
+  const stable = {
+    version: payload.version,
+    generatedAt: payload.generatedAt,
+    projects: payload.projects,
+    issues: payload.issues,
+    benchmarkReview: payload.benchmarkReview
+  };
   return crypto.createHash('sha256').update(JSON.stringify(stable)).digest('hex');
 }
 
@@ -210,6 +238,35 @@ async function readPreviousEnvelope(filePath) {
   try { return await readJson(filePath); } catch { return null; }
 }
 
+function benchmarkFixtureAdf() {
+  const text = value => ({ type: 'text', text: value });
+  const paragraph = value => ({ type: 'paragraph', content: [text(value)] });
+  const heading = (level, value) => ({ type: 'heading', attrs: { level }, content: [text(value)] });
+  const bulletList = values => ({
+    type: 'bulletList',
+    content: values.map(value => ({ type: 'listItem', content: [paragraph(value)] }))
+  });
+
+  return {
+    type: 'doc',
+    version: 1,
+    content: [
+      heading(2, 'Benchmark Run Ledger'),
+      heading(3, 'BEN-5 — Recent Activity'),
+      bulletList(['Status: Running', 'Source: Homepage Dashboard', 'Exact scores/winners: Backfill from original review records where not yet captured.']),
+      heading(3, 'BEN-9 — Runline Authority Handoff Console'),
+      bulletList(['Status: Selected — next', 'Source: Runline planned authority handoff', 'Candidate results: none yet.']),
+      heading(3, 'BEN-4 — Code Review'),
+      bulletList(['Status: Completed', 'Source: Homepage Dashboard Code Review widget', 'Candidate results: RA 8.5 / RB 9.0 — RB']),
+      heading(2, 'Previously Considered / Unused Ideas'),
+      bulletList(['Runline Standings / Current-Next projection — deterministic standings.']),
+      heading(2, 'Fresh Idea Backlog'),
+      heading(3, 'Crossmark'),
+      bulletList(['Crossmark Signal Hunt'])
+    ]
+  };
+}
+
 async function runSelfTest() {
   const histories = [
     { created: '2026-08-11T10:00:00.000-0500', items: [{ field: 'summary' }] },
@@ -220,7 +277,26 @@ async function runSelfTest() {
     throw new Error(`latestStatusMove self-test failed: ${latestStatusMove(histories)}`);
   }
 
-  const payload = { version: 1, generatedAt: '2026-08-12T12:00:00.000Z', projects: ['MYR'], issues: [{ key: 'MYR-1' }] };
+  const benchmarkReview = projectBenchmarkRegistry(benchmarkFixtureAdf(), { sourceKey: 'BEN-8', updatedAt: '2026-08-18T12:00:00.000Z' });
+  if (benchmarkReview.state !== 'ready' || benchmarkReview.selectedNext?.key !== 'BEN-9') throw new Error('benchmark selected-next self-test failed');
+  const running = benchmarkReview.runs.find(run => run.key === 'BEN-5');
+  if (running?.status !== 'Running' || running.resultState !== 'backfill') throw new Error('benchmark running/backfill self-test failed');
+  const completed = benchmarkReview.runs.find(run => run.key === 'BEN-4');
+  if (completed?.status !== 'Completed' || completed.resultLines[0] !== 'Candidate results: RA 8.5 / RB 9.0 — RB') throw new Error('benchmark exact-result self-test failed');
+  if (benchmarkReview.previouslyConsidered[0]?.title !== 'Runline Standings / Current-Next projection') throw new Error('benchmark previously-considered self-test failed');
+  if (benchmarkReview.freshBacklog[0]?.group !== 'Crossmark' || benchmarkReview.freshBacklog[0]?.ideas[0]?.title !== 'Crossmark Signal Hunt') throw new Error('benchmark fresh-backlog self-test failed');
+  const malformed = projectBenchmarkRegistry('## Not the registry\n- Candidate results: RA wins');
+  if (malformed.state !== 'unavailable' || malformed.selectedNext) throw new Error('benchmark malformed-registry self-test failed');
+  const conflicting = projectBenchmarkRegistry(`## Benchmark Run Ledger\n### BEN-9 — A\n- Status: Selected — next\n### BEN-10 — B\n- Status: Selected — next`);
+  if (conflicting.state !== 'unavailable') throw new Error('benchmark multiple-next self-test failed');
+
+  const payload = {
+    version: 1,
+    generatedAt: '2026-08-12T12:00:00.000Z',
+    projects: ['MYR', 'BEN'],
+    issues: [{ key: 'MYR-1' }],
+    benchmarkReview
+  };
   const passphrase = 'correct horse battery staple';
   const envelope = encryptPayload(payload, passphrase);
   if (JSON.stringify(decryptPayload(envelope, passphrase)) !== JSON.stringify(payload)) throw new Error('encryption self-test failed');
@@ -229,21 +305,27 @@ async function runSelfTest() {
   if (!canReuseEnvelope(envelope, hash, passphrase)) throw new Error('same-key envelope reuse self-test failed');
   if (canReuseEnvelope(envelope, hash, 'rotated dashboard passphrase')) throw new Error('passphrase rotation self-test failed');
 
+  const changedRegistryPayload = {
+    ...payload,
+    benchmarkReview: { ...benchmarkReview, updatedAt: '2026-08-18T12:15:00.000Z' }
+  };
+  if (contentHash(changedRegistryPayload) === hash) throw new Error('benchmark registry must participate in snapshot identity');
+
   const newerPayload = { ...payload, generatedAt: '2026-08-12T12:15:00.000Z' };
   if (contentHash(newerPayload) === hash) throw new Error('generatedAt must participate in snapshot identity');
 
-  const activeJql = buildActiveJql(['MYR', 'HOME']);
+  const activeJql = buildActiveJql(['MYR', 'HOME', 'BEN']);
   if (
-    !activeJql.includes('project in ("MYR", "HOME")')
+    !activeJql.includes('project in ("MYR", "HOME", "BEN")')
     || !activeJql.includes('status != Shelved')
     || !activeJql.includes('statusCategory != Done')
     || !activeJql.includes('status NOT IN ("To Do", "Backlog", "Ready", "New")')
     || activeJql.includes('"Open"')
   ) throw new Error('active JQL self-test failed');
 
-  const doneJql = buildDoneJql('LAN');
+  const doneJql = buildDoneJql('BEN');
   if (
-    !doneJql.includes('project = "LAN"')
+    !doneJql.includes('project = "BEN"')
     || !doneJql.includes('statusCategory = Done')
     || !doneJql.includes('ORDER BY statusCategoryChangedDate DESC')
     || doneJql.includes('-7d')
@@ -266,6 +348,14 @@ async function verifyOutput(filePath) {
     throw new Error('Encrypted snapshot project configuration does not match the dashboard config.');
   }
   if (!Array.isArray(payload.issues)) throw new Error('Encrypted snapshot issues must be an array.');
+  if (!payload.benchmarkReview || typeof payload.benchmarkReview !== 'object') throw new Error('Encrypted snapshot benchmarkReview must be an object.');
+  if (payload.benchmarkReview.sourceKey !== String(config.benchmarkRegistryKey || '')) throw new Error('Encrypted snapshot benchmark registry key does not match dashboard config.');
+  if (!['ready', 'unavailable'].includes(payload.benchmarkReview.state)) throw new Error('Encrypted snapshot benchmarkReview state is invalid.');
+  const requiredBenchmarkRegistry = String(process.env.VERIFY_BENCHMARK_REGISTRY || '').trim();
+  if (requiredBenchmarkRegistry) {
+    if (payload.benchmarkReview.sourceKey !== requiredBenchmarkRegistry) throw new Error(`Benchmark registry source must be ${requiredBenchmarkRegistry}.`);
+    if (payload.benchmarkReview.state !== 'ready') throw new Error(`Benchmark registry ${requiredBenchmarkRegistry} is not projectable.`);
+  }
 
   const observedProjects = new Set();
   const doneCountByProject = new Map();
@@ -292,7 +382,7 @@ async function verifyOutput(filePath) {
     if (!observedProjects.has(project)) throw new Error(`Live snapshot is missing required verification project ${project}.`);
   }
 
-  console.log(`Verified encrypted Jira snapshot with ${payload.issues.length} issues across ${[...observedProjects].sort().join(', ') || 'no active projects'}.`);
+  console.log(`Verified encrypted Jira snapshot with ${payload.issues.length} issues across ${[...observedProjects].sort().join(', ') || 'no active projects'}; benchmark registry ${payload.benchmarkReview.state}.`);
 }
 
 async function main() {
@@ -311,7 +401,10 @@ async function main() {
   const authHeader = `Basic ${Buffer.from(`${email}:${apiToken}`).toString('base64')}`;
   const maxIssues = Number.isFinite(Number(config.maxIssues)) ? Number(config.maxIssues) : 100;
 
-  const issues = await searchIssues(baseUrl, authHeader, config.projects, maxIssues);
+  const [issues, benchmarkReview] = await Promise.all([
+    searchIssues(baseUrl, authHeader, config.projects, maxIssues),
+    fetchBenchmarkRegistry(baseUrl, authHeader, String(config.benchmarkRegistryKey || ''))
+  ]);
   const historiesByIssueId = await fetchStatusChangelogs(baseUrl, authHeader, issues);
   const mapped = issues.map(issue => ({
     key: issue.key,
@@ -329,7 +422,8 @@ async function main() {
     version: 1,
     generatedAt: new Date().toISOString(),
     projects: config.projects,
-    issues: mapped
+    issues: mapped,
+    benchmarkReview
   };
 
   const previous = await readPreviousEnvelope(previousPath);
@@ -340,7 +434,7 @@ async function main() {
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
   await fs.writeFile(outputPath, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
-  console.log(`Wrote encrypted Jira Flight Control snapshot with ${mapped.length} issues to ${outputPath}`);
+  console.log(`Wrote encrypted Jira Flight Control snapshot with ${mapped.length} issues and benchmark registry ${benchmarkReview.state} to ${outputPath}`);
 }
 
 const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
