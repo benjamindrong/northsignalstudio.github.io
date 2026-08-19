@@ -89,25 +89,35 @@ export function classifyPullRequest({ draft, mergeableState, requestedReviewers,
   return { state: 'OPEN', rank: 6, className: 'todo' };
 }
 
+export function selectPullRequests(pulls, maxPullRequests) {
+  return (Array.isArray(pulls) ? pulls : []).slice(0, maxPullRequests);
+}
+
 async function fetchPullRequestsForRepository(repository, token, maxPullRequests) {
   const [owner, repo] = repository.split('/');
   const pulls = await githubFetch(`${API_ROOT}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls?state=open&sort=updated&direction=desc&per_page=${Math.min(100, maxPullRequests)}`, token);
-  const selected = pulls.filter(pull => !pull.draft).slice(0, maxPullRequests);
+  const selected = selectPullRequests(pulls, maxPullRequests);
   const mapped = [];
 
   for (const pull of selected) {
-    const [detail, reviews, checks] = await Promise.all([
-      githubFetch(`${API_ROOT}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pull.number}`, token),
-      githubFetch(`${API_ROOT}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pull.number}/reviews?per_page=100`, token),
-      githubFetch(`${API_ROOT}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${pull.head.sha}/check-runs?per_page=100`, token)
-    ]);
-    const attention = classifyPullRequest({
-      draft: Boolean(pull.draft),
-      mergeableState: detail.mergeable_state,
-      requestedReviewers: pull.requested_reviewers || [],
-      reviews,
-      checkRuns: checks.check_runs || []
-    });
+    let attention;
+    if (pull.draft) {
+      attention = classifyPullRequest({ draft: true, mergeableState: '', requestedReviewers: [], reviews: [], checkRuns: [] });
+    } else {
+      const [detail, reviews, checks] = await Promise.all([
+        githubFetch(`${API_ROOT}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pull.number}`, token),
+        githubFetch(`${API_ROOT}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pull.number}/reviews?per_page=100`, token),
+        githubFetch(`${API_ROOT}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${pull.head.sha}/check-runs?per_page=100`, token)
+      ]);
+      attention = classifyPullRequest({
+        draft: false,
+        mergeableState: detail.mergeable_state,
+        requestedReviewers: pull.requested_reviewers || [],
+        reviews,
+        checkRuns: checks.check_runs || []
+      });
+    }
+
     mapped.push({
       repository,
       number: pull.number,
@@ -203,11 +213,23 @@ async function runSelfTest() {
     if (actual.state !== state || actual.rank !== rank) throw new Error(`classification self-test failed for ${state}`);
   }
 
+  const selected = selectPullRequests([
+    { number: 1, draft: true },
+    { number: 2, draft: false },
+    { number: 3, draft: false }
+  ], 2);
+  if (selected.length !== 2 || selected[0].draft !== true || selected[1].number !== 2) {
+    throw new Error('draft-preservation self-test failed');
+  }
+
   const payload = {
     version: 1,
     generatedAt: '2026-08-12T12:00:00.000Z',
     repositories: ['benjamindrong/MyRAM-iOS'],
-    pullRequests: [{ repository: 'benjamindrong/MyRAM-iOS', number: 1, title: 'Test', updatedAt: '2026-08-12T12:00:00Z', url: 'https://github.com/benjamindrong/MyRAM-iOS/pull/1', state: 'OPEN', stateClass: 'todo', attentionRank: 6 }]
+    pullRequests: [
+      { repository: 'benjamindrong/MyRAM-iOS', number: 1, title: 'Draft test', updatedAt: '2026-08-12T12:01:00Z', url: 'https://github.com/benjamindrong/MyRAM-iOS/pull/1', state: 'DRAFT', stateClass: 'unknown', attentionRank: 7 },
+      { repository: 'benjamindrong/MyRAM-iOS', number: 2, title: 'Open test', updatedAt: '2026-08-12T12:00:00Z', url: 'https://github.com/benjamindrong/MyRAM-iOS/pull/2', state: 'OPEN', stateClass: 'todo', attentionRank: 6 }
+    ]
   };
   const passphrase = 'correct horse battery staple';
   const envelope = encryptPayload(payload, passphrase);
