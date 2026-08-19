@@ -4,7 +4,11 @@ on:
   pull_request:
     paths:
       - "dashboard/index.html"
+      - "dashboard/display.html"
+      - "dashboard/benchmark-review.js"
+      - "dashboard/refresh-health.js"
       - "dashboard/jira-flight-control.config.json"
+      - "scripts/benchmark-registry.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
   schedule:
@@ -13,7 +17,12 @@ on:
   push:
     branches: [main]
     paths:
+      - "dashboard/index.html"
+      - "dashboard/display.html"
+      - "dashboard/benchmark-review.js"
+      - "dashboard/refresh-health.js"
       - "dashboard/jira-flight-control.config.json"
+      - "scripts/benchmark-registry.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
 
@@ -38,6 +47,51 @@ jobs:
       - name: Verify refresh logic
         run: node scripts/refresh-jira-flight-control.mjs --self-test
 
+      - name: Verify Benchmark Review UI seams
+        run: |
+          node --check dashboard/benchmark-review.js
+          node --check dashboard/refresh-health.js
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const display = fs.readFileSync('dashboard/display.html', 'utf8');
+          const health = fs.readFileSync('dashboard/refresh-health.js', 'utf8');
+          const required = [
+            [display, 'data-view="3"', 'Benchmark Review Display Mode button'],
+            [display, "selector: '.widget--benchmark'", 'Benchmark Review Display Mode selector'],
+            [display, '.benchmark-board', 'Benchmark Review focused sizing'],
+            [display, 'MutationObserver', 'dynamic widget Display Mode guard'],
+            [health, "script.src = './benchmark-review.js'", 'Benchmark Review loader'],
+            [health, 'payload.benchmarkReview', 'Jira snapshot Benchmark Review bridge']
+          ];
+          for (const [source, marker, label] of required) {
+            if (!source.includes(marker)) throw new Error(`Missing ${label}`);
+          }
+          console.log('Benchmark Review UI seam checks passed');
+          NODE
+
+      - name: Verify Benchmark Review browser smoke
+        run: |
+          python3 -m http.server 8000 >/tmp/dashboard-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:8000/dashboard/index.html >/dev/null; then break; fi
+            sleep 0.2
+          done
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          if [ -z "$browser" ]; then
+            echo "No supported headless Chrome/Chromium executable is available."
+            exit 1
+          fi
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom \
+            http://127.0.0.1:8000/dashboard/index.html > /tmp/dashboard-index-dom.html
+          grep -F 'widget widget--benchmark' /tmp/dashboard-index-dom.html
+          grep -F 'Unlock the dashboard to load Benchmark Review.' /tmp/dashboard-index-dom.html
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom \
+            http://127.0.0.1:8000/dashboard/display.html > /tmp/dashboard-display-dom.html
+          grep -F 'data-view="3"' /tmp/dashboard-display-dom.html
+          grep -F '>Benchmark Review</button>' /tmp/dashboard-display-dom.html
+
       - name: Verify candidate diff
         run: |
           git fetch --no-tags origin main
@@ -54,6 +108,7 @@ jobs:
           DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
           OUTPUT_PATH: /tmp/jira-flight-control.enc.json
           VERIFY_PROJECTS: MYR,LAN
+          VERIFY_BENCHMARK_REGISTRY: BEN-8
         run: |
           node scripts/refresh-jira-flight-control.mjs
           node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
