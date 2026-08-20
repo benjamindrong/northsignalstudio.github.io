@@ -180,15 +180,6 @@
     .recent-updated { color: #9da59d; text-align: right; font-size: 8px; letter-spacing: .03em; text-transform: uppercase; }
     .recent-empty { display: grid; min-height: 100%; place-items: center; padding: 18px; color: #9da59d; text-align: center; font-size: 10px; line-height: 1.45; letter-spacing: .04em; text-transform: uppercase; }
 
-    @media (min-width: 860px) and (min-height: 640px) {
-      .page { height: 100vh; height: 100dvh; }
-      .dashboard-grid { grid-template-rows: minmax(260px, 1.15fr) minmax(180px, .85fr); }
-      .widget { min-height: 0; }
-      .widget--tickets, .widget--github { height: auto; }
-      .widget--recent { min-height: 0; }
-      .widget--recent .widget-placeholder { min-height: 0; }
-    }
-
     @media (max-width: 859px) {
       .page { width: 100%; padding: 28px 12px 40px; }
       .dashboard-grid { grid-template-columns: 1fr; }
