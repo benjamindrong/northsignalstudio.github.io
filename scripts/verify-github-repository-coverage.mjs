@@ -1,32 +1,18 @@
 import fs from 'node:fs/promises';
 import process from 'node:process';
+import { decryptPayload } from './refresh-github-prs.mjs';
 
-const DEFAULT_CONFIG = 'dashboard/github-prs.config.json';
+const DEFAULT_OUTPUT = 'dashboard/github-prs.enc.json';
 const REQUIRED_REPOSITORIES = ['benjamindrong/Runline'];
 
-function parseRepositoryList(value) {
-  return String(value || '')
-    .split(',')
-    .map(item => item.trim())
-    .filter(Boolean);
-}
-
-function validateRepository(repository) {
-  if (!/^[^/\s]+\/[^/\s]+$/.test(repository)) {
-    throw new Error(`Invalid repository name: ${repository}`);
-  }
-}
-
-export function effectiveRepositories(config, privateRepositoryValue = '') {
-  const publicRepositories = Array.isArray(config.repositories) ? config.repositories : [];
-  const privateRepositories = parseRepositoryList(privateRepositoryValue);
-  const repositories = [...new Set([...publicRepositories, ...privateRepositories])];
-  if (!repositories.length) throw new Error('GitHub PR configuration must contain at least one repository.');
-  repositories.forEach(validateRepository);
-  return repositories;
+function requiredEnv(name) {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`Missing required environment variable: ${name}`);
+  return value;
 }
 
 export function verifyRequiredRepositories(repositories, requiredRepositories = REQUIRED_REPOSITORIES) {
+  if (!Array.isArray(repositories)) throw new Error('Encrypted snapshot repositories must be an array.');
   const missing = requiredRepositories.filter(repository => !repositories.includes(repository));
   if (missing.length) {
     throw new Error(`Missing required production GitHub repository coverage: ${missing.join(', ')}`);
@@ -35,23 +21,17 @@ export function verifyRequiredRepositories(repositories, requiredRepositories = 
 }
 
 async function runSelfTest() {
-  const config = {
-    repositories: [
-      'benjamindrong/MyRAM-iOS',
-      'benjamindrong/NearbySyncCore',
-      'benjamindrong/northsignalstudio.github.io'
-    ]
-  };
-
-  const withRunline = effectiveRepositories(config, 'benjamindrong/Runline');
-  verifyRequiredRepositories(withRunline);
-  for (const repository of config.repositories) {
-    if (!withRunline.includes(repository)) throw new Error(`public repository was lost from effective coverage: ${repository}`);
-  }
+  const configured = [
+    'benjamindrong/MyRAM-iOS',
+    'benjamindrong/NearbySyncCore',
+    'benjamindrong/northsignalstudio.github.io',
+    'benjamindrong/Runline'
+  ];
+  verifyRequiredRepositories(configured);
 
   let omissionFailed = false;
   try {
-    verifyRequiredRepositories(effectiveRepositories(config, ''));
+    verifyRequiredRepositories(configured.filter(repository => repository !== 'benjamindrong/Runline'));
   } catch (error) {
     omissionFailed = String(error?.message || error).includes('benjamindrong/Runline');
   }
@@ -60,14 +40,17 @@ async function runSelfTest() {
   console.log('github repository coverage self-test passed');
 }
 
+async function verifyOutputCoverage(filePath) {
+  const passphrase = requiredEnv('DASHBOARD_DATA_PASSPHRASE');
+  const envelope = JSON.parse(await fs.readFile(filePath, 'utf8'));
+  const payload = decryptPayload(envelope, passphrase);
+  const repositories = verifyRequiredRepositories(payload.repositories);
+  console.log(`Verified required GitHub repository coverage in encrypted snapshot (${repositories.length} configured).`);
+}
+
 async function main() {
   if (process.argv.includes('--self-test')) return runSelfTest();
-
-  const configPath = process.env.CONFIG_PATH || DEFAULT_CONFIG;
-  const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
-  const repositories = effectiveRepositories(config, process.env.DASHBOARD_GITHUB_PRIVATE_REPOSITORIES);
-  verifyRequiredRepositories(repositories);
-  console.log(`Verified effective GitHub repository coverage across ${repositories.length} repositories.`);
+  return verifyOutputCoverage(process.env.OUTPUT_PATH || DEFAULT_OUTPUT);
 }
 
 main().catch(error => {

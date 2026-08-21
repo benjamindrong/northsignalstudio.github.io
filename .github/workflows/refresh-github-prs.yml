@@ -66,9 +66,9 @@ jobs:
           DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
           OUTPUT_PATH: /tmp/github-prs.enc.json
         run: |
-          node scripts/verify-github-repository-coverage.mjs
           node scripts/refresh-github-prs.mjs
           node scripts/refresh-github-prs.mjs --verify-output "$OUTPUT_PATH"
+          node scripts/verify-github-repository-coverage.mjs
 
   publish:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -96,9 +96,9 @@ jobs:
           PREVIOUS_PATH: _dashboard-data/dashboard/github-prs.enc.json
           OUTPUT_PATH: _dashboard-data/dashboard/github-prs.enc.json
         run: |
-          node scripts/verify-github-repository-coverage.mjs
           node scripts/refresh-github-prs.mjs
           node scripts/refresh-github-prs.mjs --verify-output "$OUTPUT_PATH"
+          node scripts/verify-github-repository-coverage.mjs
 
       - name: Publish changed snapshot
         working-directory: _dashboard-data
