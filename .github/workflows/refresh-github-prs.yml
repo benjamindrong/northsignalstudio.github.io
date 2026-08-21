@@ -7,6 +7,7 @@ on:
       - "dashboard/refresh-health.js"
       - "dashboard/github-prs.config.json"
       - "scripts/refresh-github-prs.mjs"
+      - "scripts/verify-github-repository-coverage.mjs"
       - "scripts/test-dashboard-refresh.mjs"
       - ".github/workflows/refresh-github-prs.yml"
   schedule:
@@ -17,6 +18,7 @@ on:
     paths:
       - "dashboard/github-prs.config.json"
       - "scripts/refresh-github-prs.mjs"
+      - "scripts/verify-github-repository-coverage.mjs"
       - ".github/workflows/refresh-github-prs.yml"
 
 permissions:
@@ -38,7 +40,9 @@ jobs:
           fetch-depth: 0
 
       - name: Verify refresh logic
-        run: node scripts/refresh-github-prs.mjs --self-test
+        run: |
+          node scripts/refresh-github-prs.mjs --self-test
+          node scripts/verify-github-repository-coverage.mjs --self-test
 
       - name: Verify dashboard refresh health
         run: |
@@ -64,6 +68,7 @@ jobs:
         run: |
           node scripts/refresh-github-prs.mjs
           node scripts/refresh-github-prs.mjs --verify-output "$OUTPUT_PATH"
+          node scripts/verify-github-repository-coverage.mjs
 
   publish:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -93,6 +98,7 @@ jobs:
         run: |
           node scripts/refresh-github-prs.mjs
           node scripts/refresh-github-prs.mjs --verify-output "$OUTPUT_PATH"
+          node scripts/verify-github-repository-coverage.mjs
 
       - name: Publish changed snapshot
         working-directory: _dashboard-data
