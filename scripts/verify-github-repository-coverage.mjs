@@ -4,7 +4,9 @@ import { decryptPayload } from './refresh-github-prs.mjs';
 
 const DEFAULT_OUTPUT = 'dashboard/github-prs.enc.json';
 const REQUIRED_REPOSITORIES = [
+  'benjamindrong/project-blacksmith-instructions',
   'benjamindrong/Runline',
+  'benjamindrong/BenchmarkReview',
   'benjamindrong/Crossmark'
 ];
 
@@ -28,7 +30,9 @@ async function runSelfTest() {
     'benjamindrong/MyRAM-iOS',
     'benjamindrong/NearbySyncCore',
     'benjamindrong/northsignalstudio.github.io',
+    'benjamindrong/project-blacksmith-instructions',
     'benjamindrong/Runline',
+    'benjamindrong/BenchmarkReview',
     'benjamindrong/Crossmark'
   ];
   verifyRequiredRepositories(configured);
