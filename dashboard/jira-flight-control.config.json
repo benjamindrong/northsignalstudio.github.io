@@ -1,6 +1,6 @@
 {
   "jiraBaseUrl": "https://benjamindrong80.atlassian.net",
-  "projects": ["MYR", "LAN", "HOME", "RUN", "BEN"],
+  "projects": ["MYR", "LAN", "HOME", "RUN", "BEN", "CROS"],
   "benchmarkRegistryKey": "BEN-8",
   "maxIssues": 100,
   "dataUrl": "https://raw.githubusercontent.com/benjamindrong/northsignalstudio.github.io/dashboard-data/dashboard/jira-flight-control.enc.json"
