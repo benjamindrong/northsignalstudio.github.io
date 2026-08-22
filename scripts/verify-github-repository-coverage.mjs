@@ -3,7 +3,10 @@ import process from 'node:process';
 import { decryptPayload } from './refresh-github-prs.mjs';
 
 const DEFAULT_OUTPUT = 'dashboard/github-prs.enc.json';
-const REQUIRED_REPOSITORIES = ['benjamindrong/Runline'];
+const REQUIRED_REPOSITORIES = [
+  'benjamindrong/Runline',
+  'benjamindrong/Crossmark'
+];
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -25,17 +28,20 @@ async function runSelfTest() {
     'benjamindrong/MyRAM-iOS',
     'benjamindrong/NearbySyncCore',
     'benjamindrong/northsignalstudio.github.io',
-    'benjamindrong/Runline'
+    'benjamindrong/Runline',
+    'benjamindrong/Crossmark'
   ];
   verifyRequiredRepositories(configured);
 
-  let omissionFailed = false;
-  try {
-    verifyRequiredRepositories(configured.filter(repository => repository !== 'benjamindrong/Runline'));
-  } catch (error) {
-    omissionFailed = String(error?.message || error).includes('benjamindrong/Runline');
+  for (const requiredRepository of REQUIRED_REPOSITORIES) {
+    let omissionFailed = false;
+    try {
+      verifyRequiredRepositories(configured.filter(repository => repository !== requiredRepository));
+    } catch (error) {
+      omissionFailed = String(error?.message || error).includes(requiredRepository);
+    }
+    if (!omissionFailed) throw new Error(`required repository omission must fail verification: ${requiredRepository}`);
   }
-  if (!omissionFailed) throw new Error('required repository omission must fail verification');
 
   console.log('github repository coverage self-test passed');
 }
