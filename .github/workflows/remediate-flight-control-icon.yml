@@ -1,0 +1,61 @@
+name: Remediate Flight Control icon
+
+on:
+  push:
+    branches:
+      - Fix-flight-control-web-app-icon
+    paths:
+      - .github/workflows/remediate-flight-control-icon.yml
+      - dashboard/flight-control-icon.svg
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Fix-flight-control-web-app-icon
+      - name: Install SVG renderer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-bin imagemagick
+      - name: Generate opaque true-color PNG
+        run: |
+          rsvg-convert -w 1024 -h 1024 dashboard/flight-control-icon.svg -o /tmp/flight-control.png
+          convert /tmp/flight-control.png -background '#0b0d10' -alpha remove -alpha off PNG24:dashboard/flight-control-app-icon.png
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('dashboard/flight-control-app-icon.png')
+          data = p.read_bytes()
+          assert data[:8] == b'\x89PNG\r\n\x1a\n'
+          assert int.from_bytes(data[16:20], 'big') == 1024
+          assert int.from_bytes(data[20:24], 'big') == 1024
+          assert data[25] == 2, f'expected true-color RGB PNG, got color type {data[25]}'
+          assert b'tRNS' not in data
+          PY
+      - name: Make every HTML icon path use the same PNG
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('dashboard/index.html')
+          text = p.read_text()
+          old = '<link rel="icon" type="image/svg+xml" href="./flight-control-icon.svg" />'
+          new = '<link rel="icon" type="image/png" sizes="1024x1024" href="./flight-control-app-icon.png" />'
+          assert old in text, 'expected SVG favicon declaration not found'
+          text = text.replace(old, new, 1)
+          p.write_text(text)
+          PY
+      - name: Commit generated remediation
+        run: |
+          if git diff --quiet -- dashboard/flight-control-app-icon.png dashboard/index.html; then
+            echo 'No remediation changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add dashboard/flight-control-app-icon.png dashboard/index.html
+          git commit -m 'Regenerate Safari-safe Flight Control icon'
+          git push origin HEAD:Fix-flight-control-web-app-icon
