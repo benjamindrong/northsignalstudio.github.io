@@ -9,9 +9,9 @@
   "theme_color": "#0b0d10",
   "icons": [
     {
-      "src": "./flight-control-icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "./flight-control-app-icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]
