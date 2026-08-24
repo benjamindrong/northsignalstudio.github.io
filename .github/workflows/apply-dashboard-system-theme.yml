@@ -1,0 +1,55 @@
+name: Apply dashboard system theme
+
+on:
+  push:
+    branches:
+      - Match-dashboard-system-appearance
+    paths:
+      - .github/workflows/apply-dashboard-system-theme.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Match-dashboard-system-appearance
+      - name: Wire system appearance into dashboard surfaces
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          light = '  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f6f8" />'
+          dark = '  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0d10" />'
+          stylesheet = '  <link rel="stylesheet" href="./theme.css" />'
+
+          for name in ('index.html', 'display.html'):
+              path = Path('dashboard') / name
+              text = path.read_text()
+              old_theme = '  <meta name="theme-color" content="#0b0d10" />'
+              if old_theme not in text:
+                  raise SystemExit(f'{name}: expected unconditional dark theme-color not found')
+              text = text.replace(old_theme, f'{light}\n{dark}', 1)
+              if stylesheet in text:
+                  raise SystemExit(f'{name}: theme stylesheet already present unexpectedly')
+              marker = '  </style>\n</head>'
+              if marker not in text:
+                  raise SystemExit(f'{name}: closing style/head marker not found')
+              text = text.replace(marker, f'  </style>\n{stylesheet}\n</head>', 1)
+              path.write_text(text)
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify system appearance contract
+        run: node scripts/test-dashboard-theme.mjs
+      - name: Commit dashboard theme wiring
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add dashboard/index.html dashboard/display.html
+          git commit -m 'Follow system appearance across dashboard surfaces'
+          git push origin HEAD:Match-dashboard-system-appearance
