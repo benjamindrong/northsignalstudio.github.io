@@ -1,0 +1,34 @@
+name: Validate dashboard theme
+
+on:
+  pull_request:
+    paths:
+      - dashboard/index.html
+      - dashboard/display.html
+      - dashboard/theme.css
+      - dashboard/benchmark-review.js
+      - scripts/test-dashboard-theme.mjs
+      - .github/workflows/validate-dashboard-theme.yml
+  push:
+    branches:
+      - main
+    paths:
+      - dashboard/index.html
+      - dashboard/display.html
+      - dashboard/theme.css
+      - dashboard/benchmark-review.js
+      - scripts/test-dashboard-theme.mjs
+      - .github/workflows/validate-dashboard-theme.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/test-dashboard-theme.mjs

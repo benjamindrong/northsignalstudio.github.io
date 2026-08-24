@@ -1,0 +1,164 @@
+:root {
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f6f8;
+    --panel: #ffffff;
+    --panel-border: #cdd5dd;
+    --board-bg: #fbfcfd;
+    --board-panel: #eef2f5;
+    --board-line: #c4ced7;
+    --board-line-soft: #dde3e8;
+    --text: #15191e;
+    --board-text: #20242a;
+    --muted: #5d6873;
+    --accent: #1667c5;
+    --todo: #256886;
+    --progress: #8a5a00;
+    --review: #6e4aa8;
+    --blocked: #b42318;
+    --done: #18723c;
+    --unknown: #59636d;
+  }
+
+  html,
+  body {
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .dashboard-action,
+  .display-toolbar button,
+  .display-toolbar select {
+    border-color: #aeb8c2;
+    background: #ffffff;
+    color: #22272e;
+  }
+
+  .display-toolbar {
+    border-color: var(--panel-border);
+    background: var(--panel);
+  }
+
+  .display-brand span,
+  .display-health,
+  .display-toolbar label {
+    color: var(--muted);
+  }
+
+  .display-toolbar button[data-active="true"] {
+    border-color: var(--accent);
+    background: #e6f0fb;
+    color: #123f71;
+  }
+
+  .display-frame {
+    background: var(--bg);
+  }
+
+  .flight-source,
+  .github-source,
+  .recent-source {
+    color: #66727c;
+  }
+
+  .flight-action {
+    border-color: #8f9ba6;
+  }
+
+  .flight-columns,
+  .flight-empty,
+  .github-empty,
+  .github-pr-updated,
+  .recent-updated,
+  .recent-empty {
+    color: #64707a;
+  }
+
+  .flight-project {
+    background: #f0f3f5;
+    color: #39434c;
+  }
+
+  .flight-row:nth-of-type(even),
+  .github-pr-row:nth-child(even),
+  .recent-row:nth-child(even) {
+    background: #f7f9fa;
+  }
+
+  .flight-row:hover,
+  .github-pr-row:hover,
+  .recent-row:hover {
+    background: #eef4f8;
+  }
+
+  .flight-key,
+  .github-pr-repo,
+  .recent-identity {
+    color: #695100;
+  }
+
+  .flight-move,
+  .github-pr-number {
+    color: #5c6670;
+  }
+
+  .unlock-form label {
+    color: #39434c;
+  }
+
+  .unlock-row input {
+    border-color: #9aa5af;
+    background: #ffffff;
+    color: var(--board-text);
+  }
+
+  .unlock-row button {
+    border-color: #8f9ba6;
+  }
+
+  /* Benchmark Review injects its dark baseline after theme.css at runtime,
+     so these light-mode declarations must win the cascade explicitly. */
+  .benchmark-meta,
+  .benchmark-run-meta,
+  .benchmark-idea-section strong {
+    color: #66727c !important;
+  }
+
+  .benchmark-next {
+    border-color: var(--progress) !important;
+    background: #fff8df !important;
+  }
+
+  .benchmark-next-label,
+  .benchmark-result.backfill {
+    color: var(--progress) !important;
+  }
+
+  .benchmark-run-title {
+    color: #695100 !important;
+  }
+
+  .benchmark-group,
+  .benchmark-ideas {
+    background: #f7f9fa !important;
+  }
+
+  .benchmark-group h3,
+  .benchmark-ideas summary {
+    color: #39434c !important;
+  }
+
+  .benchmark-result,
+  .benchmark-idea {
+    color: #5c6670 !important;
+  }
+
+  .benchmark-result.none,
+  .benchmark-result.unknown,
+  .benchmark-empty {
+    color: #64707a !important;
+  }
+}
