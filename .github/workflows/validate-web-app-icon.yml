@@ -5,6 +5,7 @@ on:
     paths:
       - dashboard/index.html
       - dashboard/manifest.webmanifest
+      - dashboard/flight-control-app-icon.png
       - dashboard/flight-control-icon.svg
       - scripts/test-web-app-icon.mjs
       - .github/workflows/validate-web-app-icon.yml
@@ -14,6 +15,7 @@ on:
     paths:
       - dashboard/index.html
       - dashboard/manifest.webmanifest
+      - dashboard/flight-control-app-icon.png
       - dashboard/flight-control-icon.svg
       - scripts/test-web-app-icon.mjs
       - .github/workflows/validate-web-app-icon.yml
