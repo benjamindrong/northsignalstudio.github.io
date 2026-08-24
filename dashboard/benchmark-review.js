@@ -2,6 +2,7 @@
   'use strict';
 
   const JIRA_BASE_URL = 'https://benjamindrong80.atlassian.net/browse/';
+  const ACTIVE_STATUSES = new Set(['Preparing', 'Blocked', 'Running']);
 
   function create(tag, className, text) {
     const element = document.createElement(tag);
@@ -25,6 +26,7 @@
       .benchmark-run-title:hover { text-decoration: underline; }
       .benchmark-run-meta { margin-top: 4px; color: #a8aea8; font-size: 9px; }
       .benchmark-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .benchmark-columns.completed-only { grid-template-columns: minmax(0, 1fr); }
       .benchmark-group { min-width: 0; border: 1px solid var(--board-line-soft); background: #101310; }
       .benchmark-group h3 { margin: 0; padding: 7px 8px; border-bottom: 1px solid var(--board-line-soft); color: #c8cec8; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
       .benchmark-run { padding: 8px; border-bottom: 1px solid var(--board-line-soft); }
@@ -33,6 +35,8 @@
       .benchmark-result.backfill { color: #ffd166; }
       .benchmark-result.none, .benchmark-result.unknown { color: #9da59d; }
       .benchmark-status { display: inline-block; margin-left: 6px; border: 1px solid currentColor; padding: 2px 4px 1px; font-size: 7px; font-weight: 950; letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px; }
+      .benchmark-status.preparing { color: var(--review); }
+      .benchmark-status.blocked { color: var(--blocked); }
       .benchmark-status.running { color: var(--progress); }
       .benchmark-status.completed { color: var(--done); }
       .benchmark-status.selected { color: var(--review); }
@@ -166,9 +170,11 @@
     }
     content.appendChild(nextCard);
 
-    const columns = create('div', 'benchmark-columns');
-    appendRunGroup(columns, 'Running', registry.runs.filter(run => run.status === 'Running'));
-    appendRunGroup(columns, 'Completed', registry.runs.filter(run => run.status === 'Completed'));
+    const activeRuns = registry.runs.filter(run => ACTIVE_STATUSES.has(run.status));
+    const completedRuns = registry.runs.filter(run => run.status === 'Completed');
+    const columns = create('div', activeRuns.length ? 'benchmark-columns' : 'benchmark-columns completed-only');
+    if (activeRuns.length) appendRunGroup(columns, 'Active', activeRuns);
+    appendRunGroup(columns, 'Completed', completedRuns);
     content.appendChild(columns);
     appendIdeas(content, registry);
   }
