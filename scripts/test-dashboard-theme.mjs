@@ -34,6 +34,47 @@ for (const token of ['--bg: #f4f6f8;', '--panel: #ffffff;', '--text: #15191e;', 
   if (!css.includes(token)) fail(`theme.css is missing required light token: ${token}`);
 }
 
+const benchmarkJs = await readFile(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
+for (const darkDeclaration of [
+  'background: #15140e;',
+  'background: #101310;',
+  'color: #fff7d3;',
+  'color: #a8aea8;',
+  'color: #c8cec8;',
+  'color: #c8c8bc;',
+  'color: #9da59d;'
+]) {
+  if (!benchmarkJs.includes(darkDeclaration)) {
+    fail(`Benchmark Review dark baseline changed; re-audit light-mode overrides for: ${darkDeclaration}`);
+  }
+}
+for (const lightOverride of [
+  'color: #66727c !important;',
+  'background: #fff8df !important;',
+  'color: #695100 !important;',
+  'background: #f7f9fa !important;',
+  'color: #39434c !important;',
+  'color: #5c6670 !important;',
+  'color: #64707a !important;'
+]) {
+  if (!css.includes(lightOverride)) {
+    fail(`Benchmark Review runtime dark CSS must have an authoritative light override: ${lightOverride}`);
+  }
+}
+for (const selector of [
+  '.benchmark-meta,',
+  '.benchmark-next {',
+  '.benchmark-run-title {',
+  '.benchmark-group,',
+  '.benchmark-group h3,',
+  '.benchmark-result,',
+  '.benchmark-result.none,'
+]) {
+  if (!css.includes(selector)) {
+    fail(`theme.css is missing Benchmark Review light-mode selector: ${selector}`);
+  }
+}
+
 const hexToRgb = hex => {
   const value = hex.replace('#', '');
   return [0, 2, 4].map(index => Number.parseInt(value.slice(index, index + 2), 16) / 255);
@@ -52,7 +93,12 @@ for (const [foreground, background, label] of [
   ['#20242a', '#fbfcfd', 'board text'],
   ['#5d6873', '#f4f6f8', 'muted text'],
   ['#b42318', '#fbfcfd', 'blocked status'],
-  ['#18723c', '#fbfcfd', 'done status']
+  ['#18723c', '#fbfcfd', 'done status'],
+  ['#695100', '#fff8df', 'benchmark title'],
+  ['#66727c', '#fff8df', 'benchmark metadata'],
+  ['#39434c', '#f7f9fa', 'benchmark group heading'],
+  ['#5c6670', '#f7f9fa', 'benchmark secondary text'],
+  ['#64707a', '#fbfcfd', 'benchmark empty text']
 ]) {
   if (contrast(foreground, background) < 4.5) {
     fail(`Light theme ${label} contrast must remain at least 4.5:1.`);
