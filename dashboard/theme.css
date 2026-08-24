@@ -119,8 +119,8 @@
     border-color: #8f9ba6;
   }
 
-  /* Benchmark Review injects its dark baseline at runtime after this file.
-     These light-mode declarations are intentionally authoritative. */
+  /* Benchmark Review injects its dark baseline after theme.css at runtime,
+     so these light-mode declarations must win the cascade explicitly. */
   .benchmark-meta,
   .benchmark-run-meta,
   .benchmark-idea-section strong {
