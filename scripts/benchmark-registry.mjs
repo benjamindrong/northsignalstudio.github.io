@@ -1,6 +1,8 @@
 const STATUS_NAMES = new Map([
   ['unused', 'Unused'],
   ['selected', 'Selected'],
+  ['preparing', 'Preparing'],
+  ['blocked', 'Blocked'],
   ['running', 'Running'],
   ['completed', 'Completed'],
   ['retired', 'Retired']
