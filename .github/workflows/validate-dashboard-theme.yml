@@ -6,6 +6,7 @@ on:
       - dashboard/index.html
       - dashboard/display.html
       - dashboard/theme.css
+      - dashboard/benchmark-review.js
       - scripts/test-dashboard-theme.mjs
       - .github/workflows/validate-dashboard-theme.yml
   push:
@@ -15,6 +16,7 @@ on:
       - dashboard/index.html
       - dashboard/display.html
       - dashboard/theme.css
+      - dashboard/benchmark-review.js
       - scripts/test-dashboard-theme.mjs
       - .github/workflows/validate-dashboard-theme.yml
 
