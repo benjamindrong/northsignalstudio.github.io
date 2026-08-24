@@ -7,6 +7,9 @@ const head = html.match(/<head>[\s\S]*?<\/head>/i)?.[0] || '';
 if (!head.includes('<link rel="manifest" href="./manifest.webmanifest" />')) {
   fail('dashboard/index.html must declare ./manifest.webmanifest.');
 }
+if (!head.includes('<link rel="apple-touch-icon" href="./flight-control-app-icon.png" />')) {
+  fail('dashboard/index.html must explicitly prefer the opaque PNG for Safari web-app icons.');
+}
 if (head.includes('href="./icon.png"')) {
   fail('dashboard/index.html must not use the legacy transparent icon.png.');
 }
