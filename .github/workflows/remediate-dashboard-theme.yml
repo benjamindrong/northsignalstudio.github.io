@@ -1,0 +1,145 @@
+name: Remediate dashboard theme
+
+on:
+  push:
+    branches:
+      - Match-dashboard-system-appearance
+    paths:
+      - .github/workflows/remediate-dashboard-theme.yml
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Match-dashboard-system-appearance
+      - name: Make Benchmark Review obey shared system theme
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          benchmark = Path('dashboard/benchmark-review.js')
+          text = benchmark.read_text()
+          old = "    document.head.appendChild(style);"
+          new = """    const themeStylesheet = document.querySelector('link[href=\"./theme.css\"]');
+    if (themeStylesheet) document.head.insertBefore(style, themeStylesheet);
+    else document.head.appendChild(style);"""
+          assert text.count(old) == 1, 'expected one benchmark style append'
+          benchmark.write_text(text.replace(old, new, 1))
+
+          theme = Path('dashboard/theme.css')
+          text = theme.read_text()
+          marker = """  .unlock-row button {
+    border-color: #8f9ba6;
+  }
+}"""
+          replacement = """  .unlock-row button {
+    border-color: #8f9ba6;
+  }
+
+  .benchmark-meta,
+  .benchmark-run-meta,
+  .benchmark-idea-section strong {
+    color: #66727c;
+  }
+
+  .benchmark-next {
+    border-color: var(--progress);
+    background: #fff8df;
+  }
+
+  .benchmark-next-label,
+  .benchmark-result.backfill {
+    color: var(--progress);
+  }
+
+  .benchmark-run-title {
+    color: #695100;
+  }
+
+  .benchmark-group,
+  .benchmark-ideas {
+    background: #f7f9fa;
+  }
+
+  .benchmark-group h3,
+  .benchmark-ideas summary {
+    color: #39434c;
+  }
+
+  .benchmark-result,
+  .benchmark-idea {
+    color: #5c6670;
+  }
+
+  .benchmark-result.none,
+  .benchmark-result.unknown,
+  .benchmark-empty {
+    color: #64707a;
+  }
+}"""
+          assert marker in text, 'theme.css insertion marker missing'
+          theme.write_text(text.replace(marker, replacement, 1))
+
+          test = Path('scripts/test-dashboard-theme.mjs')
+          text = test.read_text()
+          anchor = "const css = await readFile(new URL('../dashboard/theme.css', import.meta.url), 'utf8');"
+          insert = """const benchmarkJs = await readFile(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
+if (!benchmarkJs.includes('document.head.insertBefore(style, themeStylesheet)')) {
+  fail('Benchmark Review runtime styles must be inserted before theme.css so system overrides win.');
+}
+if (!benchmarkJs.includes('link[href=\\\"./theme.css\\\"]')) {
+  fail('Benchmark Review must explicitly anchor its runtime styles before the shared theme stylesheet.');
+}
+
+"""
+          assert anchor in text, 'theme test anchor missing'
+          text = text.replace(anchor, insert + anchor, 1)
+          token_anchor = "for (const token of ['--bg: #f4f6f8;', '--panel: #ffffff;', '--text: #15191e;', '--board-bg: #fbfcfd;', '--board-text: #20242a;']) {\n  if (!css.includes(token)) fail(`theme.css is missing required light token: ${token}`);\n}\n"
+          token_extra = """
+for (const rule of [
+  '.benchmark-next {',
+  'background: #fff8df;',
+  '.benchmark-run-title {',
+  'color: #695100;',
+  '.benchmark-group,',
+  '.benchmark-result,',
+  '.benchmark-empty {'
+]) {
+  if (!css.includes(rule)) fail(`theme.css is missing Benchmark Review light-mode coverage: ${rule}`);
+}
+"""
+          assert token_anchor in text, 'theme token loop missing'
+          text = text.replace(token_anchor, token_anchor + token_extra, 1)
+          contrast_anchor = "  ['#18723c', '#fbfcfd', 'done status']\n]) {"
+          contrast_new = """  ['#18723c', '#fbfcfd', 'done status'],
+  ['#695100', '#fff8df', 'benchmark title'],
+  ['#66727c', '#fff8df', 'benchmark metadata'],
+  ['#39434c', '#f7f9fa', 'benchmark group heading'],
+  ['#5c6670', '#f7f9fa', 'benchmark secondary text']
+]) {"""
+          assert contrast_anchor in text, 'contrast list anchor missing'
+          test.write_text(text.replace(contrast_anchor, contrast_new, 1))
+
+          workflow = Path('.github/workflows/validate-dashboard-theme.yml')
+          text = workflow.read_text()
+          needle = '      - dashboard/theme.css\n'
+          assert text.count(needle) == 2, 'expected theme.css path in PR and push filters'
+          workflow.write_text(text.replace(needle, needle + '      - dashboard/benchmark-review.js\n'))
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify corrected system appearance contract
+        run: node scripts/test-dashboard-theme.mjs
+      - name: Commit Benchmark Review light-mode remediation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add dashboard/benchmark-review.js dashboard/theme.css scripts/test-dashboard-theme.mjs .github/workflows/validate-dashboard-theme.yml
+          git commit -m 'Theme Benchmark Review with system appearance'
+          git push origin HEAD:Match-dashboard-system-appearance
