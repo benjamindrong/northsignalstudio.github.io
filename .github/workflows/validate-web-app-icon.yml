@@ -1,0 +1,32 @@
+name: Validate web app icon
+
+on:
+  pull_request:
+    paths:
+      - dashboard/index.html
+      - dashboard/manifest.webmanifest
+      - dashboard/flight-control-icon.svg
+      - scripts/test-web-app-icon.mjs
+      - .github/workflows/validate-web-app-icon.yml
+  push:
+    branches:
+      - main
+    paths:
+      - dashboard/index.html
+      - dashboard/manifest.webmanifest
+      - dashboard/flight-control-icon.svg
+      - scripts/test-web-app-icon.mjs
+      - .github/workflows/validate-web-app-icon.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/test-web-app-icon.mjs
