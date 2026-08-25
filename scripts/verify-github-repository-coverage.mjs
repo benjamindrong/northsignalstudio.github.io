@@ -7,7 +7,8 @@ const REQUIRED_REPOSITORIES = [
   'benjamindrong/project-blacksmith-instructions',
   'benjamindrong/Runline',
   'benjamindrong/BenchmarkReview',
-  'benjamindrong/Crossmark'
+  'benjamindrong/Crossmark',
+  'benjamindrong/HomepageDashboard'
 ];
 
 function requiredEnv(name) {
@@ -33,7 +34,8 @@ async function runSelfTest() {
     'benjamindrong/project-blacksmith-instructions',
     'benjamindrong/Runline',
     'benjamindrong/BenchmarkReview',
-    'benjamindrong/Crossmark'
+    'benjamindrong/Crossmark',
+    'benjamindrong/HomepageDashboard'
   ];
   verifyRequiredRepositories(configured);
 
