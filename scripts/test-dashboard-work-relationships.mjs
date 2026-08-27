@@ -102,7 +102,7 @@ for (const marker of [
   "['.flight-key', '.flight-summary', '.flight-move', '.flight-status']",
   "['.github-pr-repo', '.github-pr-title', '.github-pr-updated', '.github-pr-state']",
   "['.recent-identity', '.recent-title', '.recent-updated']",
-  "link.className = 'work-counterpart-link'",
+  "'work-counterpart-link',",
   "container.setAttribute('role', 'group')",
 ]) {
   assert.ok(relationshipSource.includes(marker), `linked-row navigation guard missing marker: ${marker}`);
