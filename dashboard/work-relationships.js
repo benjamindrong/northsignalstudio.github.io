@@ -39,19 +39,18 @@
       if (matches.length === 1 && matches[0]?.url) uniqueJiraByKey.set(key, matches[0]);
     }
 
-    const rawMatches = [];
-    for (const pull of pullRequests) {
-      const keys = distinctTitleKeys(pull?.title);
-      if (keys.length !== 1) continue;
-      const jira = uniqueJiraByKey.get(keys[0]);
-      const identity = pullIdentity(pull);
-      if (!jira || !identity || !pull?.url) continue;
-      rawMatches.push({ jira, pull, identity });
+    const uniquePulls = [];
+    for (const [identity, matches] of groupBy(pullRequests, pullIdentity).entries()) {
+      if (matches.length === 1) uniquePulls.push({ pull: matches[0], identity });
     }
 
     const uniqueMatches = [];
-    for (const matches of groupBy(rawMatches, match => match.identity).values()) {
-      if (matches.length === 1) uniqueMatches.push(matches[0]);
+    for (const { pull, identity } of uniquePulls) {
+      const keys = distinctTitleKeys(pull?.title);
+      if (keys.length !== 1) continue;
+      const jira = uniqueJiraByKey.get(keys[0]);
+      if (!jira || !pull?.url) continue;
+      uniqueMatches.push({ jira, pull, identity });
     }
 
     const githubRelations = uniqueMatches.map(match => ({
