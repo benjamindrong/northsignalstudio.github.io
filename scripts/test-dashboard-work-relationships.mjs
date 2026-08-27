@@ -97,4 +97,15 @@ for (const marker of [
   assert.ok(healthSource.includes(marker), `refresh bridge missing marker: ${marker}`);
 }
 
+const relationshipSource = fs.readFileSync(new URL('../dashboard/work-relationships.js', import.meta.url), 'utf8');
+for (const marker of [
+  "['.flight-key', '.flight-summary', '.flight-move', '.flight-status']",
+  "['.github-pr-repo', '.github-pr-title', '.github-pr-updated', '.github-pr-state']",
+  "['.recent-identity', '.recent-title', '.recent-updated']",
+  "link.className = 'work-counterpart-link'",
+  "container.setAttribute('role', 'group')",
+]) {
+  assert.ok(relationshipSource.includes(marker), `linked-row navigation guard missing marker: ${marker}`);
+}
+
 console.log('dashboard Jira↔PR relationship regressions passed');
