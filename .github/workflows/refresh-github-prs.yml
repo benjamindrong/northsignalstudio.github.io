@@ -5,10 +5,12 @@ on:
     paths:
       - "dashboard/index.html"
       - "dashboard/refresh-health.js"
+      - "dashboard/work-relationships.js"
       - "dashboard/github-prs.config.json"
       - "scripts/refresh-github-prs.mjs"
       - "scripts/verify-github-repository-coverage.mjs"
       - "scripts/test-dashboard-refresh.mjs"
+      - "scripts/test-dashboard-work-relationships.mjs"
       - ".github/workflows/refresh-github-prs.yml"
   schedule:
     - cron: "7,22,37,52 * * * *"
@@ -16,9 +18,11 @@ on:
   push:
     branches: [main]
     paths:
+      - "dashboard/work-relationships.js"
       - "dashboard/github-prs.config.json"
       - "scripts/refresh-github-prs.mjs"
       - "scripts/verify-github-repository-coverage.mjs"
+      - "scripts/test-dashboard-work-relationships.mjs"
       - ".github/workflows/refresh-github-prs.yml"
 
 permissions:
@@ -44,11 +48,14 @@ jobs:
           node scripts/refresh-github-prs.mjs --self-test
           node scripts/verify-github-repository-coverage.mjs --self-test
 
-      - name: Verify dashboard refresh health
+      - name: Verify dashboard refresh health and work relationships
         run: |
           node --check dashboard/refresh-health.js
+          node --check dashboard/work-relationships.js
           node --check scripts/test-dashboard-refresh.mjs
+          node --check scripts/test-dashboard-work-relationships.mjs
           node scripts/test-dashboard-refresh.mjs
+          node scripts/test-dashboard-work-relationships.mjs
 
       - name: Verify candidate diff
         run: |
