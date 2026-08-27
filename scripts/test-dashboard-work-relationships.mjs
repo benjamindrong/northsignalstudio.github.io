@@ -65,6 +65,18 @@ for (const title of ['No Jira key here', 'HOME-19 and HOME-20 together', 'UNKNOW
 }
 
 {
+  const mixedDuplicatePrIdentity = resolve(
+    [jira('HOME-19')],
+    [pull(5, 'HOME-19 matching record'), pull(5, 'No Jira key in duplicate record', { url: 'https://github.com/benjamindrong/HomepageDashboard/pull/5?duplicate=1' })],
+  );
+  assert.deepEqual(
+    mixedDuplicatePrIdentity,
+    { jiraRelations: [], githubRelations: [] },
+    'duplicate PR identity must fail closed before title or Jira-key matching',
+  );
+}
+
+{
   const result = resolve([jira('HOME-19')], [pull(5, 'HOME-19 first'), pull(6, 'HOME-19 second')]);
   assert.equal(result.jiraRelations.length, 0, 'Jira row must not choose arbitrarily among multiple PRs');
   assert.equal(result.githubRelations.length, 2, 'each uniquely identified PR may still point back to Jira');
