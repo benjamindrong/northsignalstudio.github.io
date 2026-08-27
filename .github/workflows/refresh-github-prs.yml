@@ -57,6 +57,106 @@ jobs:
           node scripts/test-dashboard-refresh.mjs
           node scripts/test-dashboard-work-relationships.mjs
 
+      - name: Verify linked work browser presentation
+        run: |
+          cat > dashboard/home23-work-relationships.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              html, body { margin: 0; width: 390px; height: 900px; overflow: hidden; }
+              iframe { display: block; width: 390px; height: 860px; border: 0; }
+            </style>
+          </head>
+          <body>
+            <iframe id="dashboard" src="./index.html"></iframe>
+            <pre id="result">pending</pre>
+            <script>
+              const frame = document.getElementById('dashboard');
+              frame.addEventListener('load', () => {
+                const timer = window.setInterval(() => {
+                  const api = frame.contentWindow.DashboardWorkRelationships;
+                  if (!api) return;
+                  window.clearInterval(timer);
+                  const doc = frame.contentDocument;
+                  doc.getElementById('flightRows').innerHTML = `
+                    <a class="flight-row" href="https://example.atlassian.net/browse/HOME-19" target="_blank" rel="noopener noreferrer" aria-label="HOME-19 linked">
+                      <div class="flight-cell flight-key">HOME-19</div><div class="flight-cell flight-summary">Linked ticket</div><div class="flight-cell flight-move">27 Aug 10:00</div><div class="flight-cell flight-status progress">In Progress</div>
+                    </a>
+                    <a class="flight-row" href="https://example.atlassian.net/browse/HOME-20" target="_blank" rel="noopener noreferrer" aria-label="HOME-20 unlinked">
+                      <div class="flight-cell flight-key">HOME-20</div><div class="flight-cell flight-summary">Unlinked ticket</div><div class="flight-cell flight-move">27 Aug 09:00</div><div class="flight-cell flight-status todo">To Do</div>
+                    </a>`;
+                  doc.getElementById('githubRows').innerHTML = `
+                    <a class="github-pr-row" href="https://github.com/benjamindrong/HomepageDashboard/pull/5" target="_blank" rel="noopener noreferrer" aria-label="HomepageDashboard pull request 5 linked">
+                      <div class="github-pr-repo">HomepageDashboard <span class="github-pr-number">#5</span></div><div class="github-pr-title">HOME-19 Linked PR</div><div class="github-pr-updated">Updated 27 Aug 10:00</div><div class="github-pr-state review">Review</div>
+                    </a>`;
+                  doc.getElementById('recentRows').innerHTML = `
+                    <a class="recent-row" href="https://example.atlassian.net/browse/HOME-19" target="_blank" rel="noopener noreferrer" aria-label="JIRA HOME-19 linked"><div class="recent-identity"><span class="recent-source-badge jira">JIRA</span> HOME-19</div><div class="recent-title">Linked ticket</div><div class="recent-updated">27 Aug 10:00</div></a>
+                    <a class="recent-row" href="https://github.com/benjamindrong/HomepageDashboard/pull/5" target="_blank" rel="noopener noreferrer" aria-label="GITHUB HomepageDashboard #5 linked"><div class="recent-identity"><span class="recent-source-badge github">GITHUB</span> HomepageDashboard #5</div><div class="recent-title">HOME-19 Linked PR</div><div class="recent-updated">27 Aug 10:00</div></a>`;
+
+                  api.render(
+                    { issues: [
+                      { key: 'HOME-19', url: 'https://example.atlassian.net/browse/HOME-19' },
+                      { key: 'HOME-20', url: 'https://example.atlassian.net/browse/HOME-20' }
+                    ] },
+                    { pullRequests: [
+                      { repository: 'benjamindrong/HomepageDashboard', number: 5, title: 'HOME-19 Linked PR', url: 'https://github.com/benjamindrong/HomepageDashboard/pull/5', state: 'OPEN' }
+                    ] }
+                  );
+
+                  const linkedFlight = doc.querySelector('.flight-row[data-work-primary-url]');
+                  const linkedGithub = doc.querySelector('.github-pr-row[data-work-primary-url]');
+                  const linkedRecent = [...doc.querySelectorAll('.recent-row[data-work-primary-url]')];
+                  const unlinkedFlight = doc.querySelector('.flight-row[href="https://example.atlassian.net/browse/HOME-20"]');
+                  const counterpartLinks = [...doc.querySelectorAll('.work-counterpart-link')];
+                  const hrefs = counterpartLinks.map(link => link.href);
+                  const pass = Boolean(
+                    linkedFlight && linkedGithub && linkedRecent.length === 2 && unlinkedFlight &&
+                    counterpartLinks.length === 4 &&
+                    hrefs.includes('https://github.com/benjamindrong/HomepageDashboard/pull/5') &&
+                    hrefs.includes('https://example.atlassian.net/browse/HOME-19') &&
+                    doc.querySelectorAll('a a').length === 0 &&
+                    doc.documentElement.scrollWidth <= doc.documentElement.clientWidth
+                  );
+                  document.body.dataset.home23 = pass ? 'pass' : 'fail';
+                  document.getElementById('result').textContent = JSON.stringify({
+                    pass,
+                    counterpartCount: counterpartLinks.length,
+                    recentLinkedCount: linkedRecent.length,
+                    unlinkedRemainedAnchor: Boolean(unlinkedFlight),
+                    nestedAnchorCount: doc.querySelectorAll('a a').length,
+                    scrollWidth: doc.documentElement.scrollWidth,
+                    clientWidth: doc.documentElement.clientWidth
+                  });
+                }, 20);
+              });
+            </script>
+          </body>
+          </html>
+          HTML
+
+          python3 -m http.server 8000 >/tmp/home23-dashboard-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:8000/dashboard/home23-work-relationships.html >/dev/null; then break; fi
+            sleep 0.2
+          done
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          if [ -z "$browser" ]; then
+            echo "No supported headless Chrome/Chromium executable is available."
+            exit 1
+          fi
+          "$browser" --headless --no-sandbox --disable-gpu --window-size=390,900 --virtual-time-budget=3000 --dump-dom \
+            http://127.0.0.1:8000/dashboard/home23-work-relationships.html > /tmp/home23-work-relationships-dom.html
+          grep -F 'data-home23="pass"' /tmp/home23-work-relationships-dom.html
+          grep -F '"counterpartCount":4' /tmp/home23-work-relationships-dom.html
+          grep -F '"recentLinkedCount":2' /tmp/home23-work-relationships-dom.html
+          grep -F '"unlinkedRemainedAnchor":true' /tmp/home23-work-relationships-dom.html
+          grep -F '"nestedAnchorCount":0' /tmp/home23-work-relationships-dom.html
+
       - name: Verify candidate diff
         run: |
           git fetch --no-tags origin main
