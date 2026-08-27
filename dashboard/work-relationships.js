@@ -82,6 +82,7 @@
     style.id = STYLE_ID;
     style.textContent = `
       .work-primary-link {
+        display: block;
         min-width: 0;
         overflow: hidden;
         white-space: nowrap;
@@ -182,6 +183,12 @@
     cell.appendChild(link);
   }
 
+  function wrapPrimaryCells(container, selectors, relation) {
+    for (const selector of selectors) {
+      wrapContents(container.querySelector(selector), relation.primaryUrl, `Open ${relation.primaryIdentity}`);
+    }
+  }
+
   function convertRow(row, relation, kind) {
     if (!row || row.tagName !== 'A') return;
     const container = document.createElement('div');
@@ -197,25 +204,19 @@
     row.replaceWith(container);
 
     if (kind === 'jira') {
-      wrapContents(container.querySelector('.flight-key'), relation.primaryUrl, `Open ${relation.primaryIdentity}`);
-      const summary = container.querySelector('.flight-summary');
-      wrapContents(summary, relation.primaryUrl, `Open ${relation.primaryIdentity}`);
-      appendCounterpart(summary, relation);
+      wrapPrimaryCells(container, ['.flight-key', '.flight-summary', '.flight-move', '.flight-status'], relation);
+      appendCounterpart(container.querySelector('.flight-summary'), relation);
       return;
     }
 
     if (kind === 'github') {
-      const repo = container.querySelector('.github-pr-repo');
-      wrapContents(repo, relation.primaryUrl, `Open ${relation.primaryIdentity}`);
-      appendCounterpart(repo, relation);
-      wrapContents(container.querySelector('.github-pr-title'), relation.primaryUrl, `Open ${relation.primaryIdentity}`);
+      wrapPrimaryCells(container, ['.github-pr-repo', '.github-pr-title', '.github-pr-updated', '.github-pr-state'], relation);
+      appendCounterpart(container.querySelector('.github-pr-repo'), relation);
       return;
     }
 
-    wrapContents(container.querySelector('.recent-identity'), relation.primaryUrl, `Open ${relation.primaryIdentity}`);
-    const title = container.querySelector('.recent-title');
-    wrapContents(title, relation.primaryUrl, `Open ${relation.primaryIdentity}`);
-    appendCounterpart(title, relation);
+    wrapPrimaryCells(container, ['.recent-identity', '.recent-title', '.recent-updated'], relation);
+    appendCounterpart(container.querySelector('.recent-title'), relation);
   }
 
   function relationForRow(row, relationsByUrl) {
