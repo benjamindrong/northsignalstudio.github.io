@@ -101,7 +101,10 @@
       scheduleWorkRelationships();
     }
     if (Array.isArray(payload?.pullRequests)) {
-      pendingWorkSources.github = payload;
+      pendingWorkSources.github = {
+        ...payload,
+        pullRequests: payload.pullRequests.filter(pull => String(pull?.state || '').toUpperCase() !== 'DRAFT')
+      };
       scheduleWorkRelationships();
     }
     return {
