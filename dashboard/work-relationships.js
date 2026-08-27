@@ -39,6 +39,7 @@
       if (matches.length === 1 && matches[0]?.url) uniqueJiraByKey.set(key, matches[0]);
     }
 
+    // Prove PR identity uniqueness before interpreting titles so any duplicate fails closed as a whole.
     const uniquePulls = [];
     for (const [identity, matches] of groupBy(pullRequests, pullIdentity).entries()) {
       if (matches.length === 1) uniquePulls.push({ pull: matches[0], identity });
