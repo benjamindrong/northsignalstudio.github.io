@@ -7,6 +7,8 @@
 
   const STALE_AFTER_MS = 30 * 60 * 1000;
   let pendingBenchmarkRegistry = null;
+  let pendingWorkSources = { jira: null, github: null };
+  let workRelationshipRenderQueued = false;
 
   function loadBenchmarkReview() {
     if (!root || typeof document === 'undefined') return;
@@ -42,8 +44,44 @@
     else loadBenchmarkReview();
   }
 
+  function loadWorkRelationships() {
+    if (!root || typeof document === 'undefined') return;
+    if (root.DashboardWorkRelationships) return;
+    if (document.getElementById('work-relationships-script')) return;
+
+    const script = document.createElement('script');
+    script.id = 'work-relationships-script';
+    script.src = './work-relationships.js';
+    script.addEventListener('load', scheduleWorkRelationships);
+    document.head.appendChild(script);
+  }
+
+  function flushWorkRelationships() {
+    workRelationshipRenderQueued = false;
+    if (!root || typeof document === 'undefined') return;
+    if (!root.DashboardWorkRelationships?.render) {
+      loadWorkRelationships();
+      return;
+    }
+    root.DashboardWorkRelationships.render(pendingWorkSources.jira, pendingWorkSources.github);
+  }
+
+  function scheduleWorkRelationships() {
+    if (!root || typeof document === 'undefined' || workRelationshipRenderQueued) return;
+    workRelationshipRenderQueued = true;
+    Promise.resolve().then(flushWorkRelationships);
+  }
+
+  function resetWorkRelationships() {
+    pendingWorkSources = { jira: null, github: null };
+    workRelationshipRenderQueued = false;
+    if (!root || typeof document === 'undefined') return;
+    root.DashboardWorkRelationships?.clear?.();
+  }
+
   function emptySourceState() {
     lockBenchmarkReview();
+    resetWorkRelationships();
     return { lastSuccessAt: 0, lastFailureAt: 0, generatedAt: 0, error: '' };
   }
 
@@ -59,6 +97,12 @@
         sourceKey: 'BEN-8',
         message: 'Benchmark registry is unavailable in the current Jira snapshot.'
       });
+      pendingWorkSources.jira = payload;
+      scheduleWorkRelationships();
+    }
+    if (Array.isArray(payload?.pullRequests)) {
+      pendingWorkSources.github = payload;
+      scheduleWorkRelationships();
     }
     return {
       ...state,
@@ -91,5 +135,6 @@
   }
 
   loadBenchmarkReview();
+  loadWorkRelationships();
   return { STALE_AFTER_MS, emptySourceState, markSourceSuccess, markSourceFailure, sourceState, overallState };
 });
