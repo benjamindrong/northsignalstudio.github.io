@@ -9,7 +9,7 @@
   const STYLE_ID = 'dashboard-work-relationships-style';
 
   function pullIdentity(pull) {
-    const repository = String(pull?.repository || '');
+    const repository = String(pull?.repository || '').trim().toLowerCase();
     const number = Number(pull?.number);
     if (!repository || !Number.isInteger(number) || number <= 0) return '';
     return `${repository}#${number}`;
