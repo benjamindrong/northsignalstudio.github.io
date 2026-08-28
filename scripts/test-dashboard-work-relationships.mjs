@@ -77,6 +77,24 @@ for (const title of ['No Jira key here', 'HOME-19 and HOME-20 together', 'UNKNOW
 }
 
 {
+  const caseVariantDuplicatePrIdentity = resolve(
+    [jira('HOME-19')],
+    [
+      pull(5, 'HOME-19 canonical casing'),
+      pull(5, 'HOME-19 alternate repository casing', {
+        repository: 'BENJAMINDRONG/homepagedashboard',
+        url: 'https://github.com/benjamindrong/HomepageDashboard/pull/5?case-duplicate=1',
+      }),
+    ],
+  );
+  assert.deepEqual(
+    caseVariantDuplicatePrIdentity,
+    { jiraRelations: [], githubRelations: [] },
+    'GitHub repository casing must not bypass duplicate PR identity detection',
+  );
+}
+
+{
   const result = resolve([jira('HOME-19')], [pull(5, 'HOME-19 first'), pull(6, 'HOME-19 second')]);
   assert.equal(result.jiraRelations.length, 0, 'Jira row must not choose arbitrarily among multiple PRs');
   assert.equal(result.githubRelations.length, 2, 'each uniquely identified PR may still point back to Jira');
@@ -94,7 +112,11 @@ for (const title of ['No Jira key here', 'HOME-19 and HOME-20 together', 'UNKNOW
 assert.equal(relationships.compactCounterpartLabel('PR #5'), '↔ #5');
 assert.equal(relationships.compactCounterpartLabel('HOME-19'), '↔ HOME-19');
 assert.deepEqual(relationships.distinctTitleKeys('HOME-19 HOME-19 HOME-20'), ['HOME-19', 'HOME-20']);
-assert.equal(relationships.pullIdentity(pull(5, 'HOME-19')), 'benjamindrong/HomepageDashboard#5');
+assert.equal(relationships.pullIdentity(pull(5, 'HOME-19')), 'benjamindrong/homepagedashboard#5');
+assert.equal(
+  relationships.pullIdentity(pull(5, 'HOME-19', { repository: '  BENJAMINDRONG/HomepageDashboard  ' })),
+  'benjamindrong/homepagedashboard#5',
+);
 assert.equal(relationships.pullIdentity({ repository: 'repo', number: 0 }), '');
 
 const healthSource = fs.readFileSync(new URL('../dashboard/refresh-health.js', import.meta.url), 'utf8');
