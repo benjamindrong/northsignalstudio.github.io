@@ -67,7 +67,9 @@ const records = [
   issue('BEN-10', ['candidate-evaluation', 'registry-result-unknown'], 'done', { links: [relates('HOME-12')] }),
   issue('BEN-13', ['candidate-evaluation', 'registry-idea'], 'new', { summary: 'Crossmark X Handoff Benchmark', links: [relates('CROS-1')] }),
   issue('BEN-22', ['registry-idea', 'registry-idea-considered'], 'new', { summary: 'MyRAM Markdown Preview' }),
-  issue('BEN-25', ['registry-idea', 'registry-idea-fresh'], 'new', { summary: 'Runline Needs Anchoring' })
+  issue('BEN-25', ['registry-idea', 'registry-idea-fresh'], 'new', { summary: 'Runline Needs Anchoring' }),
+  issue('BEN-6', ['candidate-evaluation'], 'new', { summary: 'Legacy support history must stay excluded' }),
+  issue('BEN-33', ['registry-idea', 'registry-idea-fresh'], 'new', { summary: 'VOID duplicate must stay excluded' })
 ];
 
 const registry = projectBenchmarkRegistry(records, {
@@ -98,6 +100,14 @@ assert.equal(registry.previouslyConsidered[0]?.key, 'BEN-22');
 assert.equal(registry.previouslyConsidered[0]?.updatedAt, '2026-08-27T12:00:00.000Z');
 assert.equal(registry.freshBacklog[0]?.ideas[0]?.key, 'BEN-25');
 assert.equal(registry.freshBacklog[0]?.ideas[0]?.updatedAt, '2026-08-27T12:00:00.000Z');
+const allProjectedKeys = new Set([
+  ...registry.runs.map(record => record.key),
+  ...registry.previouslyConsidered.map(record => record.key),
+  ...registry.freshBacklog.flatMap(group => (group.ideas || []).map(record => record.key)),
+  ...registry.invalidRecords.map(record => record.key)
+]);
+assert.equal(allProjectedKeys.has('BEN-6'), false, 'BEN-6 must remain excluded even if registry labels are added accidentally');
+assert.equal(allProjectedKeys.has('BEN-33'), false, 'BEN-33 must never enter any Jira-native projection bucket');
 
 const parsedSummary = parseCanonicalResultSummary(summaryDescription);
 assert.equal(parsedSummary.ok, true);
