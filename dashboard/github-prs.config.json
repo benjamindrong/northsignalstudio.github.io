@@ -1,6 +1,7 @@
 {
   "repositories": [
     "benjamindrong/MyRAM-iOS",
+    "benjamindrong/MyRAM-Android",
     "benjamindrong/NearbySyncCore",
     "benjamindrong/northsignalstudio.github.io"
   ],

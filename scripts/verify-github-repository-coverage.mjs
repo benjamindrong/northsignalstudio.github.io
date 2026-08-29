@@ -4,6 +4,10 @@ import { decryptPayload } from './refresh-github-prs.mjs';
 
 const DEFAULT_OUTPUT = 'dashboard/github-prs.enc.json';
 const REQUIRED_REPOSITORIES = [
+  'benjamindrong/MyRAM-iOS',
+  'benjamindrong/MyRAM-Android',
+  'benjamindrong/NearbySyncCore',
+  'benjamindrong/northsignalstudio.github.io',
   'benjamindrong/project-blacksmith-instructions',
   'benjamindrong/Runline',
   'benjamindrong/BenchmarkReview',
@@ -27,16 +31,7 @@ export function verifyRequiredRepositories(repositories, requiredRepositories = 
 }
 
 async function runSelfTest() {
-  const configured = [
-    'benjamindrong/MyRAM-iOS',
-    'benjamindrong/NearbySyncCore',
-    'benjamindrong/northsignalstudio.github.io',
-    'benjamindrong/project-blacksmith-instructions',
-    'benjamindrong/Runline',
-    'benjamindrong/BenchmarkReview',
-    'benjamindrong/Crossmark',
-    'benjamindrong/HomepageDashboard'
-  ];
+  const configured = [...REQUIRED_REPOSITORIES];
   verifyRequiredRepositories(configured);
 
   for (const requiredRepository of REQUIRED_REPOSITORIES) {
