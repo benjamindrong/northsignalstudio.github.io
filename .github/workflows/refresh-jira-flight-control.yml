@@ -209,10 +209,11 @@ jobs:
           git fetch --no-tags origin main
           git diff --check FETCH_HEAD...HEAD
 
-      - name: Verify live Jira-native registry and BEN-8 parity for trusted owner PRs
+      - name: Verify HOME-24 Slice 1 live Jira-native and BEN-8 parity
         if: >-
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.head.ref == 'HOME-24-Slice-1-Jira-native-registry-projection-and-production-cutover' &&
           github.actor == github.repository_owner
         env:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
