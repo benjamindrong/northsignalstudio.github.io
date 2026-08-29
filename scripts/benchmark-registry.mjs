@@ -335,8 +335,11 @@ export function projectBenchmarkRegistry(issues, {
     pointerError,
     invalidRecords,
     runs,
-    previouslyConsidered: considered.map(record => ({ key: record.key, title: record.title, detail: '' })),
-    freshBacklog: fresh.length ? [{ group: 'Fresh idea backlog', ideas: fresh.map(record => ({ key: record.key, title: record.title, detail: '' })) }] : []
+    previouslyConsidered: considered.map(record => ({ key: record.key, title: record.title, detail: '', updatedAt: record.updatedAt })),
+    freshBacklog: fresh.length ? [{
+      group: 'Fresh idea backlog',
+      ideas: fresh.map(record => ({ key: record.key, title: record.title, detail: '', updatedAt: record.updatedAt }))
+    }] : []
   };
 }
 
@@ -348,6 +351,19 @@ function flattenedFresh(registry) {
   return (registry?.freshBacklog || []).flatMap(group => group?.ideas || []);
 }
 
+function registryRecordByKey(registry, key) {
+  const run = (registry?.runs || []).find(record => record?.key === key);
+  if (run) return { bucket: 'run', record: run };
+
+  const considered = (registry?.previouslyConsidered || []).find(record => record?.key === key);
+  if (considered) return { bucket: 'considered', record: considered };
+
+  const fresh = flattenedFresh(registry).find(record => record?.key === key);
+  if (fresh) return { bucket: 'fresh', record: fresh };
+
+  return null;
+}
+
 function timestampAfter(value, cutoff) {
   const valueTime = Date.parse(clean(value));
   const cutoffTime = Date.parse(clean(cutoff));
@@ -356,6 +372,33 @@ function timestampAfter(value, cutoff) {
 
 function postMigration(postMigrationDifferences, message) {
   postMigrationDifferences.push(message);
+}
+
+function compareIdeaParity(nativeRegistry, key, expectedBucket, legacyTitles, migrationCutoff, errors, postMigrationDifferences) {
+  const match = registryRecordByKey(nativeRegistry, key);
+  if (!match) {
+    errors.push(`Jira-native ${expectedBucket} idea parity target ${key} is missing.`);
+    return;
+  }
+
+  const changedAfterMigration = timestampAfter(match.record.updatedAt, migrationCutoff);
+  if (match.bucket !== expectedBucket) {
+    if (changedAfterMigration) {
+      postMigration(postMigrationDifferences, `${key} idea category advanced after BEN-18: ${expectedBucket} -> ${match.bucket}.`);
+    } else {
+      errors.push(`${key} idea category mismatch at BEN-18 parity boundary: expected ${expectedBucket}, Jira-native=${match.bucket}.`);
+    }
+    return;
+  }
+
+  const title = clean(match.record.title);
+  if (!legacyTitles.has(title)) {
+    if (changedAfterMigration) {
+      postMigration(postMigrationDifferences, `${key} idea title advanced after BEN-18 to ${title || 'empty'}.`);
+    } else {
+      errors.push(`${key} ${expectedBucket} idea title is not represented by BEN-8.`);
+    }
+  }
 }
 
 export function compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry, {
@@ -416,11 +459,16 @@ export function compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry, {
       }
     }
 
-    if (current.sourceKey && !clean(legacy.source).includes(current.sourceKey)) {
-      if (changedAfterMigration) {
-        postMigration(postMigrationDifferences, `${key} source relationship advanced after BEN-18 to ${current.sourceKey}.`);
-      } else {
-        errors.push(`${key} structured source ${current.sourceKey} is not represented by BEN-8 source text.`);
+    const legacySource = clean(legacy.source);
+    if (legacySource) {
+      if (!current.sourceKey) {
+        errors.push(`${key} structured source relationship required by BEN-8 migration parity is missing.`);
+      } else if (!legacySource.includes(current.sourceKey)) {
+        if (changedAfterMigration) {
+          postMigration(postMigrationDifferences, `${key} source relationship advanced after BEN-18 to ${current.sourceKey}.`);
+        } else {
+          errors.push(`${key} structured source ${current.sourceKey} is not represented by BEN-8 source text.`);
+        }
       }
     }
   }
@@ -428,16 +476,14 @@ export function compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry, {
   if (nativeRuns.has('BEN-6')) errors.push('BEN-6 must be excluded from Jira-native projected runs.');
   if (nativeRuns.has('BEN-33')) errors.push('BEN-33 must never be projected.');
 
-  const nativeConsidered = titleSet((nativeRegistry.previouslyConsidered || []).filter(idea => consideredKeys.includes(idea.key)));
   const legacyConsidered = titleSet(legacyRegistry.previouslyConsidered);
-  for (const title of nativeConsidered) {
-    if (!legacyConsidered.has(title)) errors.push(`Previously-considered idea parity is missing: ${title}.`);
+  for (const key of consideredKeys) {
+    compareIdeaParity(nativeRegistry, key, 'considered', legacyConsidered, migrationCutoff, errors, postMigrationDifferences);
   }
 
-  const nativeFresh = titleSet(flattenedFresh(nativeRegistry).filter(idea => freshKeys.includes(idea.key)));
   const legacyFresh = titleSet(flattenedFresh(legacyRegistry));
-  for (const title of nativeFresh) {
-    if (!legacyFresh.has(title)) errors.push(`Fresh idea parity is missing: ${title}.`);
+  for (const key of freshKeys) {
+    compareIdeaParity(nativeRegistry, key, 'fresh', legacyFresh, migrationCutoff, errors, postMigrationDifferences);
   }
 
   return { ok: errors.length === 0, errors, postMigrationDifferences };
