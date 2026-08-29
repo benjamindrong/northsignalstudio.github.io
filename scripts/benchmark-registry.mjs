@@ -401,6 +401,12 @@ function compareIdeaParity(nativeRegistry, key, expectedBucket, legacyTitles, mi
   }
 }
 
+function explicitCrossProjectSourceKeys(source, owningKey) {
+  const owningProject = clean(owningKey).split('-')[0];
+  const issueKeys = clean(source).match(/\b[A-Z][A-Z0-9]+-\d+\b/g) || [];
+  return [...new Set(issueKeys)].filter(key => key.split('-')[0] !== owningProject);
+}
+
 export function compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry, {
   runKeys = ['BEN-2', 'BEN-3', 'BEN-4', 'BEN-5', 'BEN-7', 'BEN-9', 'BEN-10', 'BEN-11', 'BEN-13', 'BEN-14', 'BEN-17'],
   consideredKeys = ['BEN-22', 'BEN-23', 'BEN-24'],
@@ -460,16 +466,17 @@ export function compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry, {
     }
 
     const legacySource = clean(legacy.source);
-    if (legacySource) {
-      if (!current.sourceKey) {
-        errors.push(`${key} structured source relationship required by BEN-8 migration parity is missing.`);
-      } else if (!legacySource.includes(current.sourceKey)) {
+    const explicitSourceKeys = explicitCrossProjectSourceKeys(legacySource, key);
+    if (current.sourceKey) {
+      if (!legacySource.includes(current.sourceKey)) {
         if (changedAfterMigration) {
           postMigration(postMigrationDifferences, `${key} source relationship advanced after BEN-18 to ${current.sourceKey}.`);
         } else {
           errors.push(`${key} structured source ${current.sourceKey} is not represented by BEN-8 source text.`);
         }
       }
+    } else if (explicitSourceKeys.length) {
+      errors.push(`${key} structured source ${explicitSourceKeys.join(', ')} required by BEN-8 migration parity is missing.`);
     }
   }
 
