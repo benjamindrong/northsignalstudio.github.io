@@ -57,6 +57,11 @@ export function buildBenchmarkPointerIdentityJql(projectKey) {
   return `project = ${quoteJqlValue(projectKey)} AND summary ~ ${quoteJqlValue(`"${BENCHMARK_POINTER_SUMMARY}"`)} ORDER BY key ASC`;
 }
 
+function buildBenchmarkResultDescriptionJql(keys) {
+  if (!Array.isArray(keys) || !keys.length) throw new Error('Result Description query requires at least one BEN key.');
+  return `key in (${keys.map(quoteJqlValue).join(', ')}) ORDER BY key ASC`;
+}
+
 function benchmarkIssueLabels(issue) {
   return new Set((issue?.fields?.labels || []).map(label => String(label || '').trim().toLowerCase()).filter(Boolean));
 }
@@ -166,21 +171,44 @@ function benchmarkAuthority(config) {
 }
 
 async function hydrateBenchmarkResultDescriptions(baseUrl, authHeader, issues) {
-  return Promise.all((issues || []).map(async issue => {
-    if (!needsBenchmarkDescription(issue)) return issue;
-    const detail = await jiraFetch(
-      `${baseUrl}/rest/api/3/issue/${encodeURIComponent(issue.key)}?fields=description`,
-      {},
-      authHeader
-    );
+  const required = (issues || []).filter(needsBenchmarkDescription);
+  if (!required.length) return issues;
+
+  const expectedKeys = required.map(issue => String(issue?.key || '').trim()).filter(Boolean);
+  if (expectedKeys.length !== required.length || new Set(expectedKeys).size !== expectedKeys.length) {
+    throw new Error('Result-mode BEN records contain missing or duplicate issue keys.');
+  }
+
+  const details = await searchJqlIssues(
+    baseUrl,
+    authHeader,
+    buildBenchmarkResultDescriptionJql(expectedKeys),
+    expectedKeys.length,
+    ['description'],
+    { requireComplete: true, context: 'BEN registry result Description query' }
+  );
+  const detailByKey = new Map(details.map(issue => [String(issue?.key || '').trim(), issue]));
+  if (detailByKey.size !== expectedKeys.length || expectedKeys.some(key => !detailByKey.has(key))) {
+    throw new Error('BEN registry result Description query did not return every exact result-mode issue.');
+  }
+  for (const key of expectedKeys) {
+    const fields = detailByKey.get(key)?.fields;
+    if (!fields || !Object.prototype.hasOwnProperty.call(fields, 'description')) {
+      throw new Error(`BEN registry result Description is unavailable for ${key}.`);
+    }
+  }
+
+  return (issues || []).map(issue => {
+    const key = String(issue?.key || '').trim();
+    if (!detailByKey.has(key)) return issue;
     return {
       ...issue,
       fields: {
         ...issue.fields,
-        description: detail?.fields?.description ?? null
+        description: detailByKey.get(key).fields.description
       }
     };
-  }));
+  });
 }
 
 async function fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config) {
@@ -420,6 +448,8 @@ async function runSelfTest() {
   if (BENCHMARK_PARTICIPANT_FIELDS.includes('description')) throw new Error('Benchmark participant query must not fetch Description eagerly');
   if (needsBenchmarkDescription(selectedIssue)) throw new Error('Non-result benchmark must not fetch Description');
   if (!needsBenchmarkDescription(summaryIssue) || !needsBenchmarkDescription(unknownIssue)) throw new Error('Result-mode benchmarks must fetch their owning Description');
+  const resultDescriptionJql = buildBenchmarkResultDescriptionJql(['BEN-9', 'BEN-10']);
+  if (!resultDescriptionJql.includes('"BEN-9"') || !resultDescriptionJql.includes('"BEN-10"')) throw new Error('Result Description JQL must target exact result-mode keys');
 
   const benchmarkReview = projectBenchmarkRegistry([selectedIssue], {
     pointerIssue: {
