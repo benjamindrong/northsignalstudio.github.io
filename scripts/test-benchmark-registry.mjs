@@ -95,7 +95,9 @@ assert.equal(registry.runs.find(run => run.key === 'BEN-10')?.resultState, 'back
 assert.equal(registry.runs.find(run => run.key === 'BEN-10')?.sourceKey, 'HOME-12');
 assert.equal(registry.runs.find(run => run.key === 'BEN-13')?.status, 'Unused');
 assert.equal(registry.previouslyConsidered[0]?.key, 'BEN-22');
+assert.equal(registry.previouslyConsidered[0]?.updatedAt, '2026-08-27T12:00:00.000Z');
 assert.equal(registry.freshBacklog[0]?.ideas[0]?.key, 'BEN-25');
+assert.equal(registry.freshBacklog[0]?.ideas[0]?.updatedAt, '2026-08-27T12:00:00.000Z');
 
 const parsedSummary = parseCanonicalResultSummary(summaryDescription);
 assert.equal(parsedSummary.ok, true);
@@ -183,6 +185,52 @@ const parity = compareBenchmarkRegistryParity(nativeParity, legacy, {
 assert.equal(parity.ok, true, parity.errors.join('\n'));
 assert.deepEqual(parity.postMigrationDifferences, []);
 
+const missingConsideredNative = projectBenchmarkRegistry([
+  records[0], records[3], records[4], records[5], records[8]
+], {
+  pointerIssue: pointer(),
+  pointerMatches: [pointer()]
+});
+const missingConsideredParity = compareBenchmarkRegistryParity(missingConsideredNative, legacy, {
+  runKeys: ['BEN-17', 'BEN-14', 'BEN-9', 'BEN-10'],
+  consideredKeys: ['BEN-22'],
+  freshKeys: ['BEN-25']
+});
+assert.equal(missingConsideredParity.ok, false);
+assert.match(missingConsideredParity.errors.join('\n'), /BEN-22 is missing/);
+
+const missingFreshNative = projectBenchmarkRegistry([
+  records[0], records[3], records[4], records[5], records[7]
+], {
+  pointerIssue: pointer(),
+  pointerMatches: [pointer()]
+});
+const missingFreshParity = compareBenchmarkRegistryParity(missingFreshNative, legacy, {
+  runKeys: ['BEN-17', 'BEN-14', 'BEN-9', 'BEN-10'],
+  consideredKeys: ['BEN-22'],
+  freshKeys: ['BEN-25']
+});
+assert.equal(missingFreshParity.ok, false);
+assert.match(missingFreshParity.errors.join('\n'), /BEN-25 is missing/);
+
+const missingSourceAfterCutoff = projectBenchmarkRegistry([
+  records[0],
+  issue('BEN-14', ['benchmark-testing'], 'done', {
+    summary: 'Crossmark Physical Signal Hunt Field Benchmark',
+    updated: '2026-08-28T14:00:00.000Z'
+  })
+], {
+  pointerIssue: pointer(),
+  pointerMatches: [pointer()]
+});
+const missingSourceParity = compareBenchmarkRegistryParity(missingSourceAfterCutoff, legacy, {
+  runKeys: ['BEN-17', 'BEN-14'],
+  consideredKeys: [],
+  freshKeys: []
+});
+assert.equal(missingSourceParity.ok, false);
+assert.match(missingSourceParity.errors.join('\n'), /BEN-14 structured source relationship.*missing/);
+
 const afterCutoff = '2026-08-28T14:00:00.000Z';
 const postMigrationNative = projectBenchmarkRegistry([
   issue('BEN-17', ['candidate-evaluation', 'registry-idea'], 'new', {
@@ -207,6 +255,24 @@ assert.equal(postMigrationParity.ok, true, postMigrationParity.errors.join('\n')
 assert.equal(postMigrationParity.postMigrationDifferences.length, 2);
 assert.match(postMigrationParity.postMigrationDifferences[0], /Selected-next advanced after BEN-18/);
 assert.match(postMigrationParity.postMigrationDifferences[1], /BEN-17 lifecycle advanced after BEN-18/);
+
+const movedIdeaNative = projectBenchmarkRegistry([
+  records[0],
+  issue('BEN-22', ['registry-idea', 'registry-idea-fresh'], 'new', {
+    summary: 'MyRAM Markdown Preview',
+    updated: afterCutoff
+  })
+], {
+  pointerIssue: pointer(),
+  pointerMatches: [pointer()]
+});
+const movedIdeaParity = compareBenchmarkRegistryParity(movedIdeaNative, legacy, {
+  runKeys: ['BEN-17'],
+  consideredKeys: ['BEN-22'],
+  freshKeys: []
+});
+assert.equal(movedIdeaParity.ok, true, movedIdeaParity.errors.join('\n'));
+assert.match(movedIdeaParity.postMigrationDifferences.join('\n'), /BEN-22 idea category advanced after BEN-18/);
 
 const preCutoffPointerMismatch = {
   ...postMigrationNative,
