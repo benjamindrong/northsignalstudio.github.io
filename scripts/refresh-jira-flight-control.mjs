@@ -15,6 +15,8 @@ const DEFAULT_OUTPUT = 'dashboard/jira-flight-control.enc.json';
 const PBKDF2_ITERATIONS = 250_000;
 const RECENT_DONE_PER_PROJECT = 3;
 const BENCHMARK_POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
+const BENCHMARK_PARTICIPANT_FIELDS = ['summary', 'status', 'project', 'labels', 'updated', 'issuelinks'];
+const BENCHMARK_RESULT_LABELS = new Set(['registry-result-summary', 'registry-result-unknown']);
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -53,6 +55,15 @@ export function buildBenchmarkRegistryJql(projectKey) {
 
 export function buildBenchmarkPointerIdentityJql(projectKey) {
   return `project = ${quoteJqlValue(projectKey)} AND summary ~ ${quoteJqlValue(`"${BENCHMARK_POINTER_SUMMARY}"`)} ORDER BY key ASC`;
+}
+
+function benchmarkIssueLabels(issue) {
+  return new Set((issue?.fields?.labels || []).map(label => String(label || '').trim().toLowerCase()).filter(Boolean));
+}
+
+function needsBenchmarkDescription(issue) {
+  const labels = benchmarkIssueLabels(issue);
+  return [...BENCHMARK_RESULT_LABELS].some(label => labels.has(label));
 }
 
 function historyTimestamp(created) {
@@ -154,20 +165,39 @@ function benchmarkAuthority(config) {
   return authority;
 }
 
+async function hydrateBenchmarkResultDescriptions(baseUrl, authHeader, issues) {
+  return Promise.all((issues || []).map(async issue => {
+    if (!needsBenchmarkDescription(issue)) return issue;
+    const detail = await jiraFetch(
+      `${baseUrl}/rest/api/3/issue/${encodeURIComponent(issue.key)}?fields=description`,
+      {},
+      authHeader
+    );
+    return {
+      ...issue,
+      fields: {
+        ...issue.fields,
+        description: detail?.fields?.description ?? null
+      }
+    };
+  }));
+}
+
 async function fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config) {
   const projectKey = String(config.benchmarkRegistryProject || 'BEN').trim();
   const pointerKey = String(config.benchmarkRegistryPointerKey || 'BEN-21').trim();
   const maxIssues = Number.isFinite(Number(config.benchmarkRegistryMaxIssues)) ? Number(config.benchmarkRegistryMaxIssues) : 100;
 
   try {
-    const issues = await searchJqlIssues(
+    const participants = await searchJqlIssues(
       baseUrl,
       authHeader,
       buildBenchmarkRegistryJql(projectKey),
       maxIssues,
-      ['summary', 'status', 'project', 'labels', 'updated', 'description', 'issuelinks'],
+      BENCHMARK_PARTICIPANT_FIELDS,
       { requireComplete: true, context: 'BEN registry participant query' }
     );
+    const issues = await hydrateBenchmarkResultDescriptions(baseUrl, authHeader, participants);
 
     let pointerIssue = null;
     try {
@@ -187,7 +217,7 @@ async function fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config) {
         authHeader,
         buildBenchmarkPointerIdentityJql(projectKey),
         20,
-        ['summary', 'parent', 'updated'],
+        ['summary'],
         { requireComplete: true, context: 'BEN registry pointer identity query' }
       );
     } catch (error) {
@@ -385,6 +415,12 @@ async function runSelfTest() {
   }
 
   const selectedIssue = benchmarkFixtureIssue('BEN-17', ['candidate-evaluation'], 'new');
+  const summaryIssue = benchmarkFixtureIssue('BEN-9', ['candidate-evaluation', 'registry-result-summary'], 'done');
+  const unknownIssue = benchmarkFixtureIssue('BEN-10', ['candidate-evaluation', 'registry-result-unknown'], 'done');
+  if (BENCHMARK_PARTICIPANT_FIELDS.includes('description')) throw new Error('Benchmark participant query must not fetch Description eagerly');
+  if (needsBenchmarkDescription(selectedIssue)) throw new Error('Non-result benchmark must not fetch Description');
+  if (!needsBenchmarkDescription(summaryIssue) || !needsBenchmarkDescription(unknownIssue)) throw new Error('Result-mode benchmarks must fetch their owning Description');
+
   const benchmarkReview = projectBenchmarkRegistry([selectedIssue], {
     pointerIssue: {
       key: 'BEN-21',
