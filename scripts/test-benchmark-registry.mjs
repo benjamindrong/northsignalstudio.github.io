@@ -36,14 +36,20 @@ function relates(key, summary = `${key} source`) {
   };
 }
 
-function pointer(parentKey = 'BEN-17', updated = '2026-08-27T12:01:00.000Z', labels = []) {
+function pointer(
+  parentKey = 'BEN-17',
+  updated = '2026-08-27T12:01:00.000Z',
+  labels = [],
+  issuetype = { name: 'Subtask', subtask: true }
+) {
   return {
     key: 'BEN-21',
     fields: {
       summary: POINTER_SUMMARY,
       parent: { key: parentKey },
       updated,
-      labels
+      labels,
+      issuetype
     }
   };
 }
@@ -155,7 +161,27 @@ const nestedSummaryAdf = {
 };
 const nestedSummary = parseCanonicalResultSummary(nestedSummaryAdf);
 assert.equal(nestedSummary.ok, false);
-assert.match(nestedSummary.error, /three top-level bullets/i);
+assert.match(nestedSummary.error, /three top-level bullet-list items/i);
+
+const orderedSummaryAdf = {
+  type: 'doc',
+  version: 1,
+  content: [
+    { type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: 'Completion Artifact' }] },
+    { type: 'heading', attrs: { level: 4 }, content: [{ type: 'text', text: 'Registry Result Summary' }] },
+    {
+      type: 'orderedList',
+      content: [
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Outcome: B' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Scores: 9/8' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Signal: X' }] }] }
+      ]
+    }
+  ]
+};
+const orderedSummary = parseCanonicalResultSummary(orderedSummaryAdf);
+assert.equal(orderedSummary.ok, false);
+assert.match(orderedSummary.error, /three top-level bullet-list items/i);
 
 const invalidRecords = [
   issue('BEN-50', ['candidate-evaluation', 'benchmark-testing'], 'new'),
@@ -191,6 +217,14 @@ const contaminatedPointer = projectBenchmarkRegistry([records[0]], {
 assert.equal(contaminatedPointer.state, 'ready');
 assert.equal(contaminatedPointer.selectedNext, null);
 assert.match(contaminatedPointer.pointerError, /must not carry registry labels/i);
+
+const wrongTypePointer = projectBenchmarkRegistry([records[0]], {
+  pointerIssue: pointer('BEN-17', '2026-08-27T12:01:00.000Z', [], { name: 'Task', subtask: false }),
+  pointerMatches: [pointer()]
+});
+assert.equal(wrongTypePointer.state, 'ready');
+assert.equal(wrongTypePointer.selectedNext, null);
+assert.match(wrongTypePointer.pointerError, /permanent Subtask pointer/i);
 
 const ideaPointer = projectBenchmarkRegistry([records[0], records[6]], {
   pointerIssue: pointer('BEN-13'),
@@ -233,6 +267,7 @@ const legacy = projectLegacyBenchmarkRegistry(`
 - Exact scores/winners: Backfill from original review records.
 ## Previously Considered / Unused Ideas
 - MyRAM Markdown Preview
+- Dashboard Display Mode
 ## Fresh Idea Backlog
 ### Runline
 - Runline Needs Anchoring
@@ -253,6 +288,22 @@ const parity = compareBenchmarkRegistryParity(nativeParity, legacy, {
 });
 assert.equal(parity.ok, true, parity.errors.join('\n'));
 assert.deepEqual(parity.postMigrationDifferences, []);
+
+const swappedIdeaNative = projectBenchmarkRegistry([
+  records[0],
+  issue('BEN-22', ['registry-idea', 'registry-idea-considered'], 'new', { summary: 'Dashboard Display Mode' }),
+  issue('BEN-23', ['registry-idea', 'registry-idea-considered'], 'new', { summary: 'MyRAM Markdown Preview' })
+], {
+  pointerIssue: pointer(),
+  pointerMatches: [pointer()]
+});
+const swappedIdeaParity = compareBenchmarkRegistryParity(swappedIdeaNative, legacy, {
+  runKeys: ['BEN-17'],
+  consideredKeys: ['BEN-22', 'BEN-23'],
+  freshKeys: []
+});
+assert.equal(swappedIdeaParity.ok, false);
+assert.match(swappedIdeaParity.errors.join('\n'), /BEN-22 idea title mismatch/);
 
 const missingConsideredNative = projectBenchmarkRegistry([
   records[0], records[3], records[4], records[5], records[8]
