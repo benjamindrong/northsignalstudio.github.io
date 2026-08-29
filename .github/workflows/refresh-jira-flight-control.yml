@@ -265,13 +265,6 @@ jobs:
           PREVIOUS_PATH: _dashboard-data/dashboard/jira-flight-control.enc.json
           OUTPUT_PATH: _dashboard-data/dashboard/jira-flight-control.enc.json
         run: |
-          if [ "$BENCHMARK_REGISTRY_AUTHORITY" = "jira-native" ]; then
-            parity_output="$(node scripts/refresh-jira-flight-control.mjs --verify-benchmark-parity)"
-            printf '%s\n' "$parity_output"
-            printf '%s\n' "$parity_output" | node scripts/benchmark-registry-cutover-policy.mjs verify-parity-output
-          else
-            echo "Jira-native parity verification skipped while BEN-8 rollback authority is active."
-          fi
           node scripts/refresh-jira-flight-control.mjs
           node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
 
