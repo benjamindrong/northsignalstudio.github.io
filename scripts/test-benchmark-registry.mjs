@@ -36,13 +36,14 @@ function relates(key, summary = `${key} source`) {
   };
 }
 
-function pointer(parentKey = 'BEN-17', updated = '2026-08-27T12:01:00.000Z') {
+function pointer(parentKey = 'BEN-17', updated = '2026-08-27T12:01:00.000Z', labels = []) {
   return {
     key: 'BEN-21',
     fields: {
       summary: POINTER_SUMMARY,
       parent: { key: parentKey },
-      updated
+      updated,
+      labels
     }
   };
 }
@@ -69,6 +70,7 @@ const records = [
   issue('BEN-22', ['registry-idea', 'registry-idea-considered'], 'new', { summary: 'MyRAM Markdown Preview' }),
   issue('BEN-25', ['registry-idea', 'registry-idea-fresh'], 'new', { summary: 'Runline Needs Anchoring' }),
   issue('BEN-6', ['candidate-evaluation'], 'new', { summary: 'Legacy support history must stay excluded' }),
+  issue('BEN-21', ['candidate-evaluation'], 'new', { summary: POINTER_SUMMARY }),
   issue('BEN-33', ['registry-idea', 'registry-idea-fresh'], 'new', { summary: 'VOID duplicate must stay excluded' })
 ];
 
@@ -107,6 +109,7 @@ const allProjectedKeys = new Set([
   ...registry.invalidRecords.map(record => record.key)
 ]);
 assert.equal(allProjectedKeys.has('BEN-6'), false, 'BEN-6 must remain excluded even if registry labels are added accidentally');
+assert.equal(allProjectedKeys.has('BEN-21'), false, 'BEN-21 must never become projected benchmark work');
 assert.equal(allProjectedKeys.has('BEN-33'), false, 'BEN-33 must never enter any Jira-native projection bucket');
 
 const parsedSummary = parseCanonicalResultSummary(summaryDescription);
@@ -122,6 +125,37 @@ const malformedSummary = parseCanonicalResultSummary(`
 ### Completion Artifact
 `);
 assert.equal(malformedSummary.ok, false);
+
+const nestedSummaryAdf = {
+  type: 'doc',
+  version: 1,
+  content: [
+    { type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: 'Completion Artifact' }] },
+    { type: 'heading', attrs: { level: 4 }, content: [{ type: 'text', text: 'Registry Result Summary' }] },
+    {
+      type: 'bulletList',
+      content: [
+        {
+          type: 'listItem',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Outcome: B' }] },
+            {
+              type: 'bulletList',
+              content: [
+                { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Extra: nested evidence' }] }] }
+              ]
+            }
+          ]
+        },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Scores: 9/8' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Signal: X' }] }] }
+      ]
+    }
+  ]
+};
+const nestedSummary = parseCanonicalResultSummary(nestedSummaryAdf);
+assert.equal(nestedSummary.ok, false);
+assert.match(nestedSummary.error, /three top-level bullets/i);
 
 const invalidRecords = [
   issue('BEN-50', ['candidate-evaluation', 'benchmark-testing'], 'new'),
@@ -150,12 +184,36 @@ assert.equal(duplicatePointer.state, 'ready');
 assert.equal(duplicatePointer.selectedNext, null);
 assert.match(duplicatePointer.pointerError, /unique/i);
 
+const contaminatedPointer = projectBenchmarkRegistry([records[0]], {
+  pointerIssue: pointer('BEN-17', '2026-08-27T12:01:00.000Z', ['candidate-evaluation']),
+  pointerMatches: [pointer()]
+});
+assert.equal(contaminatedPointer.state, 'ready');
+assert.equal(contaminatedPointer.selectedNext, null);
+assert.match(contaminatedPointer.pointerError, /must not carry registry labels/i);
+
 const ideaPointer = projectBenchmarkRegistry([records[0], records[6]], {
   pointerIssue: pointer('BEN-13'),
   pointerMatches: [pointer('BEN-13')]
 });
 assert.equal(ideaPointer.selectedNext, null);
 assert.match(ideaPointer.pointerError, /eligible/i);
+
+const malformedLegacy = projectLegacyBenchmarkRegistry('## Not the registry');
+assert.equal(malformedLegacy.state, 'unavailable');
+assert.equal(malformedLegacy.authority, 'ben-8');
+assert.equal(malformedLegacy.sourceLabel, 'BEN-8 temporary rollback authority');
+
+const duplicateNextLegacy = projectLegacyBenchmarkRegistry(`
+## Benchmark Run Ledger
+### BEN-17 — A
+- Status: Selected — next
+### BEN-18 — B
+- Status: Selected — next
+`);
+assert.equal(duplicateNextLegacy.state, 'unavailable');
+assert.equal(duplicateNextLegacy.authority, 'ben-8');
+assert.equal(duplicateNextLegacy.sourceLabel, 'BEN-8 temporary rollback authority');
 
 const legacy = projectLegacyBenchmarkRegistry(`
 ## Benchmark Run Ledger
