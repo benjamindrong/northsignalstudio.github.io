@@ -253,8 +253,13 @@ jobs:
           authority_path="_dashboard-data/dashboard/benchmark-registry-authority.txt"
           mkdir -p "$(dirname "$authority_path")"
           authority="$(node scripts/benchmark-registry-cutover-policy.mjs resolve-authority "$REQUESTED_BENCHMARK_REGISTRY_AUTHORITY" "$authority_path" jira-native)"
+          case "$REQUESTED_BENCHMARK_REGISTRY_AUTHORITY" in
+            jira-native|ben-8) authority_change_requested=true ;;
+            *) authority_change_requested=false ;;
+          esac
           printf '%s\n' "$authority" > "$authority_path"
           printf 'BENCHMARK_REGISTRY_AUTHORITY=%s\n' "$authority" >> "$GITHUB_ENV"
+          printf 'BENCHMARK_AUTHORITY_CHANGE_REQUESTED=%s\n' "$authority_change_requested" >> "$GITHUB_ENV"
           echo "Benchmark registry authority resolved to $authority."
 
       - name: Refresh and verify encrypted Jira snapshot
@@ -266,7 +271,11 @@ jobs:
           OUTPUT_PATH: _dashboard-data/dashboard/jira-flight-control.enc.json
         run: |
           node scripts/refresh-jira-flight-control.mjs
-          node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
+          if [ "$BENCHMARK_AUTHORITY_CHANGE_REQUESTED" = "true" ]; then
+            VERIFY_BENCHMARK_AUTHORITY="$BENCHMARK_REGISTRY_AUTHORITY" node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
+          else
+            node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
+          fi
 
       - name: Publish changed snapshot and authority state
         working-directory: _dashboard-data
