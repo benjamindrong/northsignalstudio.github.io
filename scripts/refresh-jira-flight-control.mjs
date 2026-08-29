@@ -3,12 +3,18 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { projectBenchmarkRegistry } from './benchmark-registry.mjs';
+import {
+  compareBenchmarkRegistryParity,
+  projectBenchmarkRegistry,
+  REGISTRY_QUERY_LABELS
+} from './benchmark-registry.mjs';
+import { projectBenchmarkRegistry as projectLegacyBenchmarkRegistry } from './benchmark-registry-legacy.mjs';
 
 const DEFAULT_CONFIG = 'dashboard/jira-flight-control.config.json';
 const DEFAULT_OUTPUT = 'dashboard/jira-flight-control.enc.json';
 const PBKDF2_ITERATIONS = 250_000;
 const RECENT_DONE_PER_PROJECT = 3;
+const BENCHMARK_POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -38,6 +44,15 @@ function buildActiveJql(projects) {
 
 function buildDoneJql(project) {
   return `project = ${quoteJqlValue(project)} AND ${exclusionJql()} AND statusCategory = Done ORDER BY statusCategoryChangedDate DESC`;
+}
+
+export function buildBenchmarkRegistryJql(projectKey) {
+  const labels = REGISTRY_QUERY_LABELS.map(quoteJqlValue).join(', ');
+  return `project = ${quoteJqlValue(projectKey)} AND labels IN (${labels}) ORDER BY key ASC`;
+}
+
+export function buildBenchmarkPointerIdentityJql(projectKey) {
+  return `project = ${quoteJqlValue(projectKey)} AND summary ~ ${quoteJqlValue(`"${BENCHMARK_POINTER_SUMMARY}"`)} ORDER BY key ASC`;
 }
 
 function historyTimestamp(created) {
@@ -83,14 +98,14 @@ async function jiraFetch(url, options, authHeader) {
   return response.json();
 }
 
-async function searchJqlIssues(baseUrl, authHeader, jql, maxIssues) {
+async function searchJqlIssues(baseUrl, authHeader, jql, maxIssues, fields = ['summary', 'status', 'project', 'updated']) {
   const issues = [];
   let nextPageToken;
   do {
     const body = {
       jql,
       maxResults: Math.min(100, Math.max(1, maxIssues - issues.length)),
-      fields: ['summary', 'status', 'project', 'updated']
+      fields
     };
     if (nextPageToken) body.nextPageToken = nextPageToken;
     const page = await jiraFetch(`${baseUrl}/rest/api/3/search/jql`, {
@@ -117,25 +132,111 @@ async function searchIssues(baseUrl, authHeader, projects, maxIssues) {
   return [...active, ...recentDone];
 }
 
-async function fetchBenchmarkRegistry(baseUrl, authHeader, registryKey) {
-  if (!registryKey) {
-    return { state: 'unavailable', sourceKey: '', updatedAt: '', message: 'Benchmark registry key is not configured.' };
+function benchmarkAuthority(config) {
+  const authority = String(process.env.BENCHMARK_REGISTRY_AUTHORITY || config.benchmarkRegistryAuthority || 'jira-native').trim();
+  if (!['jira-native', 'ben-8'].includes(authority)) {
+    throw new Error(`Unsupported benchmark registry authority: ${authority || 'empty'}.`);
   }
+  return authority;
+}
 
+async function fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config) {
+  const projectKey = String(config.benchmarkRegistryProject || 'BEN').trim();
+  const pointerKey = String(config.benchmarkRegistryPointerKey || 'BEN-21').trim();
+  const maxIssues = Number.isFinite(Number(config.benchmarkRegistryMaxIssues)) ? Number(config.benchmarkRegistryMaxIssues) : 100;
+
+  try {
+    const issues = await searchJqlIssues(
+      baseUrl,
+      authHeader,
+      buildBenchmarkRegistryJql(projectKey),
+      maxIssues,
+      ['summary', 'status', 'project', 'labels', 'updated', 'description', 'issuelinks']
+    );
+
+    let pointerIssue = null;
+    try {
+      pointerIssue = await jiraFetch(
+        `${baseUrl}/rest/api/3/issue/${encodeURIComponent(pointerKey)}?fields=summary,parent,updated`,
+        {},
+        authHeader
+      );
+    } catch (error) {
+      console.warn(`Benchmark pointer ${pointerKey} is unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    let pointerMatches = [];
+    try {
+      pointerMatches = await searchJqlIssues(
+        baseUrl,
+        authHeader,
+        buildBenchmarkPointerIdentityJql(projectKey),
+        20,
+        ['summary', 'parent', 'updated']
+      );
+    } catch (error) {
+      console.warn(`Benchmark pointer identity query is unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    return projectBenchmarkRegistry(issues, {
+      pointerIssue,
+      pointerMatches,
+      sourceKey: projectKey,
+      sourceLabel: 'Jira-native BEN registry'
+    });
+  } catch (error) {
+    console.warn(`Jira-native BEN registry is unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    return {
+      state: 'unavailable',
+      authority: 'jira-native',
+      sourceKey: projectKey,
+      sourceLabel: 'Jira-native BEN registry',
+      updatedAt: '',
+      message: 'Jira-native BEN registry is unavailable.'
+    };
+  }
+}
+
+async function fetchLegacyBenchmarkRegistry(baseUrl, authHeader, config) {
+  const registryKey = String(config.benchmarkRegistryLegacyKey || 'BEN-8').trim();
   try {
     const issue = await jiraFetch(
       `${baseUrl}/rest/api/3/issue/${encodeURIComponent(registryKey)}?fields=description,updated,summary`,
       {},
       authHeader
     );
-    return projectBenchmarkRegistry(issue.fields?.description, {
+    return projectLegacyBenchmarkRegistry(issue.fields?.description, {
       sourceKey: issue.key || registryKey,
       updatedAt: issue.fields?.updated || ''
     });
   } catch (error) {
-    console.warn(`Benchmark registry ${registryKey} is unavailable: ${error instanceof Error ? error.message : String(error)}`);
-    return { state: 'unavailable', sourceKey: registryKey, updatedAt: '', message: 'Benchmark registry is unavailable.' };
+    console.warn(`Legacy benchmark registry ${registryKey} is unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    return {
+      state: 'unavailable',
+      authority: 'ben-8',
+      sourceKey: registryKey,
+      sourceLabel: 'BEN-8 temporary rollback authority',
+      updatedAt: '',
+      message: 'BEN-8 rollback registry is unavailable.'
+    };
   }
+}
+
+async function fetchBenchmarkRegistry(baseUrl, authHeader, config) {
+  const authority = benchmarkAuthority(config);
+  return authority === 'ben-8'
+    ? fetchLegacyBenchmarkRegistry(baseUrl, authHeader, config)
+    : fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config);
+}
+
+async function verifyBenchmarkParity(baseUrl, authHeader, config) {
+  const [nativeRegistry, legacyRegistry] = await Promise.all([
+    fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config),
+    fetchLegacyBenchmarkRegistry(baseUrl, authHeader, config)
+  ]);
+  const parity = compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry);
+  if (!parity.ok) throw new Error(`Benchmark registry parity failed:\n- ${parity.errors.join('\n- ')}`);
+  console.log('Benchmark registry Jira-native/BEN-8 parity passed for HOME-24 legacy targets.');
 }
 
 async function fetchStatusChangelogs(baseUrl, authHeader, issues) {
@@ -238,32 +339,18 @@ async function readPreviousEnvelope(filePath) {
   try { return await readJson(filePath); } catch { return null; }
 }
 
-function benchmarkFixtureAdf() {
-  const text = value => ({ type: 'text', text: value });
-  const paragraph = value => ({ type: 'paragraph', content: [text(value)] });
-  const heading = (level, value) => ({ type: 'heading', attrs: { level }, content: [text(value)] });
-  const bulletList = values => ({
-    type: 'bulletList',
-    content: values.map(value => ({ type: 'listItem', content: [paragraph(value)] }))
-  });
-
+function benchmarkFixtureIssue(key, labels, category, updated = '2026-08-18T12:00:00.000Z') {
   return {
-    type: 'doc',
-    version: 1,
-    content: [
-      heading(2, 'Benchmark Run Ledger'),
-      heading(3, 'BEN-5 — Recent Activity'),
-      bulletList(['Status: Running', 'Source: Homepage Dashboard', 'Exact scores/winners: Backfill from original review records where not yet captured.']),
-      heading(3, 'BEN-9 — Runline Authority Handoff Console'),
-      bulletList(['Status: Selected — next', 'Source: Runline planned authority handoff', 'Candidate results: none yet.']),
-      heading(3, 'BEN-4 — Code Review'),
-      bulletList(['Status: Completed', 'Source: Homepage Dashboard Code Review widget', 'Candidate results: RA 8.5 / RB 9.0 — RB']),
-      heading(2, 'Previously Considered / Unused Ideas'),
-      bulletList(['Runline Standings / Current-Next projection — deterministic standings.']),
-      heading(2, 'Fresh Idea Backlog'),
-      heading(3, 'Crossmark'),
-      bulletList(['Crossmark Signal Hunt'])
-    ]
+    key,
+    fields: {
+      summary: `${key} fixture`,
+      labels,
+      status: { statusCategory: { key: category } },
+      project: { key: 'BEN' },
+      updated,
+      description: '',
+      issuelinks: []
+    }
   };
 }
 
@@ -277,18 +364,13 @@ async function runSelfTest() {
     throw new Error(`latestStatusMove self-test failed: ${latestStatusMove(histories)}`);
   }
 
-  const benchmarkReview = projectBenchmarkRegistry(benchmarkFixtureAdf(), { sourceKey: 'BEN-8', updatedAt: '2026-08-18T12:00:00.000Z' });
-  if (benchmarkReview.state !== 'ready' || benchmarkReview.selectedNext?.key !== 'BEN-9') throw new Error('benchmark selected-next self-test failed');
-  const running = benchmarkReview.runs.find(run => run.key === 'BEN-5');
-  if (running?.status !== 'Running' || running.resultState !== 'backfill') throw new Error('benchmark running/backfill self-test failed');
-  const completed = benchmarkReview.runs.find(run => run.key === 'BEN-4');
-  if (completed?.status !== 'Completed' || completed.resultLines[0] !== 'Candidate results: RA 8.5 / RB 9.0 — RB') throw new Error('benchmark exact-result self-test failed');
-  if (benchmarkReview.previouslyConsidered[0]?.title !== 'Runline Standings / Current-Next projection') throw new Error('benchmark previously-considered self-test failed');
-  if (benchmarkReview.freshBacklog[0]?.group !== 'Crossmark' || benchmarkReview.freshBacklog[0]?.ideas[0]?.title !== 'Crossmark Signal Hunt') throw new Error('benchmark fresh-backlog self-test failed');
-  const malformed = projectBenchmarkRegistry('## Not the registry\n- Candidate results: RA wins');
-  if (malformed.state !== 'unavailable' || malformed.selectedNext) throw new Error('benchmark malformed-registry self-test failed');
-  const conflicting = projectBenchmarkRegistry(`## Benchmark Run Ledger\n### BEN-9 — A\n- Status: Selected — next\n### BEN-10 — B\n- Status: Selected — next`);
-  if (conflicting.state !== 'unavailable') throw new Error('benchmark multiple-next self-test failed');
+  const selectedIssue = benchmarkFixtureIssue('BEN-17', ['candidate-evaluation'], 'new');
+  const benchmarkReview = projectBenchmarkRegistry([selectedIssue], {
+    pointerIssue: { key: 'BEN-21', fields: { summary: BENCHMARK_POINTER_SUMMARY, parent: { key: 'BEN-17' }, updated: '2026-08-18T12:01:00.000Z' } },
+    pointerMatches: [{ key: 'BEN-21', fields: { summary: BENCHMARK_POINTER_SUMMARY } }]
+  });
+  if (benchmarkReview.state !== 'ready' || benchmarkReview.authority !== 'jira-native') throw new Error('benchmark Jira-native self-test failed');
+  if (benchmarkReview.selectedNext?.key !== 'BEN-17' || benchmarkReview.selectedNext?.status !== 'Preparing') throw new Error('benchmark pointer self-test failed');
 
   const payload = {
     version: 1,
@@ -330,6 +412,12 @@ async function runSelfTest() {
     || !doneJql.includes('ORDER BY statusCategoryChangedDate DESC')
     || doneJql.includes('-7d')
   ) throw new Error('Done JQL self-test failed');
+
+  const registryJql = buildBenchmarkRegistryJql('BEN');
+  if (!registryJql.includes('labels IN (') || !registryJql.includes('"candidate-evaluation"') || !registryJql.includes('"registry-result-summary"')) {
+    throw new Error('Benchmark registry JQL self-test failed');
+  }
+  if (!buildBenchmarkPointerIdentityJql('BEN').includes('Benchmark Registry Next Pointer')) throw new Error('Benchmark pointer identity JQL self-test failed');
   console.log('refresh-jira-flight-control self-test passed');
 }
 
@@ -349,12 +437,14 @@ async function verifyOutput(filePath) {
   }
   if (!Array.isArray(payload.issues)) throw new Error('Encrypted snapshot issues must be an array.');
   if (!payload.benchmarkReview || typeof payload.benchmarkReview !== 'object') throw new Error('Encrypted snapshot benchmarkReview must be an object.');
-  if (payload.benchmarkReview.sourceKey !== String(config.benchmarkRegistryKey || '')) throw new Error('Encrypted snapshot benchmark registry key does not match dashboard config.');
+  const expectedAuthority = benchmarkAuthority(config);
+  if (payload.benchmarkReview.authority !== expectedAuthority) throw new Error(`Encrypted snapshot benchmark registry authority must be ${expectedAuthority}.`);
+  if (typeof payload.benchmarkReview.sourceLabel !== 'string' || !payload.benchmarkReview.sourceLabel) throw new Error('Encrypted snapshot benchmarkReview source metadata is missing.');
   if (!['ready', 'unavailable'].includes(payload.benchmarkReview.state)) throw new Error('Encrypted snapshot benchmarkReview state is invalid.');
-  const requiredBenchmarkRegistry = String(process.env.VERIFY_BENCHMARK_REGISTRY || '').trim();
-  if (requiredBenchmarkRegistry) {
-    if (payload.benchmarkReview.sourceKey !== requiredBenchmarkRegistry) throw new Error(`Benchmark registry source must be ${requiredBenchmarkRegistry}.`);
-    if (payload.benchmarkReview.state !== 'ready') throw new Error(`Benchmark registry ${requiredBenchmarkRegistry} is not projectable.`);
+  const requiredBenchmarkAuthority = String(process.env.VERIFY_BENCHMARK_AUTHORITY || '').trim();
+  if (requiredBenchmarkAuthority) {
+    if (payload.benchmarkReview.authority !== requiredBenchmarkAuthority) throw new Error(`Benchmark registry authority must be ${requiredBenchmarkAuthority}.`);
+    if (payload.benchmarkReview.state !== 'ready') throw new Error(`Benchmark registry authority ${requiredBenchmarkAuthority} is not projectable.`);
   }
 
   const observedProjects = new Set();
@@ -382,7 +472,7 @@ async function verifyOutput(filePath) {
     if (!observedProjects.has(project)) throw new Error(`Live snapshot is missing required verification project ${project}.`);
   }
 
-  console.log(`Verified encrypted Jira snapshot with ${payload.issues.length} issues across ${[...observedProjects].sort().join(', ') || 'no active projects'}; benchmark registry ${payload.benchmarkReview.state}.`);
+  console.log(`Verified encrypted Jira snapshot with ${payload.issues.length} issues across ${[...observedProjects].sort().join(', ') || 'no active projects'}; benchmark registry ${payload.benchmarkReview.authority}/${payload.benchmarkReview.state}.`);
 }
 
 async function main() {
@@ -391,19 +481,24 @@ async function main() {
   if (verifyIndex >= 0) return verifyOutput(process.argv[verifyIndex + 1]);
 
   const configPath = process.env.CONFIG_PATH || DEFAULT_CONFIG;
-  const outputPath = process.env.OUTPUT_PATH || DEFAULT_OUTPUT;
-  const previousPath = process.env.PREVIOUS_PATH || '';
   const config = await readJson(configPath);
   const baseUrl = normalizeBaseUrl(config.jiraBaseUrl);
   const email = requiredEnv('JIRA_EMAIL');
   const apiToken = requiredEnv('JIRA_API_TOKEN');
-  const passphrase = requiredEnv('DASHBOARD_DATA_PASSPHRASE');
   const authHeader = `Basic ${Buffer.from(`${email}:${apiToken}`).toString('base64')}`;
+
+  if (process.argv.includes('--verify-benchmark-parity')) {
+    return verifyBenchmarkParity(baseUrl, authHeader, config);
+  }
+
+  const outputPath = process.env.OUTPUT_PATH || DEFAULT_OUTPUT;
+  const previousPath = process.env.PREVIOUS_PATH || '';
+  const passphrase = requiredEnv('DASHBOARD_DATA_PASSPHRASE');
   const maxIssues = Number.isFinite(Number(config.maxIssues)) ? Number(config.maxIssues) : 100;
 
   const [issues, benchmarkReview] = await Promise.all([
     searchIssues(baseUrl, authHeader, config.projects, maxIssues),
-    fetchBenchmarkRegistry(baseUrl, authHeader, String(config.benchmarkRegistryKey || ''))
+    fetchBenchmarkRegistry(baseUrl, authHeader, config)
   ]);
   const historiesByIssueId = await fetchStatusChangelogs(baseUrl, authHeader, issues);
   const mapped = issues.map(issue => ({
@@ -434,7 +529,7 @@ async function main() {
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
   await fs.writeFile(outputPath, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
-  console.log(`Wrote encrypted Jira Flight Control snapshot with ${mapped.length} issues and benchmark registry ${benchmarkReview.state} to ${outputPath}`);
+  console.log(`Wrote encrypted Jira Flight Control snapshot with ${mapped.length} issues and benchmark registry ${benchmarkReview.authority}/${benchmarkReview.state} to ${outputPath}`);
 }
 
 const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
