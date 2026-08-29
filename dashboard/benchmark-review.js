@@ -41,11 +41,12 @@
       .benchmark-status.completed { color: var(--done); }
       .benchmark-status.selected { color: var(--review); }
       .benchmark-status.retired, .benchmark-status.unused { color: var(--muted); }
-      .benchmark-ideas { border: 1px solid var(--board-line-soft); background: #101310; }
-      .benchmark-ideas summary { cursor: pointer; padding: 8px; color: #c8cec8; font-size: 9px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+      .benchmark-ideas, .benchmark-invalid { border: 1px solid var(--board-line-soft); background: #101310; }
+      .benchmark-ideas summary, .benchmark-invalid summary { cursor: pointer; padding: 8px; color: #c8cec8; font-size: 9px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
       .benchmark-idea-body { padding: 0 8px 8px; display: grid; gap: 8px; }
       .benchmark-idea-section strong { display: block; margin-bottom: 4px; color: #a8aea8; font-size: 8px; letter-spacing: .05em; text-transform: uppercase; }
       .benchmark-idea { color: #c8c8bc; font-size: 9px; line-height: 1.35; }
+      .benchmark-invalid .benchmark-idea { color: var(--blocked); }
       .benchmark-empty { min-height: 170px; display: grid; place-items: center; padding: 18px; color: #9da59d; text-align: center; font-size: 10px; line-height: 1.45; letter-spacing: .04em; text-transform: uppercase; }
       @media (max-width: 859px) { .widget--benchmark { grid-column: auto; min-height: 360px; } }
       @media (max-width: 620px) { .benchmark-columns { grid-template-columns: 1fr; } }
@@ -91,7 +92,11 @@
       for (const line of run.resultLines) container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, line));
       return;
     }
-    const fallback = run.resultState === 'none' ? 'No candidate results recorded yet.' : 'Result not recorded.';
+    if (run.activityKind === 'benchmark-testing') {
+      container.appendChild(create('div', 'benchmark-result none', 'Application/product benchmark record.'));
+      return;
+    }
+    const fallback = run.resultState === 'none' ? 'No candidate results recorded yet.' : 'Result: Unknown / backfill.';
     container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, fallback));
   }
 
@@ -102,7 +107,7 @@
     const status = create('span', `benchmark-status ${String(run.status || 'unknown').toLowerCase()}`, run.statusRaw || run.status || 'Unknown');
     titleLine.appendChild(status);
     row.appendChild(titleLine);
-    const metadata = [run.source && `Source: ${run.source}`, run.turnsCompleted && `Turns: ${run.turnsCompleted}`].filter(Boolean).join(' · ');
+    const metadata = [run.source && `Source: ${run.source}`, run.type && `Type: ${run.type}`, run.turnsCompleted && `Turns: ${run.turnsCompleted}`].filter(Boolean).join(' · ');
     if (metadata) row.appendChild(create('div', 'benchmark-run-meta', metadata));
     appendResults(row, run);
     container.appendChild(row);
@@ -117,12 +122,20 @@
   }
 
   function appendIdeas(content, registry) {
+    const definedUnused = Array.isArray(registry.runs) ? registry.runs.filter(run => run.status === 'Unused') : [];
     const previous = Array.isArray(registry.previouslyConsidered) ? registry.previouslyConsidered : [];
     const freshGroups = Array.isArray(registry.freshBacklog) ? registry.freshBacklog : [];
     const freshCount = freshGroups.reduce((total, group) => total + (group.ideas?.length || 0), 0);
     const details = create('details', 'benchmark-ideas');
-    details.appendChild(create('summary', '', `Idea backlog · ${previous.length + freshCount}`));
+    details.appendChild(create('summary', '', `Idea backlog · ${definedUnused.length + previous.length + freshCount}`));
     const body = create('div', 'benchmark-idea-body');
+
+    if (definedUnused.length) {
+      const section = create('div', 'benchmark-idea-section');
+      section.appendChild(create('strong', '', 'Defined unused benchmarks'));
+      for (const run of definedUnused) section.appendChild(create('div', 'benchmark-idea', `${run.key} · ${run.title}`));
+      body.appendChild(section);
+    }
 
     if (previous.length) {
       const section = create('div', 'benchmark-idea-section');
@@ -143,6 +156,20 @@
     content.appendChild(details);
   }
 
+  function appendInvalidRecords(content, registry) {
+    const invalid = Array.isArray(registry.invalidRecords) ? registry.invalidRecords : [];
+    if (!invalid.length) return;
+    const details = create('details', 'benchmark-invalid');
+    details.appendChild(create('summary', '', `Invalid registry records · ${invalid.length}`));
+    const body = create('div', 'benchmark-idea-body');
+    for (const record of invalid) {
+      const reasons = Array.isArray(record.reasons) ? record.reasons.join('; ') : 'Invalid registry state.';
+      body.appendChild(create('div', 'benchmark-idea', `${record.key || 'Unknown'} · ${reasons}`));
+    }
+    details.appendChild(body);
+    content.appendChild(details);
+  }
+
   function render(registry) {
     ensureSurface();
     const content = document.getElementById('benchmarkContent');
@@ -151,12 +178,12 @@
     content.replaceChildren();
 
     if (!registry || registry.state !== 'ready') {
-      source.textContent = registry?.sourceKey ? `${registry.sourceKey} · unavailable` : 'BEN registry unavailable';
+      source.textContent = registry?.sourceLabel || (registry?.sourceKey ? `${registry.sourceKey} · unavailable` : 'BEN registry unavailable');
       content.appendChild(create('div', 'benchmark-empty', registry?.message || 'Benchmark registry is unavailable.'));
       return;
     }
 
-    source.textContent = `${registry.sourceKey || 'BEN-8'} · canonical benchmark registry`;
+    source.textContent = registry.sourceLabel || `${registry.sourceKey || 'BEN'} · benchmark registry`;
     const next = registry.selectedNext;
     const nextCard = create('section', 'benchmark-next');
     nextCard.appendChild(create('div', 'benchmark-next-label', 'Next benchmark'));
@@ -166,7 +193,7 @@
       if (metadata) nextCard.appendChild(create('div', 'benchmark-run-meta', metadata));
       appendResults(nextCard, next);
     } else {
-      nextCard.appendChild(create('div', 'benchmark-result unknown', 'No benchmark is marked Selected — next.'));
+      nextCard.appendChild(create('div', 'benchmark-result unknown', registry.pointerError || 'No benchmark is selected as next.'));
     }
     content.appendChild(nextCard);
 
@@ -177,6 +204,7 @@
     appendRunGroup(columns, 'Completed', completedRuns);
     content.appendChild(columns);
     appendIdeas(content, registry);
+    appendInvalidRecords(content, registry);
   }
 
   function locked(message = 'Unlock the dashboard to load Benchmark Review.') {
