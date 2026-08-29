@@ -125,7 +125,7 @@ function parseRun(section, headingIndex) {
   const properties = lines.map(property).filter(Boolean);
   const valueFor = pattern => properties.find(entry => pattern.test(entry.name))?.value || '';
   const statusInfo = normalizeStatus(valueFor(/^status$/i));
-  const resultLines = lines.filter(line => /score|winner|tie|candidate result|exact result|finding|compliance split|per-turn result|benchmark signal/i.test(line));
+  const resultLines = lines.filter(line => /score|winner|tie|candidate result|exact result|finding|compliance split|per-turn result|benchmark signal|^result\s*:|most consequential split/i.test(line));
   const turns = valueFor(/^turns completed$/i);
 
   return {
