@@ -98,7 +98,20 @@ async function jiraFetch(url, options, authHeader) {
   return response.json();
 }
 
-async function searchJqlIssues(baseUrl, authHeader, jql, maxIssues, fields = ['summary', 'status', 'project', 'updated']) {
+function assertCompleteSearch(nextPageToken, issueCount, maxIssues, context) {
+  if (nextPageToken && issueCount >= maxIssues) {
+    throw new Error(`${context} exceeded the configured maximum of ${maxIssues} issues.`);
+  }
+}
+
+async function searchJqlIssues(
+  baseUrl,
+  authHeader,
+  jql,
+  maxIssues,
+  fields = ['summary', 'status', 'project', 'updated'],
+  { requireComplete = false, context = 'Jira query' } = {}
+) {
   const issues = [];
   let nextPageToken;
   do {
@@ -115,6 +128,7 @@ async function searchJqlIssues(baseUrl, authHeader, jql, maxIssues, fields = ['s
     issues.push(...(page.issues || []));
     nextPageToken = page.nextPageToken;
   } while (nextPageToken && issues.length < maxIssues);
+  if (requireComplete) assertCompleteSearch(nextPageToken, issues.length, maxIssues, context);
   return issues.slice(0, maxIssues);
 }
 
@@ -151,13 +165,14 @@ async function fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config) {
       authHeader,
       buildBenchmarkRegistryJql(projectKey),
       maxIssues,
-      ['summary', 'status', 'project', 'labels', 'updated', 'description', 'issuelinks']
+      ['summary', 'status', 'project', 'labels', 'updated', 'description', 'issuelinks'],
+      { requireComplete: true, context: 'BEN registry participant query' }
     );
 
     let pointerIssue = null;
     try {
       pointerIssue = await jiraFetch(
-        `${baseUrl}/rest/api/3/issue/${encodeURIComponent(pointerKey)}?fields=summary,parent,updated`,
+        `${baseUrl}/rest/api/3/issue/${encodeURIComponent(pointerKey)}?fields=summary,parent,updated,labels`,
         {},
         authHeader
       );
@@ -172,7 +187,8 @@ async function fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config) {
         authHeader,
         buildBenchmarkPointerIdentityJql(projectKey),
         20,
-        ['summary', 'parent', 'updated']
+        ['summary', 'parent', 'updated'],
+        { requireComplete: true, context: 'BEN registry pointer identity query' }
       );
     } catch (error) {
       console.warn(`Benchmark pointer identity query is unavailable: ${error instanceof Error ? error.message : String(error)}`);
@@ -370,7 +386,7 @@ async function runSelfTest() {
 
   const selectedIssue = benchmarkFixtureIssue('BEN-17', ['candidate-evaluation'], 'new');
   const benchmarkReview = projectBenchmarkRegistry([selectedIssue], {
-    pointerIssue: { key: 'BEN-21', fields: { summary: BENCHMARK_POINTER_SUMMARY, parent: { key: 'BEN-17' }, updated: '2026-08-18T12:01:00.000Z' } },
+    pointerIssue: { key: 'BEN-21', fields: { summary: BENCHMARK_POINTER_SUMMARY, parent: { key: 'BEN-17' }, updated: '2026-08-18T12:01:00.000Z', labels: [] } },
     pointerMatches: [{ key: 'BEN-21', fields: { summary: BENCHMARK_POINTER_SUMMARY } }]
   });
   if (benchmarkReview.state !== 'ready' || benchmarkReview.authority !== 'jira-native') throw new Error('benchmark Jira-native self-test failed');
@@ -418,10 +434,24 @@ async function runSelfTest() {
   ) throw new Error('Done JQL self-test failed');
 
   const registryJql = buildBenchmarkRegistryJql('BEN');
-  if (!registryJql.includes('labels IN (') || !registryJql.includes('"candidate-evaluation"') || !registryJql.includes('"registry-result-summary"')) {
-    throw new Error('Benchmark registry JQL self-test failed');
-  }
+  if (
+    !registryJql.includes('labels IN (')
+    || !registryJql.includes('"candidate-evaluation"')
+    || !registryJql.includes('"benchmark-testing"')
+    || !registryJql.includes('"registry-idea"')
+    || registryJql.includes('"registry-blocked"')
+    || registryJql.includes('"registry-result-summary"')
+  ) throw new Error('Benchmark registry JQL participation-boundary self-test failed');
   if (!buildBenchmarkPointerIdentityJql('BEN').includes('Benchmark Registry Next Pointer')) throw new Error('Benchmark pointer identity JQL self-test failed');
+
+  let boundedSearchFailed = false;
+  try {
+    assertCompleteSearch('next-page', 100, 100, 'BEN registry participant query');
+  } catch (error) {
+    boundedSearchFailed = /exceeded the configured maximum/.test(String(error?.message || error));
+  }
+  if (!boundedSearchFailed) throw new Error('Benchmark registry bounded-query self-test failed');
+
   console.log('refresh-jira-flight-control self-test passed');
 }
 
