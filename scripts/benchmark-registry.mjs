@@ -22,6 +22,11 @@ export const REGISTRY_QUERY_LABELS = [
   ...RESULT_LABELS.keys()
 ];
 
+// BEN-18 completed the migration contract at this exact Jira update identity.
+// HOME-24 parity validates the migrated state while allowing later Jira-native
+// changes to advance without requiring BEN-8 to be rewritten.
+export const BEN18_MIGRATION_CUTOFF = '2026-08-27T16:15:09.077Z';
+
 const POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
 const ELIGIBLE_NEXT_STATUSES = new Set(['Preparing', 'Blocked', 'Running']);
 
@@ -162,9 +167,10 @@ export function parseCanonicalResultSummary(description) {
   const names = ['Outcome', 'Scores', 'Signal'];
   const values = {};
   for (const name of names) {
-    const matching = bullets.filter(line => new RegExp(`^${name}:\\s*`, 'i').test(line));
+    const pattern = new RegExp(`^${name}:\\s*`, 'i');
+    const matching = bullets.filter(line => pattern.test(line));
     if (matching.length !== 1) return { ok: false, error: `Registry Result Summary must contain exactly one ${name}: bullet.` };
-    const value = clean(matching[0].replace(new RegExp(`^${name}:\\s*`, 'i'), ''));
+    const value = clean(matching[0].replace(pattern, ''));
     if (!value) return { ok: false, error: `${name}: must contain a value.` };
     values[name.toLowerCase()] = value;
   }
@@ -304,7 +310,7 @@ export function projectBenchmarkRegistry(issues, {
   sourceLabel = 'Jira-native BEN registry'
 } = {}) {
   if (!Array.isArray(issues)) {
-    return { state: 'unavailable', authority: 'jira-native', sourceKey, sourceLabel, updatedAt: '', message: 'BEN registry query did not return an issue array.' };
+    return { state: 'unavailable', authority: 'jira-native', sourceKey, sourceLabel, updatedAt: '', pointerUpdatedAt: '', message: 'BEN registry query did not return an issue array.' };
   }
 
   const projected = issues.map(classifyIssue);
@@ -316,13 +322,15 @@ export function projectBenchmarkRegistry(issues, {
   const considered = valid.filter(record => record.status === 'Unused' && record.ideaCategory === 'considered');
   const fresh = valid.filter(record => record.status === 'Unused' && record.ideaCategory === 'fresh');
   const { selectedNext, pointerError } = resolveSelectedNext(pointerIssue, pointerMatches, runs);
+  const pointerUpdatedAt = clean(pointerIssue?.fields?.updated);
 
   return {
     state: 'ready',
     authority: 'jira-native',
     sourceKey,
     sourceLabel,
-    updatedAt: maxUpdatedAt([...issues.map(issue => issue?.fields?.updated), pointerIssue?.fields?.updated]),
+    updatedAt: maxUpdatedAt([...issues.map(issue => issue?.fields?.updated), pointerUpdatedAt]),
+    pointerUpdatedAt,
     selectedNext,
     pointerError,
     invalidRecords,
@@ -340,18 +348,36 @@ function flattenedFresh(registry) {
   return (registry?.freshBacklog || []).flatMap(group => group?.ideas || []);
 }
 
+function timestampAfter(value, cutoff) {
+  const valueTime = Date.parse(clean(value));
+  const cutoffTime = Date.parse(clean(cutoff));
+  return !Number.isNaN(valueTime) && !Number.isNaN(cutoffTime) && valueTime > cutoffTime;
+}
+
+function postMigration(postMigrationDifferences, message) {
+  postMigrationDifferences.push(message);
+}
+
 export function compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry, {
   runKeys = ['BEN-2', 'BEN-3', 'BEN-4', 'BEN-5', 'BEN-7', 'BEN-9', 'BEN-10', 'BEN-11', 'BEN-13', 'BEN-14', 'BEN-17'],
   consideredKeys = ['BEN-22', 'BEN-23', 'BEN-24'],
-  freshKeys = ['BEN-25', 'BEN-26', 'BEN-27', 'BEN-28', 'BEN-29', 'BEN-30', 'BEN-31', 'BEN-32']
+  freshKeys = ['BEN-25', 'BEN-26', 'BEN-27', 'BEN-28', 'BEN-29', 'BEN-30', 'BEN-31', 'BEN-32'],
+  migrationCutoff = BEN18_MIGRATION_CUTOFF
 } = {}) {
   const errors = [];
+  const postMigrationDifferences = [];
   if (nativeRegistry?.state !== 'ready') errors.push('Jira-native registry is not ready.');
   if (legacyRegistry?.state !== 'ready') errors.push('BEN-8 rollback registry is not ready.');
-  if (errors.length) return { ok: false, errors };
+  if (errors.length) return { ok: false, errors, postMigrationDifferences };
 
-  if (nativeRegistry.selectedNext?.key !== legacyRegistry.selectedNext?.key) {
-    errors.push(`Selected-next mismatch: Jira-native=${nativeRegistry.selectedNext?.key || 'none'}, BEN-8=${legacyRegistry.selectedNext?.key || 'none'}.`);
+  const nativeNext = nativeRegistry.selectedNext?.key || '';
+  const legacyNext = legacyRegistry.selectedNext?.key || '';
+  if (nativeNext !== legacyNext) {
+    if (timestampAfter(nativeRegistry.pointerUpdatedAt, migrationCutoff)) {
+      postMigration(postMigrationDifferences, `Selected-next advanced after BEN-18: ${legacyNext || 'none'} -> ${nativeNext || 'none'}.`);
+    } else {
+      errors.push(`Selected-next mismatch at BEN-18 parity boundary: Jira-native=${nativeNext || 'none'}, BEN-8=${legacyNext || 'none'}.`);
+    }
   }
 
   const nativeRuns = new Map((nativeRegistry.runs || []).map(run => [run.key, run]));
@@ -363,17 +389,35 @@ export function compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry, {
     if (!legacy) errors.push(`BEN-8 parity target ${key} is missing.`);
     if (!current || !legacy) continue;
 
-    if (key !== nativeRegistry.selectedNext?.key && current.status !== legacy.status) {
-      errors.push(`${key} lifecycle mismatch: Jira-native=${current.status}, BEN-8=${legacy.status}.`);
+    const changedAfterMigration = timestampAfter(current.updatedAt, migrationCutoff);
+    const wasLegacyNext = key === legacyNext;
+    const lifecycleMatchesMigration = wasLegacyNext
+      ? ELIGIBLE_NEXT_STATUSES.has(current.status)
+      : current.status === legacy.status;
+
+    if (!lifecycleMatchesMigration) {
+      if (changedAfterMigration) {
+        postMigration(postMigrationDifferences, `${key} lifecycle advanced after BEN-18: ${legacy.status} -> ${current.status}.`);
+      } else {
+        errors.push(`${key} lifecycle mismatch at BEN-18 parity boundary: Jira-native=${current.status}, BEN-8=${legacy.status}.`);
+      }
     }
-    if (current.resultState === 'backfill' && legacy.resultState !== 'backfill') {
-      errors.push(`${key} Unknown/backfill state is not preserved.`);
+
+    const expectedLegacyResult = current.resultState === 'backfill' ? 'backfill' : current.resultState === 'recorded' ? 'recorded' : '';
+    if (expectedLegacyResult && legacy.resultState !== expectedLegacyResult) {
+      if (changedAfterMigration) {
+        postMigration(postMigrationDifferences, `${key} result state advanced after BEN-18: BEN-8=${legacy.resultState}, Jira-native=${current.resultState}.`);
+      } else {
+        errors.push(`${key} ${expectedLegacyResult === 'backfill' ? 'Unknown/backfill' : 'recorded-result'} state is not preserved.`);
+      }
     }
-    if (current.resultState === 'recorded' && legacy.resultState !== 'recorded') {
-      errors.push(`${key} recorded-result state is not preserved.`);
-    }
+
     if (current.sourceKey && !clean(legacy.source).includes(current.sourceKey)) {
-      errors.push(`${key} structured source ${current.sourceKey} is not represented by BEN-8 source text.`);
+      if (changedAfterMigration) {
+        postMigration(postMigrationDifferences, `${key} source relationship advanced after BEN-18 to ${current.sourceKey}.`);
+      } else {
+        errors.push(`${key} structured source ${current.sourceKey} is not represented by BEN-8 source text.`);
+      }
     }
   }
 
@@ -382,11 +426,15 @@ export function compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry, {
 
   const nativeConsidered = titleSet((nativeRegistry.previouslyConsidered || []).filter(idea => consideredKeys.includes(idea.key)));
   const legacyConsidered = titleSet(legacyRegistry.previouslyConsidered);
-  for (const title of nativeConsidered) if (!legacyConsidered.has(title)) errors.push(`Previously-considered idea parity is missing: ${title}.`);
+  for (const title of nativeConsidered) {
+    if (!legacyConsidered.has(title)) errors.push(`Previously-considered idea parity is missing: ${title}.`);
+  }
 
   const nativeFresh = titleSet(flattenedFresh(nativeRegistry).filter(idea => freshKeys.includes(idea.key)));
   const legacyFresh = titleSet(flattenedFresh(legacyRegistry));
-  for (const title of nativeFresh) if (!legacyFresh.has(title)) errors.push(`Fresh idea parity is missing: ${title}.`);
+  for (const title of nativeFresh) {
+    if (!legacyFresh.has(title)) errors.push(`Fresh idea parity is missing: ${title}.`);
+  }
 
-  return { ok: errors.length === 0, errors };
+  return { ok: errors.length === 0, errors, postMigrationDifferences };
 }
