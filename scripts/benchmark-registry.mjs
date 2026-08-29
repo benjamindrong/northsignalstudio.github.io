@@ -29,6 +29,7 @@ export const BEN18_MIGRATION_CUTOFF = '2026-08-27T16:15:09.077Z';
 
 const POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
 const ELIGIBLE_NEXT_STATUSES = new Set(['Preparing', 'Blocked', 'Running']);
+const EXCLUDED_REGISTRY_KEYS = new Set(['BEN-6', 'BEN-33']);
 
 function clean(value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -313,7 +314,8 @@ export function projectBenchmarkRegistry(issues, {
     return { state: 'unavailable', authority: 'jira-native', sourceKey, sourceLabel, updatedAt: '', pointerUpdatedAt: '', message: 'BEN registry query did not return an issue array.' };
   }
 
-  const projected = issues.map(classifyIssue);
+  const eligibleIssues = issues.filter(issue => !EXCLUDED_REGISTRY_KEYS.has(clean(issue?.key)));
+  const projected = eligibleIssues.map(classifyIssue);
   const invalidRecords = projected
     .filter(record => record.errors.length)
     .map(record => ({ key: record.key, title: record.title, reasons: [...record.errors] }));
@@ -329,7 +331,7 @@ export function projectBenchmarkRegistry(issues, {
     authority: 'jira-native',
     sourceKey,
     sourceLabel,
-    updatedAt: maxUpdatedAt([...issues.map(issue => issue?.fields?.updated), pointerUpdatedAt]),
+    updatedAt: maxUpdatedAt([...eligibleIssues.map(issue => issue?.fields?.updated), pointerUpdatedAt]),
     pointerUpdatedAt,
     selectedNext,
     pointerError,
