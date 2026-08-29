@@ -116,6 +116,10 @@ function resultState(lines) {
   return lines.length ? 'recorded' : 'unknown';
 }
 
+function isResultLine(line) {
+  return /^(historical per-turn scores\/winner|exact scores\/winners|candidate results|most consequential benchmark signal|result\s*:|most consequential split|exact historical candidate scores)\b/i.test(clean(line));
+}
+
 function parseRun(section, headingIndex) {
   const identity = parseRunHeading(section[headingIndex].text);
   if (!identity) return null;
@@ -125,7 +129,7 @@ function parseRun(section, headingIndex) {
   const properties = lines.map(property).filter(Boolean);
   const valueFor = pattern => properties.find(entry => pattern.test(entry.name))?.value || '';
   const statusInfo = normalizeStatus(valueFor(/^status$/i));
-  const resultLines = lines.filter(line => /score|winner|tie|candidate result|exact result|finding|compliance split|per-turn result|benchmark signal|^result\s*:|most consequential split/i.test(line));
+  const resultLines = lines.filter(isResultLine);
   const turns = valueFor(/^turns completed$/i);
 
   return {
