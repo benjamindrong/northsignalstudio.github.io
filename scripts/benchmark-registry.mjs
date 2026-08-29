@@ -15,12 +15,17 @@ const RESULT_LABELS = new Map([
 
 export const REGISTRY_QUERY_LABELS = [
   ...ACTIVITY_LABELS.keys(),
+  'registry-idea'
+];
+
+const POINTER_FORBIDDEN_LABELS = new Set([
+  ...ACTIVITY_LABELS.keys(),
   'registry-idea',
   'registry-blocked',
   'registry-retired',
   ...IDEA_CATEGORY_LABELS.keys(),
   ...RESULT_LABELS.keys()
-];
+]);
 
 // BEN-18 completed the migration contract at this exact Jira update identity.
 // HOME-24 parity validates the migrated state while allowing later Jira-native
@@ -29,7 +34,7 @@ export const BEN18_MIGRATION_CUTOFF = '2026-08-27T16:15:09.077Z';
 
 const POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
 const ELIGIBLE_NEXT_STATUSES = new Set(['Preparing', 'Blocked', 'Running']);
-const EXCLUDED_REGISTRY_KEYS = new Set(['BEN-6', 'BEN-33']);
+const EXCLUDED_REGISTRY_KEYS = new Set(['BEN-6', 'BEN-21', 'BEN-33']);
 
 function clean(value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -88,12 +93,17 @@ function itemText(node) {
   return (node.content || []).map(itemText).join(' ');
 }
 
-function listBlocks(node) {
+function listBlocks(node, depth = 0) {
   const blocks = [];
   for (const item of node?.content || []) {
     if (item?.type !== 'listItem') continue;
     const text = clean(itemText(item));
-    if (text) blocks.push({ kind: 'bullet', text });
+    if (text) blocks.push({ kind: 'bullet', text, depth });
+    for (const child of item.content || []) {
+      if (child?.type === 'bulletList' || child?.type === 'orderedList') {
+        blocks.push(...listBlocks(child, depth + 1));
+      }
+    }
   }
   return blocks;
 }
@@ -110,7 +120,7 @@ function markdownBlocks(source) {
     }
     const bullet = line.match(/^[-*]\s+(.+)$/);
     if (bullet) {
-      blocks.push({ kind: 'bullet', text: clean(bullet[1].replace(/\*\*/g, '')) });
+      blocks.push({ kind: 'bullet', text: clean(bullet[1].replace(/\*\*/g, '')), depth: 0 });
       continue;
     }
     blocks.push({ kind: 'paragraph', text: clean(line.replace(/\*\*/g, '')) });
@@ -162,20 +172,26 @@ export function parseCanonicalResultSummary(description) {
 
   const resultEndOffset = blocks.slice(resultIndex + 1).findIndex(block => block.kind === 'heading' && block.level <= 4);
   const resultEnd = resultEndOffset < 0 ? blocks.length : resultIndex + 1 + resultEndOffset;
-  const bullets = blocks.slice(resultIndex + 1, resultEnd).filter(block => block.kind === 'bullet').map(block => block.text);
-  if (bullets.length !== 3) return { ok: false, error: 'Registry Result Summary must contain exactly three bullets.' };
+  const resultContent = blocks.slice(resultIndex + 1, resultEnd);
+  if (resultContent.some(block => block.kind !== 'bullet')) {
+    return { ok: false, error: 'Registry Result Summary may contain only the three required bullets.' };
+  }
+  const bullets = resultContent.filter(block => block.kind === 'bullet');
+  if (bullets.length !== 3 || bullets.some(block => block.depth !== 0)) {
+    return { ok: false, error: 'Registry Result Summary must contain exactly three top-level bullets.' };
+  }
 
   const names = ['Outcome', 'Scores', 'Signal'];
   const values = {};
   for (const name of names) {
     const pattern = new RegExp(`^${name}:\\s*`, 'i');
-    const matching = bullets.filter(line => pattern.test(line));
+    const matching = bullets.filter(block => pattern.test(block.text));
     if (matching.length !== 1) return { ok: false, error: `Registry Result Summary must contain exactly one ${name}: bullet.` };
-    const value = clean(matching[0].replace(pattern, ''));
+    const value = clean(matching[0].text.replace(pattern, ''));
     if (!value) return { ok: false, error: `${name}: must contain a value.` };
     values[name.toLowerCase()] = value;
   }
-  if (bullets.some(line => !names.some(name => new RegExp(`^${name}:\\s*`, 'i').test(line)))) {
+  if (bullets.some(block => !names.some(name => new RegExp(`^${name}:\\s*`, 'i').test(block.text)))) {
     return { ok: false, error: 'Registry Result Summary contains an unsupported bullet.' };
   }
 
@@ -294,6 +310,10 @@ function resolveSelectedNext(pointerIssue, pointerMatches, runs) {
   }
   if (clean(pointerIssue?.key) !== 'BEN-21' || clean(pointerIssue?.fields?.summary) !== POINTER_SUMMARY) {
     return { selectedNext: null, pointerError: 'BEN-21 identity is invalid or unavailable.' };
+  }
+  const forbiddenPointerLabels = [...lowerLabels(pointerIssue)].filter(label => POINTER_FORBIDDEN_LABELS.has(label));
+  if (forbiddenPointerLabels.length) {
+    return { selectedNext: null, pointerError: 'BEN-21 must not carry registry labels.' };
   }
   const parentKey = clean(pointerIssue?.fields?.parent?.key);
   if (!parentKey) return { selectedNext: null, pointerError: 'BEN-21 Parent is missing.' };
@@ -483,6 +503,7 @@ export function compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry, {
   }
 
   if (nativeRuns.has('BEN-6')) errors.push('BEN-6 must be excluded from Jira-native projected runs.');
+  if (nativeRuns.has('BEN-21')) errors.push('BEN-21 must never be projected as benchmark work.');
   if (nativeRuns.has('BEN-33')) errors.push('BEN-33 must never be projected.');
 
   const legacyConsidered = titleSet(legacyRegistry.previouslyConsidered);
