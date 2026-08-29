@@ -172,7 +172,7 @@ async function fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config) {
     let pointerIssue = null;
     try {
       pointerIssue = await jiraFetch(
-        `${baseUrl}/rest/api/3/issue/${encodeURIComponent(pointerKey)}?fields=summary,parent,updated,labels`,
+        `${baseUrl}/rest/api/3/issue/${encodeURIComponent(pointerKey)}?fields=summary,parent,updated,labels,issuetype`,
         {},
         authHeader
       );
@@ -386,7 +386,16 @@ async function runSelfTest() {
 
   const selectedIssue = benchmarkFixtureIssue('BEN-17', ['candidate-evaluation'], 'new');
   const benchmarkReview = projectBenchmarkRegistry([selectedIssue], {
-    pointerIssue: { key: 'BEN-21', fields: { summary: BENCHMARK_POINTER_SUMMARY, parent: { key: 'BEN-17' }, updated: '2026-08-18T12:01:00.000Z', labels: [] } },
+    pointerIssue: {
+      key: 'BEN-21',
+      fields: {
+        summary: BENCHMARK_POINTER_SUMMARY,
+        parent: { key: 'BEN-17' },
+        updated: '2026-08-18T12:01:00.000Z',
+        labels: [],
+        issuetype: { name: 'Subtask', subtask: true }
+      }
+    },
     pointerMatches: [{ key: 'BEN-21', fields: { summary: BENCHMARK_POINTER_SUMMARY } }]
   });
   if (benchmarkReview.state !== 'ready' || benchmarkReview.authority !== 'jira-native') throw new Error('benchmark Jira-native self-test failed');
