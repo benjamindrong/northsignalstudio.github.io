@@ -4,6 +4,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const ALLOWED_AUTHORITIES = new Set(['jira-native', 'ben-8']);
+const PRESERVE_AUTHORITY = 'preserve';
 
 export const ALLOWED_POST_MIGRATION_DIFFERENCES = new Set([
   'Selected-next advanced after BEN-18: BEN-17 -> BEN-34.',
@@ -23,7 +24,10 @@ function validateAuthority(value, source) {
 }
 
 export function resolveBenchmarkRegistryAuthority({ requested = '', persisted = '', fallback = 'jira-native' } = {}) {
-  if (clean(requested)) return validateAuthority(requested, 'explicit request');
+  const requestedAuthority = clean(requested);
+  if (requestedAuthority && requestedAuthority !== PRESERVE_AUTHORITY) {
+    return validateAuthority(requestedAuthority, 'explicit request');
+  }
   if (clean(persisted)) return validateAuthority(persisted, 'persisted cutover state');
   return validateAuthority(fallback, 'configured fallback');
 }
@@ -82,7 +86,9 @@ function runSelfTest() {
 
   assertEqual(resolveBenchmarkRegistryAuthority({ requested: 'ben-8', persisted: 'jira-native' }), 'ben-8', 'explicit rollback wins');
   assertEqual(resolveBenchmarkRegistryAuthority({ persisted: 'ben-8' }), 'ben-8', 'scheduled refresh preserves rollback');
+  assertEqual(resolveBenchmarkRegistryAuthority({ requested: 'preserve', persisted: 'ben-8' }), 'ben-8', 'manual preserve keeps rollback');
   assertEqual(resolveBenchmarkRegistryAuthority({ requested: 'jira-native', persisted: 'ben-8' }), 'jira-native', 'explicit restore wins');
+  assertEqual(resolveBenchmarkRegistryAuthority({ requested: 'preserve' }), 'jira-native', 'preserve without state uses safe fallback');
   assertEqual(resolveBenchmarkRegistryAuthority({}), 'jira-native', 'fallback authority');
   assertThrows(
     () => resolveBenchmarkRegistryAuthority({ persisted: 'invalid' }),
@@ -119,7 +125,7 @@ async function main() {
     console.log(`Benchmark parity post-migration policy passed (${differences.length} accepted difference${differences.length === 1 ? '' : 's'}).`);
     return;
   }
-  throw new Error('Usage: benchmark-registry-cutover-policy.mjs --self-test | resolve-authority <requested> <state-path> [fallback] | verify-parity-output');
+  throw new Error('Usage: benchmark-registry-cutover-policy.mjs --self-test | resolve-authority <requested|preserve> <state-path> [fallback] | verify-parity-output');
 }
 
 const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
