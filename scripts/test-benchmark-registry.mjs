@@ -157,6 +157,7 @@ const legacy = projectLegacyBenchmarkRegistry(`
 - Source: CROS-1 production field benchmark
 ### BEN-9 — Runline Authority Handoff Console
 - Status: Completed
+- Source: Benchmark Review historical notes
 - Candidate results: Response B won.
 ### BEN-10 — Homepage Dashboard PR Health Panel Benchmark
 - Status: Completed
@@ -229,7 +230,7 @@ const missingSourceParity = compareBenchmarkRegistryParity(missingSourceAfterCut
   freshKeys: []
 });
 assert.equal(missingSourceParity.ok, false);
-assert.match(missingSourceParity.errors.join('\n'), /BEN-14 structured source relationship.*missing/);
+assert.match(missingSourceParity.errors.join('\n'), /BEN-14 structured source CROS-1.*missing/);
 
 const afterCutoff = '2026-08-28T14:00:00.000Z';
 const postMigrationNative = projectBenchmarkRegistry([
