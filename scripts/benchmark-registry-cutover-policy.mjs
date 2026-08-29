@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 const ALLOWED_AUTHORITIES = new Set(['jira-native', 'ben-8']);
 const PRESERVE_AUTHORITY = 'preserve';
 
+// This allowlist exists only to validate HOME-24 Slice 1's one-time BEN-18
+// migration parity at the current cutover candidate. It is not a production
+// registry-change policy: ordinary Jira-native publishes do not consult it.
 export const ALLOWED_POST_MIGRATION_DIFFERENCES = new Set([
   'Selected-next advanced after BEN-18: BEN-17 -> BEN-34.',
   'BEN-17 lifecycle advanced after BEN-18: Selected -> Unused.'
@@ -34,6 +37,11 @@ export function resolveBenchmarkRegistryAuthority({ requested = '', persisted = 
 
 export function verifyBenchmarkParityOutput(output) {
   const lines = String(output || '').split(/\r?\n/).map(line => line.trim());
+  const passMarker = 'Benchmark registry Jira-native/BEN-8 parity passed for HOME-24 legacy targets.';
+  if (!lines.includes(passMarker)) {
+    throw new Error('Benchmark parity output is missing the required HOME-24 pass marker.');
+  }
+
   const headingIndex = lines.indexOf('Accepted post-BEN-18 Jira-native differences:');
   if (headingIndex < 0) return [];
 
@@ -102,6 +110,11 @@ function runSelfTest() {
     () => verifyBenchmarkParityOutput(`Accepted post-BEN-18 Jira-native differences:\n- BEN-22 idea category advanced after BEN-18: considered -> fresh.\nBenchmark registry Jira-native/BEN-8 parity passed for HOME-24 legacy targets.`),
     /Unexpected post-BEN-18 parity difference/,
     'unrelated post-cutoff drift fails closed'
+  );
+  assertThrows(
+    () => verifyBenchmarkParityOutput('Accepted post-BEN-18 Jira-native differences:\n- Selected-next advanced after BEN-18: BEN-17 -> BEN-34.'),
+    /missing the required HOME-24 pass marker/,
+    'missing comparator success marker fails closed'
   );
 
   console.log('benchmark registry cutover policy self-test passed');
