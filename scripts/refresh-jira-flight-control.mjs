@@ -236,6 +236,10 @@ async function verifyBenchmarkParity(baseUrl, authHeader, config) {
   ]);
   const parity = compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry);
   if (!parity.ok) throw new Error(`Benchmark registry parity failed:\n- ${parity.errors.join('\n- ')}`);
+  if (parity.postMigrationDifferences.length) {
+    console.log('Accepted post-BEN-18 Jira-native differences:');
+    for (const difference of parity.postMigrationDifferences) console.log(`- ${difference}`);
+  }
   console.log('Benchmark registry Jira-native/BEN-8 parity passed for HOME-24 legacy targets.');
 }
 
