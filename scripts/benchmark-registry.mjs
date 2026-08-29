@@ -27,6 +27,20 @@ const POINTER_FORBIDDEN_LABELS = new Set([
   ...RESULT_LABELS.keys()
 ]);
 
+const LEGACY_IDEA_TITLES = new Map([
+  ['BEN-22', 'MyRAM Markdown Preview'],
+  ['BEN-23', 'Dashboard Display Mode'],
+  ['BEN-24', 'MyRAM Mac peer-display-name formatter'],
+  ['BEN-25', 'Runline Needs Anchoring'],
+  ['BEN-26', 'Runline Coordinator vs. Anchor Controls'],
+  ['BEN-27', 'Runline Event Lifecycle'],
+  ['BEN-28', 'FocusLab Runtime Diagnostics HUD'],
+  ['BEN-29', 'FocusLab Adaptive Quality Controller'],
+  ['BEN-30', 'FocusLab Coherence/Turbulence Visualizer'],
+  ['BEN-31', 'MyRAM Structural Edit Visualizer'],
+  ['BEN-32', 'MyRAM Sync Recovery Inspector']
+]);
+
 // BEN-18 completed the migration contract at this exact Jira update identity.
 // HOME-24 parity validates the migrated state while allowing later Jira-native
 // changes to advance without requiring BEN-8 to be rewritten.
@@ -98,7 +112,7 @@ function listBlocks(node, depth = 0) {
   for (const item of node?.content || []) {
     if (item?.type !== 'listItem') continue;
     const text = clean(itemText(item));
-    if (text) blocks.push({ kind: 'bullet', text, depth });
+    if (text) blocks.push({ kind: 'bullet', text, depth, listType: node.type });
     for (const child of item.content || []) {
       if (child?.type === 'bulletList' || child?.type === 'orderedList') {
         blocks.push(...listBlocks(child, depth + 1));
@@ -120,7 +134,7 @@ function markdownBlocks(source) {
     }
     const bullet = line.match(/^[-*]\s+(.+)$/);
     if (bullet) {
-      blocks.push({ kind: 'bullet', text: clean(bullet[1].replace(/\*\*/g, '')), depth: 0 });
+      blocks.push({ kind: 'bullet', text: clean(bullet[1].replace(/\*\*/g, '')), depth: 0, listType: 'bulletList' });
       continue;
     }
     blocks.push({ kind: 'paragraph', text: clean(line.replace(/\*\*/g, '')) });
@@ -177,8 +191,8 @@ export function parseCanonicalResultSummary(description) {
     return { ok: false, error: 'Registry Result Summary may contain only the three required bullets.' };
   }
   const bullets = resultContent.filter(block => block.kind === 'bullet');
-  if (bullets.length !== 3 || bullets.some(block => block.depth !== 0)) {
-    return { ok: false, error: 'Registry Result Summary must contain exactly three top-level bullets.' };
+  if (bullets.length !== 3 || bullets.some(block => block.depth !== 0 || block.listType !== 'bulletList')) {
+    return { ok: false, error: 'Registry Result Summary must contain exactly three top-level bullet-list items.' };
   }
 
   const names = ['Outcome', 'Scores', 'Signal'];
@@ -311,6 +325,9 @@ function resolveSelectedNext(pointerIssue, pointerMatches, runs) {
   if (clean(pointerIssue?.key) !== 'BEN-21' || clean(pointerIssue?.fields?.summary) !== POINTER_SUMMARY) {
     return { selectedNext: null, pointerError: 'BEN-21 identity is invalid or unavailable.' };
   }
+  if (pointerIssue?.fields?.issuetype?.subtask !== true) {
+    return { selectedNext: null, pointerError: 'BEN-21 must remain the permanent Subtask pointer.' };
+  }
   const forbiddenPointerLabels = [...lowerLabels(pointerIssue)].filter(label => POINTER_FORBIDDEN_LABELS.has(label));
   if (forbiddenPointerLabels.length) {
     return { selectedNext: null, pointerError: 'BEN-21 must not carry registry labels.' };
@@ -397,6 +414,16 @@ function postMigration(postMigrationDifferences, message) {
 }
 
 function compareIdeaParity(nativeRegistry, key, expectedBucket, legacyTitles, migrationCutoff, errors, postMigrationDifferences) {
+  const expectedTitle = LEGACY_IDEA_TITLES.get(key);
+  if (!expectedTitle) {
+    errors.push(`No BEN-18 legacy idea identity is registered for ${key}.`);
+    return;
+  }
+  if (!legacyTitles.has(expectedTitle)) {
+    errors.push(`BEN-8 ${expectedBucket} idea identity for ${key} is missing expected title ${expectedTitle}.`);
+    return;
+  }
+
   const match = registryRecordByKey(nativeRegistry, key);
   if (!match) {
     errors.push(`Jira-native ${expectedBucket} idea parity target ${key} is missing.`);
@@ -414,11 +441,11 @@ function compareIdeaParity(nativeRegistry, key, expectedBucket, legacyTitles, mi
   }
 
   const title = clean(match.record.title);
-  if (!legacyTitles.has(title)) {
+  if (title !== expectedTitle) {
     if (changedAfterMigration) {
-      postMigration(postMigrationDifferences, `${key} idea title advanced after BEN-18 to ${title || 'empty'}.`);
+      postMigration(postMigrationDifferences, `${key} idea title advanced after BEN-18: ${expectedTitle} -> ${title || 'empty'}.`);
     } else {
-      errors.push(`${key} ${expectedBucket} idea title is not represented by BEN-8.`);
+      errors.push(`${key} idea title mismatch at BEN-18 parity boundary: expected ${expectedTitle}, Jira-native=${title || 'empty'}.`);
     }
   }
 }
