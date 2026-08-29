@@ -1,7 +1,11 @@
 {
   "jiraBaseUrl": "https://benjamindrong80.atlassian.net",
   "projects": ["MYR", "LAN", "HOME", "RUN", "BEN", "CROS"],
-  "benchmarkRegistryKey": "BEN-8",
+  "benchmarkRegistryAuthority": "jira-native",
+  "benchmarkRegistryProject": "BEN",
+  "benchmarkRegistryPointerKey": "BEN-21",
+  "benchmarkRegistryLegacyKey": "BEN-8",
+  "benchmarkRegistryMaxIssues": 100,
   "maxIssues": 100,
   "dataUrl": "https://raw.githubusercontent.com/benjamindrong/northsignalstudio.github.io/dashboard-data/dashboard/jira-flight-control.enc.json"
 }
