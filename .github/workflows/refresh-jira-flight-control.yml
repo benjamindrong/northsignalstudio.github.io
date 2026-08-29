@@ -21,9 +21,10 @@ on:
       benchmark_registry_authority:
         description: "Benchmark Review runtime authority"
         required: false
-        default: "jira-native"
+        default: "preserve"
         type: choice
         options:
+          - "preserve"
           - "jira-native"
           - "ben-8"
   push:
