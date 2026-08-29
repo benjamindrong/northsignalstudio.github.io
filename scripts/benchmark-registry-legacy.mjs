@@ -111,7 +111,7 @@ function normalizeStatus(raw) {
 }
 
 function resultState(lines) {
-  if (lines.some(line => /backfill|do not infer|unknown/i.test(line))) return 'backfill';
+  if (lines.some(line => /backfill|do not infer|unknown|record exact.*as .*canonical/i.test(line))) return 'backfill';
   if (lines.some(line => /none yet|no result/i.test(line))) return 'none';
   return lines.length ? 'recorded' : 'unknown';
 }
@@ -125,7 +125,7 @@ function parseRun(section, headingIndex) {
   const properties = lines.map(property).filter(Boolean);
   const valueFor = pattern => properties.find(entry => pattern.test(entry.name))?.value || '';
   const statusInfo = normalizeStatus(valueFor(/^status$/i));
-  const resultLines = lines.filter(line => /score|winner|tie|candidate result|exact result|finding|compliance split|per-turn result/i.test(line));
+  const resultLines = lines.filter(line => /score|winner|tie|candidate result|exact result|finding|compliance split|per-turn result|benchmark signal/i.test(line));
   const turns = valueFor(/^turns completed$/i);
 
   return {
