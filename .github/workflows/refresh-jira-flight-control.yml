@@ -10,6 +10,7 @@ on:
       - "dashboard/jira-flight-control.config.json"
       - "scripts/benchmark-registry.mjs"
       - "scripts/benchmark-registry-legacy.mjs"
+      - "scripts/benchmark-registry-cutover-policy.mjs"
       - "scripts/test-benchmark-registry.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
@@ -35,6 +36,7 @@ on:
       - "dashboard/jira-flight-control.config.json"
       - "scripts/benchmark-registry.mjs"
       - "scripts/benchmark-registry-legacy.mjs"
+      - "scripts/benchmark-registry-cutover-policy.mjs"
       - "scripts/test-benchmark-registry.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
@@ -61,8 +63,10 @@ jobs:
         run: |
           node --check scripts/benchmark-registry.mjs
           node --check scripts/benchmark-registry-legacy.mjs
+          node --check scripts/benchmark-registry-cutover-policy.mjs
           node --check scripts/refresh-jira-flight-control.mjs
           node scripts/test-benchmark-registry.mjs
+          node scripts/benchmark-registry-cutover-policy.mjs --self-test
           node scripts/refresh-jira-flight-control.mjs --self-test
 
       - name: Verify Benchmark Review UI seams
@@ -217,7 +221,9 @@ jobs:
           VERIFY_PROJECTS: MYR,LAN
           VERIFY_BENCHMARK_AUTHORITY: jira-native
         run: |
-          node scripts/refresh-jira-flight-control.mjs --verify-benchmark-parity
+          parity_output="$(node scripts/refresh-jira-flight-control.mjs --verify-benchmark-parity)"
+          printf '%s\n' "$parity_output"
+          printf '%s\n' "$parity_output" | node scripts/benchmark-registry-cutover-policy.mjs verify-parity-output
           node scripts/refresh-jira-flight-control.mjs
           node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
 
@@ -239,6 +245,17 @@ jobs:
           ref: dashboard-data
           path: _dashboard-data
 
+      - name: Resolve persistent Benchmark Review authority
+        env:
+          REQUESTED_BENCHMARK_REGISTRY_AUTHORITY: ${{ github.event_name == 'workflow_dispatch' && inputs.benchmark_registry_authority || '' }}
+        run: |
+          authority_path="_dashboard-data/dashboard/benchmark-registry-authority.txt"
+          mkdir -p "$(dirname "$authority_path")"
+          authority="$(node scripts/benchmark-registry-cutover-policy.mjs resolve-authority "$REQUESTED_BENCHMARK_REGISTRY_AUTHORITY" "$authority_path" jira-native)"
+          printf '%s\n' "$authority" > "$authority_path"
+          printf 'BENCHMARK_REGISTRY_AUTHORITY=%s\n' "$authority" >> "$GITHUB_ENV"
+          echo "Benchmark registry authority resolved to $authority."
+
       - name: Refresh and verify encrypted Jira snapshot
         env:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
@@ -246,17 +263,23 @@ jobs:
           DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
           PREVIOUS_PATH: _dashboard-data/dashboard/jira-flight-control.enc.json
           OUTPUT_PATH: _dashboard-data/dashboard/jira-flight-control.enc.json
-          BENCHMARK_REGISTRY_AUTHORITY: ${{ github.event_name == 'workflow_dispatch' && inputs.benchmark_registry_authority || '' }}
         run: |
+          if [ "$BENCHMARK_REGISTRY_AUTHORITY" = "jira-native" ]; then
+            parity_output="$(node scripts/refresh-jira-flight-control.mjs --verify-benchmark-parity)"
+            printf '%s\n' "$parity_output"
+            printf '%s\n' "$parity_output" | node scripts/benchmark-registry-cutover-policy.mjs verify-parity-output
+          else
+            echo "Jira-native parity verification skipped while BEN-8 rollback authority is active."
+          fi
           node scripts/refresh-jira-flight-control.mjs
           node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
 
-      - name: Publish changed snapshot
+      - name: Publish changed snapshot and authority state
         working-directory: _dashboard-data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dashboard/jira-flight-control.enc.json
+          git add dashboard/jira-flight-control.enc.json dashboard/benchmark-registry-authority.txt
           if git diff --cached --quiet; then
             echo "No Jira Flight Control changes."
             exit 0
