@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
@@ -55,10 +56,10 @@ export function verifyBenchmarkParityOutput(output) {
 }
 
 function readPersistedAuthority(filePath) {
-  const path = clean(filePath);
-  if (!path) return '';
+  const statePath = clean(filePath);
+  if (!statePath) return '';
   try {
-    return fs.readFileSync(path, 'utf8');
+    return fs.readFileSync(statePath, 'utf8');
   } catch (error) {
     if (error?.code === 'ENOENT') return '';
     throw error;
@@ -121,7 +122,7 @@ async function main() {
   throw new Error('Usage: benchmark-registry-cutover-policy.mjs --self-test | resolve-authority <requested> <state-path> [fallback] | verify-parity-output');
 }
 
-const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(import.meta.url);
+const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (isDirectRun) {
   main().catch(error => {
     console.error(error instanceof Error ? error.stack : error);
