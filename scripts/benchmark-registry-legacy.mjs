@@ -187,14 +187,25 @@ function parseFreshBacklog(blocks) {
   return groups.filter(entry => entry.ideas.length);
 }
 
+function unavailable(sourceKey, updatedAt, message) {
+  return {
+    state: 'unavailable',
+    authority: 'ben-8',
+    sourceKey,
+    sourceLabel: 'BEN-8 temporary rollback authority',
+    updatedAt,
+    message
+  };
+}
+
 export function projectBenchmarkRegistry(description, { sourceKey = 'BEN-8', updatedAt = '' } = {}) {
   const blocks = adfBlocks(description);
   const { runs, error } = parseRuns(blocks);
-  if (error) return { state: 'unavailable', sourceKey, updatedAt, message: error };
+  if (error) return unavailable(sourceKey, updatedAt, error);
 
   const selectedNext = runs.filter(run => run.status === 'Selected' && run.next);
   if (selectedNext.length > 1) {
-    return { state: 'unavailable', sourceKey, updatedAt, message: 'Benchmark registry contains multiple selected-next entries.' };
+    return unavailable(sourceKey, updatedAt, 'Benchmark registry contains multiple selected-next entries.');
   }
 
   return {
