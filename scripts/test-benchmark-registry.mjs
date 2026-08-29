@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  BEN18_MIGRATION_CUTOFF,
   compareBenchmarkRegistryParity,
   parseCanonicalResultSummary,
   projectBenchmarkRegistry
@@ -35,13 +36,13 @@ function relates(key, summary = `${key} source`) {
   };
 }
 
-function pointer(parentKey = 'BEN-17') {
+function pointer(parentKey = 'BEN-17', updated = '2026-08-27T12:01:00.000Z') {
   return {
     key: 'BEN-21',
     fields: {
       summary: POINTER_SUMMARY,
       parent: { key: parentKey },
-      updated: '2026-08-27T12:01:00.000Z'
+      updated
     }
   };
 }
@@ -77,6 +78,7 @@ const registry = projectBenchmarkRegistry(records, {
 assert.equal(registry.state, 'ready');
 assert.equal(registry.authority, 'jira-native');
 assert.equal(registry.sourceLabel, 'Jira-native BEN registry');
+assert.equal(registry.pointerUpdatedAt, '2026-08-27T12:01:00.000Z');
 assert.deepEqual(registry.invalidRecords, []);
 assert.equal(registry.selectedNext?.key, 'BEN-17');
 assert.equal(registry.selectedNext?.status, 'Preparing');
@@ -179,5 +181,44 @@ const parity = compareBenchmarkRegistryParity(nativeParity, legacy, {
   freshKeys: ['BEN-25']
 });
 assert.equal(parity.ok, true, parity.errors.join('\n'));
+assert.deepEqual(parity.postMigrationDifferences, []);
+
+const afterCutoff = '2026-08-28T14:00:00.000Z';
+const postMigrationNative = projectBenchmarkRegistry([
+  issue('BEN-17', ['candidate-evaluation', 'registry-idea'], 'new', {
+    summary: 'Runline Event Board PRD Candidate Evaluation',
+    links: [relates('RUN-5')],
+    updated: afterCutoff
+  }),
+  issue('BEN-34', ['candidate-evaluation'], 'new', {
+    summary: 'Vega-Lite JSON Generation Candidate Evaluation',
+    updated: afterCutoff
+  })
+], {
+  pointerIssue: pointer('BEN-34', afterCutoff),
+  pointerMatches: [pointer('BEN-34', afterCutoff)]
+});
+const postMigrationParity = compareBenchmarkRegistryParity(postMigrationNative, legacy, {
+  runKeys: ['BEN-17'],
+  consideredKeys: [],
+  freshKeys: []
+});
+assert.equal(postMigrationParity.ok, true, postMigrationParity.errors.join('\n'));
+assert.equal(postMigrationParity.postMigrationDifferences.length, 2);
+assert.match(postMigrationParity.postMigrationDifferences[0], /Selected-next advanced after BEN-18/);
+assert.match(postMigrationParity.postMigrationDifferences[1], /BEN-17 lifecycle advanced after BEN-18/);
+
+const preCutoffPointerMismatch = {
+  ...postMigrationNative,
+  pointerUpdatedAt: '2026-08-27T15:00:00.000Z'
+};
+const failedParity = compareBenchmarkRegistryParity(preCutoffPointerMismatch, legacy, {
+  runKeys: ['BEN-17'],
+  consideredKeys: [],
+  freshKeys: [],
+  migrationCutoff: BEN18_MIGRATION_CUTOFF
+});
+assert.equal(failedParity.ok, false);
+assert.match(failedParity.errors.join('\n'), /Selected-next mismatch at BEN-18 parity boundary/);
 
 console.log('benchmark Jira-native registry contract tests passed');
