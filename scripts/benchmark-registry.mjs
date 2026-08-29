@@ -403,12 +403,16 @@ export function compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry, {
       }
     }
 
-    const expectedLegacyResult = current.resultState === 'backfill' ? 'backfill' : current.resultState === 'recorded' ? 'recorded' : '';
-    if (expectedLegacyResult && legacy.resultState !== expectedLegacyResult) {
+    const resultPreserved = current.resultState === 'backfill'
+      ? ['backfill', 'unknown'].includes(legacy.resultState)
+      : current.resultState === 'recorded'
+        ? legacy.resultState === 'recorded'
+        : true;
+    if (!resultPreserved) {
       if (changedAfterMigration) {
         postMigration(postMigrationDifferences, `${key} result state advanced after BEN-18: BEN-8=${legacy.resultState}, Jira-native=${current.resultState}.`);
       } else {
-        errors.push(`${key} ${expectedLegacyResult === 'backfill' ? 'Unknown/backfill' : 'recorded-result'} state is not preserved.`);
+        errors.push(`${key} ${current.resultState === 'backfill' ? 'Unknown/backfill' : 'recorded-result'} state is not preserved.`);
       }
     }
 
