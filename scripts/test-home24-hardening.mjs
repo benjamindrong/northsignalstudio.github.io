@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { parseCanonicalResultSummary, projectBenchmarkRegistry } from './benchmark-registry.mjs';
+import {
+  compareBenchmarkRegistryParity,
+  parseCanonicalResultSummary,
+  projectBenchmarkRegistry
+} from './benchmark-registry.mjs';
 import { projectBenchmarkRegistry as projectLegacyBenchmarkRegistry } from './benchmark-registry-legacy.mjs';
 
 const POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
@@ -173,5 +177,31 @@ const legacySelected = legacy.runs.find(run => run.key === 'BEN-17');
 assert.equal(legacySelected?.activityKind, 'candidate-evaluation');
 assert.equal(legacySelected?.resultState, 'none');
 assert.equal(legacy.selectedNext?.key, 'BEN-17');
+
+const sourceParityBase = {
+  state: 'ready',
+  selectedNext: null,
+  pointerUpdatedAt: '2026-08-27T12:00:00.000Z',
+  previouslyConsidered: [],
+  freshBacklog: []
+};
+const exactSourceParity = compareBenchmarkRegistryParity({
+  ...sourceParityBase,
+  runs: [{ key: 'BEN-91', status: 'Completed', resultState: 'none', sourceKey: 'RUN-5', updatedAt: '2026-08-27T12:00:00.000Z' }]
+}, {
+  ...sourceParityBase,
+  runs: [{ key: 'BEN-91', status: 'Completed', resultState: 'none', source: 'RUN-5 source' }]
+}, { runKeys: ['BEN-91'], consideredKeys: [], freshKeys: [] });
+assert.equal(exactSourceParity.ok, true, exactSourceParity.errors.join('\n'));
+
+const substringSourceParity = compareBenchmarkRegistryParity({
+  ...sourceParityBase,
+  runs: [{ key: 'BEN-91', status: 'Completed', resultState: 'none', sourceKey: 'RUN-5', updatedAt: '2026-08-27T12:00:00.000Z' }]
+}, {
+  ...sourceParityBase,
+  runs: [{ key: 'BEN-91', status: 'Completed', resultState: 'none', source: 'RUN-50 source' }]
+}, { runKeys: ['BEN-91'], consideredKeys: [], freshKeys: [] });
+assert.equal(substringSourceParity.ok, false, 'RUN-5 must not match RUN-50 by substring');
+assert.match(substringSourceParity.errors.join('\n'), /exact BEN-8 source key/i);
 
 console.log('HOME-24 adversarial registry hardening tests passed');
