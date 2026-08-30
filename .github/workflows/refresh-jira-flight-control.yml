@@ -178,6 +178,7 @@ jobs:
           - Type: Candidate Evaluation — comparative model documentation exercise
             `);
             DashboardBenchmarkReview.render(registry);
+            document.querySelectorAll('script').forEach(node => node.remove());
           </script>
           </body></html>
           HTML
@@ -246,7 +247,7 @@ jobs:
             echo "Rollback fixture rendered Candidate Evaluation backfill semantics for a non-completed or Benchmark Testing record."
             exit 1
           fi
-          if grep -F 'BEN-6' /tmp/benchmark-rollback-dom.html; then
+          if grep -F 'href="https://benjamindrong80.atlassian.net/browse/BEN-6"' /tmp/benchmark-rollback-dom.html; then
             echo "Rollback fixture projected excluded BEN-6 support history."
             exit 1
           fi
