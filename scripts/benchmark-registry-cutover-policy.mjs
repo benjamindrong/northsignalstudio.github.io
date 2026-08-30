@@ -6,10 +6,10 @@ import { fileURLToPath } from 'node:url';
 const ALLOWED_AUTHORITIES = new Set(['jira-native', 'ben-8']);
 const PRESERVE_AUTHORITY = 'preserve';
 
-// This allowlist exists only to validate HOME-24 Slice 1's one-time BEN-18
+// This exact set exists only to validate HOME-24 Slice 1's one-time BEN-18
 // migration parity at the current cutover candidate. It is not a production
 // registry-change policy: ordinary Jira-native publishes do not consult it.
-export const ALLOWED_POST_MIGRATION_DIFFERENCES = new Set([
+export const REQUIRED_POST_MIGRATION_DIFFERENCES = new Set([
   'Selected-next advanced after BEN-18: BEN-17 -> BEN-34.',
   'BEN-17 lifecycle advanced after BEN-18: Selected -> Unused.'
 ]);
@@ -43,7 +43,9 @@ export function verifyBenchmarkParityOutput(output) {
   }
 
   const headingIndex = lines.indexOf('Accepted post-BEN-18 Jira-native differences:');
-  if (headingIndex < 0) return [];
+  if (headingIndex < 0) {
+    throw new Error('Benchmark parity output is missing the required current post-BEN-18 differences.');
+  }
 
   const differences = [];
   for (const line of lines.slice(headingIndex + 1)) {
@@ -55,13 +57,19 @@ export function verifyBenchmarkParityOutput(output) {
     throw new Error('Parity output declared post-BEN-18 differences without listing them.');
   }
 
-  const unexpected = differences.filter(difference => !ALLOWED_POST_MIGRATION_DIFFERENCES.has(difference));
+  if (new Set(differences).size !== differences.length) {
+    throw new Error('Post-BEN-18 parity output contains duplicate differences.');
+  }
+
+  const unexpected = differences.filter(difference => !REQUIRED_POST_MIGRATION_DIFFERENCES.has(difference));
   if (unexpected.length) {
     throw new Error(`Unexpected post-BEN-18 parity difference(s):\n- ${unexpected.join('\n- ')}`);
   }
 
-  if (new Set(differences).size !== differences.length) {
-    throw new Error('Post-BEN-18 parity output contains duplicate accepted differences.');
+  const observed = new Set(differences);
+  const missing = [...REQUIRED_POST_MIGRATION_DIFFERENCES].filter(difference => !observed.has(difference));
+  if (missing.length) {
+    throw new Error(`Required current post-BEN-18 parity difference(s) missing:\n- ${missing.join('\n- ')}`);
   }
 
   return differences;
@@ -105,11 +113,21 @@ function runSelfTest() {
   );
 
   const accepted = verifyBenchmarkParityOutput(`Accepted post-BEN-18 Jira-native differences:\n- Selected-next advanced after BEN-18: BEN-17 -> BEN-34.\n- BEN-17 lifecycle advanced after BEN-18: Selected -> Unused.\nBenchmark registry Jira-native/BEN-8 parity passed for HOME-24 legacy targets.`);
-  assertEqual(accepted.length, 2, 'known post-migration differences');
+  assertEqual(accepted.length, 2, 'exact current post-migration differences');
   assertThrows(
     () => verifyBenchmarkParityOutput(`Accepted post-BEN-18 Jira-native differences:\n- BEN-22 idea category advanced after BEN-18: considered -> fresh.\nBenchmark registry Jira-native/BEN-8 parity passed for HOME-24 legacy targets.`),
     /Unexpected post-BEN-18 parity difference/,
     'unrelated post-cutoff drift fails closed'
+  );
+  assertThrows(
+    () => verifyBenchmarkParityOutput('Benchmark registry Jira-native/BEN-8 parity passed for HOME-24 legacy targets.'),
+    /missing the required current post-BEN-18 differences/,
+    'missing expected current differences fails closed'
+  );
+  assertThrows(
+    () => verifyBenchmarkParityOutput(`Accepted post-BEN-18 Jira-native differences:\n- Selected-next advanced after BEN-18: BEN-17 -> BEN-34.\nBenchmark registry Jira-native/BEN-8 parity passed for HOME-24 legacy targets.`),
+    /Required current post-BEN-18 parity difference/,
+    'partial expected difference set fails closed'
   );
   assertThrows(
     () => verifyBenchmarkParityOutput('Accepted post-BEN-18 Jira-native differences:\n- Selected-next advanced after BEN-18: BEN-17 -> BEN-34.'),
@@ -135,7 +153,7 @@ async function main() {
     let input = '';
     for await (const chunk of process.stdin) input += chunk;
     const differences = verifyBenchmarkParityOutput(input);
-    console.log(`Benchmark parity post-migration policy passed (${differences.length} accepted difference${differences.length === 1 ? '' : 's'}).`);
+    console.log(`Benchmark parity post-migration policy passed (${differences.length} required difference${differences.length === 1 ? '' : 's'}).`);
     return;
   }
   throw new Error('Usage: benchmark-registry-cutover-policy.mjs --self-test | resolve-authority <requested|preserve> <state-path> [fallback] | verify-parity-output');
