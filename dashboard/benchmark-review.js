@@ -87,16 +87,31 @@
     return link;
   }
 
+  function activityTypeLabel(run) {
+    const legacyType = String(run?.type || '').trim();
+    if (run?.activityKind === 'benchmark-testing' || legacyType.startsWith('Benchmark Testing')) {
+      return legacyType.startsWith('Benchmark Testing')
+        ? legacyType.replace(/^Benchmark Testing/, 'Application Testing')
+        : 'Application Testing';
+    }
+    if (run?.activityKind === 'candidate-evaluation' || legacyType.startsWith('Candidate Evaluation')) {
+      return legacyType.startsWith('Candidate Evaluation')
+        ? legacyType.replace(/^Candidate Evaluation/, 'Comparative Evaluation')
+        : 'Comparative Evaluation';
+    }
+    return legacyType;
+  }
+
   function appendResults(container, run) {
     if (Array.isArray(run.resultLines) && run.resultLines.length) {
       for (const line of run.resultLines) container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, line));
       return;
     }
     if (run.activityKind === 'benchmark-testing') {
-      container.appendChild(create('div', 'benchmark-result none', 'Application/product benchmark record.'));
+      container.appendChild(create('div', 'benchmark-result none', 'Application testing record.'));
       return;
     }
-    const fallback = run.resultState === 'none' ? 'No candidate results recorded yet.' : 'Result: Unknown / backfill.';
+    const fallback = run.resultState === 'none' ? 'No comparative results recorded yet.' : 'Result: Unknown / backfill.';
     container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, fallback));
   }
 
@@ -107,7 +122,8 @@
     const status = create('span', `benchmark-status ${String(run.status || 'unknown').toLowerCase()}`, run.statusRaw || run.status || 'Unknown');
     titleLine.appendChild(status);
     row.appendChild(titleLine);
-    const metadata = [run.source && `Source: ${run.source}`, run.type && `Type: ${run.type}`, run.turnsCompleted && `Turns: ${run.turnsCompleted}`].filter(Boolean).join(' · ');
+    const activityType = activityTypeLabel(run);
+    const metadata = [run.source && `Source: ${run.source}`, activityType && `Type: ${activityType}`, run.turnsCompleted && `Turns: ${run.turnsCompleted}`].filter(Boolean).join(' · ');
     if (metadata) row.appendChild(create('div', 'benchmark-run-meta', metadata));
     appendResults(row, run);
     container.appendChild(row);
@@ -189,7 +205,8 @@
     nextCard.appendChild(create('div', 'benchmark-next-label', 'Next benchmark'));
     if (next) {
       nextCard.appendChild(runLink(next));
-      const metadata = [next.source && `Source: ${next.source}`, next.type && `Type: ${next.type}`].filter(Boolean).join(' · ');
+      const activityType = activityTypeLabel(next);
+      const metadata = [next.source && `Source: ${next.source}`, activityType && `Type: ${activityType}`].filter(Boolean).join(' · ');
       if (metadata) nextCard.appendChild(create('div', 'benchmark-run-meta', metadata));
       appendResults(nextCard, next);
     } else {
