@@ -90,12 +90,12 @@
   function activityTypeLabel(run) {
     const activityKind = String(run?.activityKind || '').trim();
     const legacyType = String(run?.type || '').trim();
-    if (activityKind === 'benchmark-testing') {
+    if (run && run.activityKind === 'benchmark-testing') {
       return legacyType.startsWith('Benchmark Testing')
         ? legacyType.replace(/^Benchmark Testing/, 'Application Testing')
         : 'Application Testing';
     }
-    if (activityKind === 'candidate-evaluation') {
+    if (run && run.activityKind === 'candidate-evaluation') {
       return legacyType.startsWith('Candidate Evaluation')
         ? legacyType.replace(/^Candidate Evaluation/, 'Comparative Evaluation')
         : 'Comparative Evaluation';
