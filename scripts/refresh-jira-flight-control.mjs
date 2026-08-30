@@ -170,6 +170,22 @@ function benchmarkAuthority(config) {
   return authority;
 }
 
+function benchmarkSourceMetadata(config, authority) {
+  if (authority === 'jira-native') {
+    return {
+      sourceKey: String(config.benchmarkRegistryProject || 'BEN').trim(),
+      sourceLabel: 'Jira-native BEN registry'
+    };
+  }
+  if (authority === 'ben-8') {
+    return {
+      sourceKey: String(config.benchmarkRegistryLegacyKey || 'BEN-8').trim(),
+      sourceLabel: 'BEN-8 temporary rollback authority'
+    };
+  }
+  throw new Error(`Unsupported benchmark registry authority for source metadata: ${authority || 'empty'}.`);
+}
+
 async function hydrateBenchmarkResultDescriptions(baseUrl, authHeader, issues) {
   const required = (issues || []).filter(needsBenchmarkDescription);
   if (!required.length) return issues;
@@ -451,6 +467,11 @@ async function runSelfTest() {
   const resultDescriptionJql = buildBenchmarkResultDescriptionJql(['BEN-9', 'BEN-10']);
   if (!resultDescriptionJql.includes('"BEN-9"') || !resultDescriptionJql.includes('"BEN-10"')) throw new Error('Result Description JQL must target exact result-mode keys');
 
+  const nativeMetadata = benchmarkSourceMetadata({ benchmarkRegistryProject: 'BEN', benchmarkRegistryLegacyKey: 'BEN-8' }, 'jira-native');
+  if (nativeMetadata.sourceKey !== 'BEN' || nativeMetadata.sourceLabel !== 'Jira-native BEN registry') throw new Error('Jira-native source metadata self-test failed');
+  const rollbackMetadata = benchmarkSourceMetadata({ benchmarkRegistryProject: 'BEN', benchmarkRegistryLegacyKey: 'BEN-8' }, 'ben-8');
+  if (rollbackMetadata.sourceKey !== 'BEN-8' || rollbackMetadata.sourceLabel !== 'BEN-8 temporary rollback authority') throw new Error('BEN-8 source metadata self-test failed');
+
   const benchmarkReview = projectBenchmarkRegistry([selectedIssue], {
     pointerIssue: {
       key: 'BEN-21',
@@ -548,7 +569,13 @@ async function verifyOutput(filePath) {
   if (!payload.benchmarkReview || typeof payload.benchmarkReview !== 'object') throw new Error('Encrypted snapshot benchmarkReview must be an object.');
   const expectedAuthority = benchmarkAuthority(config);
   if (payload.benchmarkReview.authority !== expectedAuthority) throw new Error(`Encrypted snapshot benchmark registry authority must be ${expectedAuthority}.`);
-  if (typeof payload.benchmarkReview.sourceLabel !== 'string' || !payload.benchmarkReview.sourceLabel) throw new Error('Encrypted snapshot benchmarkReview source metadata is missing.');
+  const expectedSource = benchmarkSourceMetadata(config, expectedAuthority);
+  if (payload.benchmarkReview.sourceKey !== expectedSource.sourceKey) {
+    throw new Error(`Encrypted snapshot benchmark registry source key must be ${expectedSource.sourceKey} for ${expectedAuthority}.`);
+  }
+  if (payload.benchmarkReview.sourceLabel !== expectedSource.sourceLabel) {
+    throw new Error(`Encrypted snapshot benchmark registry source label must be ${expectedSource.sourceLabel} for ${expectedAuthority}.`);
+  }
   if (!['ready', 'unavailable'].includes(payload.benchmarkReview.state)) throw new Error('Encrypted snapshot benchmarkReview state is invalid.');
   const requiredBenchmarkAuthority = String(process.env.VERIFY_BENCHMARK_AUTHORITY || '').trim();
   if (requiredBenchmarkAuthority) {
