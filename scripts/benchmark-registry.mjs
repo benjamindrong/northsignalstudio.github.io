@@ -215,16 +215,16 @@ export function parseCanonicalResultSummary(description) {
 
   const names = ['Outcome', 'Scores', 'Signal'];
   const values = {};
-  for (const name of names) {
-    const pattern = new RegExp(`^${name}:\\s*`, 'i');
-    const matching = bullets.filter(block => pattern.test(block.text));
-    if (matching.length !== 1) return { ok: false, error: `Registry Result Summary must contain exactly one ${name}: bullet.` };
-    const value = clean(matching[0].text.replace(pattern, ''));
+  for (let index = 0; index < names.length; index += 1) {
+    const name = names[index];
+    const pattern = new RegExp(`^${name}:\\s*`);
+    const bullet = bullets[index];
+    if (!pattern.test(bullet.text)) {
+      return { ok: false, error: 'Registry Result Summary bullets must be exactly Outcome:, Scores:, and Signal: in that order.' };
+    }
+    const value = clean(bullet.text.replace(pattern, ''));
     if (!value) return { ok: false, error: `${name}: must contain a value.` };
     values[name.toLowerCase()] = value;
-  }
-  if (bullets.some(block => !names.some(name => new RegExp(`^${name}:\\s*`, 'i').test(block.text)))) {
-    return { ok: false, error: 'Registry Result Summary contains an unsupported bullet.' };
   }
 
   return {
