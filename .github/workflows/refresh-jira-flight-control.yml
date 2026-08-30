@@ -12,6 +12,7 @@ on:
       - "scripts/benchmark-registry-legacy.mjs"
       - "scripts/benchmark-registry-cutover-policy.mjs"
       - "scripts/test-benchmark-registry.mjs"
+      - "scripts/test-dashboard-refresh.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
   schedule:
@@ -39,6 +40,7 @@ on:
       - "scripts/benchmark-registry-legacy.mjs"
       - "scripts/benchmark-registry-cutover-policy.mjs"
       - "scripts/test-benchmark-registry.mjs"
+      - "scripts/test-dashboard-refresh.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
 
@@ -69,6 +71,7 @@ jobs:
           node scripts/test-benchmark-registry.mjs
           node scripts/benchmark-registry-cutover-policy.mjs --self-test
           node scripts/refresh-jira-flight-control.mjs --self-test
+          node scripts/test-dashboard-refresh.mjs
 
       - name: Verify Benchmark Review UI seams
         run: |
