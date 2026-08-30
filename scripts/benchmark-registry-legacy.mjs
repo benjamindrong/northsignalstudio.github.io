@@ -8,6 +8,8 @@ const STATUS_NAMES = new Map([
   ['retired', 'Retired']
 ]);
 
+const LEGACY_EXCLUDED_KEYS = new Set(['BEN-6']);
+
 function clean(value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
@@ -106,7 +108,7 @@ function normalizeStatus(raw) {
   const text = clean(raw);
   const lower = text.toLowerCase();
   const next = /\bnext\b/.test(lower);
-  const matched = [...STATUS_NAMES.entries()].find(([key]) => new RegExp(`\\b${key}\\b`, 'i').test(text));
+  const matched = [...STATUS_NAMES.entries()].find(([key]) => new RegExp(`\b${key}\b`, 'i').test(text));
   return { status: matched ? matched[1] : 'Unknown', statusRaw: text || 'Unknown', next };
 }
 
@@ -120,6 +122,12 @@ function isResultLine(line) {
   return /^(historical per-turn scores\/winner|exact scores\/winners|candidate results|most consequential benchmark signal|result\s*:|most consequential split|exact historical candidate scores)\b/i.test(clean(line));
 }
 
+function activityIdentity(rawType) {
+  const type = clean(rawType);
+  if (/^benchmark testing\b/i.test(type)) return { activityKind: 'benchmark-testing', type: type || 'Benchmark Testing' };
+  return { activityKind: 'candidate-evaluation', type: type || 'Candidate Evaluation' };
+}
+
 function parseRun(section, headingIndex) {
   const identity = parseRunHeading(section[headingIndex].text);
   if (!identity) return null;
@@ -131,6 +139,10 @@ function parseRun(section, headingIndex) {
   const statusInfo = normalizeStatus(valueFor(/^status$/i));
   const resultLines = lines.filter(isResultLine);
   const turns = valueFor(/^turns completed$/i);
+  const activity = activityIdentity(valueFor(/^type$/i));
+  const normalizedResultState = statusInfo.status === 'Completed' && activity.activityKind === 'candidate-evaluation'
+    ? resultState(resultLines)
+    : 'none';
 
   return {
     ...identity,
@@ -138,9 +150,10 @@ function parseRun(section, headingIndex) {
     statusRaw: statusInfo.statusRaw,
     next: statusInfo.next,
     source: valueFor(/^(source|feature\/source)$/i),
-    type: valueFor(/^type$/i),
+    activityKind: activity.activityKind,
+    type: activity.type,
     turnsCompleted: turns || null,
-    resultState: resultState(resultLines),
+    resultState: normalizedResultState,
     resultLines
   };
 }
@@ -152,7 +165,7 @@ function parseRuns(blocks) {
   for (let index = 0; index < section.length; index += 1) {
     if (section[index].kind !== 'heading' || section[index].level !== 3) continue;
     const run = parseRun(section, index);
-    if (run) runs.push(run);
+    if (run && !LEGACY_EXCLUDED_KEYS.has(run.key)) runs.push(run);
   }
   if (!runs.length) return { runs: [], error: 'Benchmark Run Ledger contains no recognizable BEN entries.' };
   return { runs, error: '' };
