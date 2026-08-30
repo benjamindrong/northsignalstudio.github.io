@@ -536,11 +536,11 @@ export function compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry, {
     const legacySource = clean(legacy.source);
     const explicitSourceKeys = explicitCrossProjectSourceKeys(legacySource, key);
     if (current.sourceKey) {
-      if (!legacySource.includes(current.sourceKey)) {
+      if (!explicitSourceKeys.includes(current.sourceKey)) {
         if (changedAfterMigration) {
           postMigration(postMigrationDifferences, `${key} source relationship advanced after BEN-18 to ${current.sourceKey}.`);
         } else {
-          errors.push(`${key} structured source ${current.sourceKey} is not represented by BEN-8 source text.`);
+          errors.push(`${key} structured source ${current.sourceKey} is not represented by an exact BEN-8 source key.`);
         }
       }
     } else if (explicitSourceKeys.length) {
