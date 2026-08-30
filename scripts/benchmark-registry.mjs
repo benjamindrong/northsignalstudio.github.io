@@ -99,27 +99,54 @@ function inlineText(node) {
   return (node.content || []).map(inlineText).join('');
 }
 
-function itemText(node) {
-  if (!node || typeof node !== 'object') return '';
-  if (node.type === 'text') return String(node.text || '');
-  if (node.type === 'hardBreak') return ' ';
-  if (node.type === 'bulletList' || node.type === 'orderedList') return '';
-  return (node.content || []).map(itemText).join(' ');
+function listItemText(item) {
+  return (item?.content || [])
+    .filter(child => child?.type === 'paragraph' || child?.type === 'codeBlock')
+    .map(inlineText)
+    .join(' ');
 }
 
-function listBlocks(node, depth = 0) {
+function listBlocks(node, depth = 0, containerDepth = 0) {
   const blocks = [];
   for (const item of node?.content || []) {
     if (item?.type !== 'listItem') continue;
-    const text = clean(itemText(item));
-    if (text) blocks.push({ kind: 'bullet', text, depth, listType: node.type });
+    const text = clean(listItemText(item));
+    if (text) blocks.push({ kind: 'bullet', text, depth, listType: node.type, containerDepth });
     for (const child of item.content || []) {
       if (child?.type === 'bulletList' || child?.type === 'orderedList') {
-        blocks.push(...listBlocks(child, depth + 1));
+        blocks.push(...listBlocks(child, depth + 1, containerDepth));
+      } else if (child?.type !== 'paragraph' && child?.type !== 'codeBlock' && Array.isArray(child?.content)) {
+        blocks.push(...adfNodeBlocks(child, containerDepth + 1));
       }
     }
   }
   return blocks;
+}
+
+function adfNodeBlocks(node, containerDepth = 0) {
+  if (!node || typeof node !== 'object') return [];
+  if (node.type === 'heading') {
+    const text = clean(inlineText(node));
+    return text ? [{ kind: 'heading', level: Number(node.attrs?.level) || 1, text, containerDepth }] : [];
+  }
+  if (node.type === 'bulletList' || node.type === 'orderedList') {
+    return listBlocks(node, 0, containerDepth);
+  }
+  if (node.type === 'paragraph' || node.type === 'codeBlock') {
+    const text = clean(inlineText(node));
+    return text ? [{ kind: 'paragraph', text, containerDepth }] : [];
+  }
+  if (node.type === 'text' || node.type === 'hardBreak') {
+    const text = clean(inlineText(node));
+    return text ? [{ kind: 'paragraph', text, containerDepth }] : [];
+  }
+
+  const children = Array.isArray(node.content) ? node.content : [];
+  if (children.length) {
+    const nested = children.flatMap(child => adfNodeBlocks(child, containerDepth + (node.type === 'doc' ? 0 : 1)));
+    if (nested.length) return nested;
+  }
+  return node.type === 'doc' ? [] : [{ kind: 'unsupported', text: clean(inlineText(node)), containerDepth }];
 }
 
 function markdownBlocks(source) {
@@ -129,15 +156,15 @@ function markdownBlocks(source) {
     if (!line) continue;
     const heading = line.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
-      blocks.push({ kind: 'heading', level: heading[1].length, text: clean(heading[2].replace(/\*\*/g, '')) });
+      blocks.push({ kind: 'heading', level: heading[1].length, text: clean(heading[2].replace(/\*\*/g, '')), containerDepth: 0 });
       continue;
     }
     const bullet = line.match(/^[-*]\s+(.+)$/);
     if (bullet) {
-      blocks.push({ kind: 'bullet', text: clean(bullet[1].replace(/\*\*/g, '')), depth: 0, listType: 'bulletList' });
+      blocks.push({ kind: 'bullet', text: clean(bullet[1].replace(/\*\*/g, '')), depth: 0, listType: 'bulletList', containerDepth: 0 });
       continue;
     }
-    blocks.push({ kind: 'paragraph', text: clean(line.replace(/\*\*/g, '')) });
+    blocks.push({ kind: 'paragraph', text: clean(line.replace(/\*\*/g, '')), containerDepth: 0 });
   }
   return blocks;
 }
@@ -145,20 +172,7 @@ function markdownBlocks(source) {
 export function descriptionBlocks(description) {
   if (typeof description === 'string') return markdownBlocks(description);
   if (!description || typeof description !== 'object' || description.type !== 'doc' || !Array.isArray(description.content)) return [];
-
-  const blocks = [];
-  for (const node of description.content) {
-    if (node?.type === 'heading') {
-      const text = clean(inlineText(node));
-      if (text) blocks.push({ kind: 'heading', level: Number(node.attrs?.level) || 1, text });
-    } else if (node?.type === 'bulletList' || node?.type === 'orderedList') {
-      blocks.push(...listBlocks(node));
-    } else {
-      const text = clean(inlineText(node));
-      if (text) blocks.push({ kind: 'paragraph', text });
-    }
-  }
-  return blocks;
+  return description.content.flatMap(node => adfNodeBlocks(node, 0));
 }
 
 function headingIndexes(blocks, level, text) {
@@ -177,9 +191,13 @@ export function parseCanonicalResultSummary(description) {
   if (resultIndexes.length !== 1) return { ok: false, error: 'Description must contain exactly one #### Registry Result Summary.' };
 
   const artifactIndex = artifactIndexes[0];
+  const resultIndex = resultIndexes[0];
+  if (blocks[artifactIndex].containerDepth !== 0 || blocks[resultIndex].containerDepth !== 0) {
+    return { ok: false, error: 'Canonical Completion Artifact and Registry Result Summary headings must be top-level Description sections.' };
+  }
+
   const artifactEndOffset = blocks.slice(artifactIndex + 1).findIndex(block => block.kind === 'heading' && block.level <= 3);
   const artifactEnd = artifactEndOffset < 0 ? blocks.length : artifactIndex + 1 + artifactEndOffset;
-  const resultIndex = resultIndexes[0];
   if (resultIndex <= artifactIndex || resultIndex >= artifactEnd) {
     return { ok: false, error: 'Registry Result Summary must be inside the canonical Completion Artifact.' };
   }
@@ -191,7 +209,7 @@ export function parseCanonicalResultSummary(description) {
     return { ok: false, error: 'Registry Result Summary may contain only the three required bullets.' };
   }
   const bullets = resultContent.filter(block => block.kind === 'bullet');
-  if (bullets.length !== 3 || bullets.some(block => block.depth !== 0 || block.listType !== 'bulletList')) {
+  if (bullets.length !== 3 || bullets.some(block => block.depth !== 0 || block.listType !== 'bulletList' || block.containerDepth !== 0)) {
     return { ok: false, error: 'Registry Result Summary must contain exactly three top-level bullet-list items.' };
   }
 
@@ -314,7 +332,8 @@ function maxUpdatedAt(records) {
 }
 
 function exactPointerMatches(pointerMatches) {
-  return (pointerMatches || []).filter(issue => clean(issue?.fields?.summary) === POINTER_SUMMARY);
+  const wanted = POINTER_SUMMARY.toLowerCase();
+  return (pointerMatches || []).filter(issue => clean(issue?.fields?.summary).toLowerCase() === wanted);
 }
 
 function resolveSelectedNext(pointerIssue, pointerMatches, runs) {
