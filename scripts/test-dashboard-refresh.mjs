@@ -22,6 +22,35 @@ function verifyInlineScripts(filePath) {
   scripts.forEach((script, index) => new vm.Script(script, { filename: `${filePath}#inline-${index + 1}` }));
 }
 
+function captureMissingBenchmarkFallback() {
+  const source = fs.readFileSync(new URL('../dashboard/refresh-health.js', import.meta.url), 'utf8');
+  let rendered = null;
+  const context = {
+    console,
+    Promise,
+    Date,
+    setTimeout,
+    clearTimeout,
+    document: {},
+    DashboardBenchmarkReview: {
+      render(registry) { rendered = registry; },
+      locked() {}
+    },
+    DashboardWorkRelationships: {
+      render() {},
+      clear() {}
+    }
+  };
+  context.globalThis = context;
+  vm.runInNewContext(source, context, { filename: 'dashboard/refresh-health.js' });
+  const isolated = context.DashboardRefreshHealth;
+  isolated.markSourceSuccess(isolated.emptySourceState(), {
+    generatedAt: new Date(NOW).toISOString(),
+    issues: []
+  }, NOW);
+  return rendered;
+}
+
 assert.equal(health.STALE_AFTER_MS, 30 * 60 * 1000, 'material staleness threshold should be 30 minutes');
 assert.equal(health.sourceState(success(recentPayload), NOW), 'current', 'recent producer snapshot should be current even when business data is unchanged');
 assert.equal(health.sourceState(success(oldPayload), NOW), 'stale', 'old producer snapshot should be stale');
@@ -41,6 +70,12 @@ assert.equal(health.sourceState(recoveredState, NOW), 'current', 'new recent sna
 
 assert.equal(health.sourceState(health.emptySourceState(), NOW), 'waiting', 'source should wait before first success');
 assert.equal(health.sourceState(success({ generatedAt: 'not-a-date' }), NOW), 'stale', 'invalid generatedAt should be stale');
+
+const missingBenchmarkFallback = captureMissingBenchmarkFallback();
+assert.equal(missingBenchmarkFallback?.state, 'unavailable', 'missing benchmarkReview should degrade only the Benchmark Review panel');
+assert.equal('authority' in missingBenchmarkFallback, false, 'missing benchmarkReview must not invent a registry authority');
+assert.equal('sourceKey' in missingBenchmarkFallback, false, 'missing benchmarkReview must not attribute the failure to BEN-8 or another source');
+assert.equal('sourceLabel' in missingBenchmarkFallback, false, 'missing benchmarkReview must keep source metadata authority-neutral');
 
 verifyInlineScripts(new URL('../dashboard/index.html', import.meta.url));
 verifyInlineScripts(new URL('../dashboard/display.html', import.meta.url));

@@ -9,12 +9,26 @@ on:
       - "dashboard/refresh-health.js"
       - "dashboard/jira-flight-control.config.json"
       - "scripts/benchmark-registry.mjs"
+      - "scripts/benchmark-registry-legacy.mjs"
+      - "scripts/benchmark-registry-cutover-policy.mjs"
       - "scripts/test-benchmark-registry.mjs"
+      - "scripts/test-home24-hardening.mjs"
+      - "scripts/test-dashboard-refresh.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
+    inputs:
+      benchmark_registry_authority:
+        description: "Benchmark Review runtime authority"
+        required: false
+        default: "preserve"
+        type: choice
+        options:
+          - "preserve"
+          - "jira-native"
+          - "ben-8"
   push:
     branches: [main]
     paths:
@@ -24,7 +38,11 @@ on:
       - "dashboard/refresh-health.js"
       - "dashboard/jira-flight-control.config.json"
       - "scripts/benchmark-registry.mjs"
+      - "scripts/benchmark-registry-legacy.mjs"
+      - "scripts/benchmark-registry-cutover-policy.mjs"
       - "scripts/test-benchmark-registry.mjs"
+      - "scripts/test-home24-hardening.mjs"
+      - "scripts/test-dashboard-refresh.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
 
@@ -48,8 +66,15 @@ jobs:
 
       - name: Verify refresh logic
         run: |
+          node --check scripts/benchmark-registry.mjs
+          node --check scripts/benchmark-registry-legacy.mjs
+          node --check scripts/benchmark-registry-cutover-policy.mjs
+          node --check scripts/refresh-jira-flight-control.mjs
           node scripts/test-benchmark-registry.mjs
+          node scripts/test-home24-hardening.mjs
+          node scripts/benchmark-registry-cutover-policy.mjs --self-test
           node scripts/refresh-jira-flight-control.mjs --self-test
+          node scripts/test-dashboard-refresh.mjs
 
       - name: Verify Benchmark Review UI seams
         run: |
@@ -68,7 +93,10 @@ jobs:
             [health, "script.src = './benchmark-review.js'", 'Benchmark Review loader'],
             [health, 'payload.benchmarkReview', 'Jira snapshot Benchmark Review bridge'],
             [benchmark, "new Set(['Preparing', 'Blocked', 'Running'])", 'active benchmark statuses'],
-            [benchmark, 'benchmark-columns completed-only', 'completed-only full-width layout']
+            [benchmark, 'benchmark-columns completed-only', 'completed-only full-width layout'],
+            [benchmark, 'registry.sourceLabel', 'active registry authority metadata'],
+            [benchmark, "run.activityKind === 'benchmark-testing'", 'Benchmark Testing result distinction'],
+            [benchmark, 'Defined unused benchmarks', 'defined-unused registry distinction']
           ];
           for (const [source, marker, label] of required) {
             if (!source.includes(marker)) throw new Error(`Missing ${label}`);
@@ -86,13 +114,17 @@ jobs:
           <script>
             DashboardBenchmarkReview.render({
               state: 'ready',
-              sourceKey: 'BEN-8',
-              selectedNext: { key: 'BEN-13', title: 'Crossmark X Handoff Benchmark', status: 'Selected', statusRaw: 'Selected — next', resultState: 'none', resultLines: [] },
+              authority: 'jira-native',
+              sourceKey: 'BEN',
+              sourceLabel: 'Jira-native BEN registry',
+              selectedNext: null,
+              pointerError: 'BEN-21 Parent is missing.',
+              invalidRecords: [],
               runs: [
-                { key: 'BEN-13', title: 'Crossmark X Handoff Benchmark', status: 'Selected', statusRaw: 'Selected — next', resultState: 'none', resultLines: [] },
-                { key: 'BEN-11', title: 'Crossmark Signal Hunt Benchmark', status: 'Completed', statusRaw: 'Completed', resultState: 'recorded', resultLines: ['Response B won.'] }
+                { key: 'BEN-14', title: 'Crossmark Physical Signal Hunt Field Benchmark', status: 'Completed', statusRaw: 'Completed', activityKind: 'benchmark-testing', type: 'Benchmark Testing', source: 'CROS-1', resultState: 'none', resultLines: [] },
+                { key: 'BEN-13', title: 'Crossmark X Handoff Benchmark', status: 'Unused', statusRaw: 'Unused', activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', source: 'CROS-1', resultState: 'none', resultLines: [] }
               ],
-              previouslyConsidered: [],
+              previouslyConsidered: [{ key: 'BEN-22', title: 'MyRAM Markdown Preview', detail: '' }],
               freshBacklog: []
             });
             document.querySelectorAll('script').forEach(node => node.remove());
@@ -108,17 +140,44 @@ jobs:
           <script>
             DashboardBenchmarkReview.render({
               state: 'ready',
-              sourceKey: 'BEN-8',
-              selectedNext: { key: 'BEN-13', title: 'Crossmark X Handoff Benchmark', status: 'Selected', statusRaw: 'Selected — next', resultState: 'none', resultLines: [] },
+              authority: 'jira-native',
+              sourceKey: 'BEN',
+              sourceLabel: 'Jira-native BEN registry',
+              selectedNext: { key: 'BEN-17', title: 'Runline Event Board PRD Candidate Evaluation', status: 'Preparing', statusRaw: 'Preparing', activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', source: 'RUN-5', resultState: 'none', resultLines: [] },
+              pointerError: '',
+              invalidRecords: [{ key: 'BEN-99', title: 'Invalid fixture', reasons: ['Invalid lifecycle fixture.'] }],
               runs: [
-                { key: 'BEN-13', title: 'Crossmark X Handoff Benchmark', status: 'Selected', statusRaw: 'Selected — next', resultState: 'none', resultLines: [] },
-                { key: 'BEN-14', title: 'Crossmark Physical Signal Hunt Field Benchmark', status: 'Blocked', statusRaw: 'Blocked', resultState: 'none', resultLines: [] },
-                { key: 'BEN-15', title: 'Follow-on benchmark preparation', status: 'Preparing', statusRaw: 'Preparing', resultState: 'none', resultLines: [] },
-                { key: 'BEN-11', title: 'Crossmark Signal Hunt Benchmark', status: 'Completed', statusRaw: 'Completed', resultState: 'recorded', resultLines: ['Response B won.'] }
+                { key: 'BEN-17', title: 'Runline Event Board PRD Candidate Evaluation', status: 'Preparing', statusRaw: 'Preparing', activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', source: 'RUN-5', resultState: 'none', resultLines: [] },
+                { key: 'BEN-40', title: 'Blocked candidate', status: 'Blocked', statusRaw: 'Blocked', activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', source: 'Unknown', resultState: 'none', resultLines: [] },
+                { key: 'BEN-11', title: 'Crossmark Signal Hunt Benchmark', status: 'Completed', statusRaw: 'Completed', activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', source: 'CROS-1', resultState: 'recorded', resultLines: ['Outcome: Response B won.', 'Scores: Unknown', 'Signal: State continuity.'] }
               ],
               previouslyConsidered: [],
               freshBacklog: []
             });
+            document.querySelectorAll('script').forEach(node => node.remove());
+          </script>
+          </body></html>
+          HTML
+
+          cat > dashboard/benchmark-review-rollback.html <<'HTML'
+          <!doctype html>
+          <html><head><meta charset="utf-8"></head><body>
+          <div class="dashboard-grid"></div>
+          <script src="./benchmark-review.js"></script>
+          <script type="module">
+            import { projectBenchmarkRegistry } from '../scripts/benchmark-registry-legacy.mjs';
+            const registry = projectBenchmarkRegistry(`
+          ## Benchmark Run Ledger
+          ### BEN-6 — Benchmark idea discovery
+          - Status: Completed
+          ### BEN-14 — Crossmark Physical Signal Hunt Field Benchmark
+          - Status: Completed
+          - Type: Benchmark Testing — production field benchmark
+          ### BEN-17 — Runline Event Board PRD Candidate Evaluation
+          - Status: Selected — next
+          - Type: Candidate Evaluation — comparative model documentation exercise
+            `);
+            DashboardBenchmarkReview.render(registry);
             document.querySelectorAll('script').forEach(node => node.remove());
           </script>
           </body></html>
@@ -149,9 +208,13 @@ jobs:
 
           "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom \
             http://127.0.0.1:8000/dashboard/benchmark-review-completed-only.html > /tmp/benchmark-completed-only-dom.html
+          grep -F 'Jira-native BEN registry' /tmp/benchmark-completed-only-dom.html
           grep -F 'class="benchmark-columns completed-only"' /tmp/benchmark-completed-only-dom.html
           grep -F 'Completed · 1' /tmp/benchmark-completed-only-dom.html
-          grep -F 'BEN-13 · Crossmark X Handoff Benchmark' /tmp/benchmark-completed-only-dom.html
+          grep -F 'Type: Benchmark Testing' /tmp/benchmark-completed-only-dom.html
+          grep -F 'Application/product benchmark record.' /tmp/benchmark-completed-only-dom.html
+          grep -F 'Defined unused benchmarks' /tmp/benchmark-completed-only-dom.html
+          grep -F 'Previously considered / unused' /tmp/benchmark-completed-only-dom.html
           if grep -F 'Active ·' /tmp/benchmark-completed-only-dom.html; then
             echo "Completed-only case unexpectedly rendered an Active group."
             exit 1
@@ -160,16 +223,32 @@ jobs:
           "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom \
             http://127.0.0.1:8000/dashboard/benchmark-review-active.html > /tmp/benchmark-active-dom.html
           grep -F 'Active · 2' /tmp/benchmark-active-dom.html
-          grep -F 'BEN-13 · Crossmark X Handoff Benchmark' /tmp/benchmark-active-dom.html
-          grep -F 'BEN-14 · Crossmark Physical Signal Hunt Field Benchmark' /tmp/benchmark-active-dom.html
+          grep -F 'BEN-17 · Runline Event Board PRD Candidate Evaluation' /tmp/benchmark-active-dom.html
+          grep -F 'Type: Candidate Evaluation' /tmp/benchmark-active-dom.html
           grep -F 'class="benchmark-status blocked"' /tmp/benchmark-active-dom.html
           grep -F '>Blocked</span>' /tmp/benchmark-active-dom.html
-          grep -F 'BEN-15 · Follow-on benchmark preparation' /tmp/benchmark-active-dom.html
-          grep -F 'class="benchmark-status preparing"' /tmp/benchmark-active-dom.html
-          grep -F '>Preparing</span>' /tmp/benchmark-active-dom.html
           grep -F 'Completed · 1' /tmp/benchmark-active-dom.html
+          grep -F 'Invalid registry records · 1' /tmp/benchmark-active-dom.html
           if grep -F 'benchmark-columns completed-only' /tmp/benchmark-active-dom.html; then
             echo "Active-work case incorrectly used the completed-only layout."
+            exit 1
+          fi
+
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom \
+            http://127.0.0.1:8000/dashboard/benchmark-review-rollback.html > /tmp/benchmark-rollback-dom.html
+          grep -F 'BEN-8 temporary rollback authority' /tmp/benchmark-rollback-dom.html
+          grep -F 'BEN-14 · Crossmark Physical Signal Hunt Field Benchmark' /tmp/benchmark-rollback-dom.html
+          grep -F 'Type: Benchmark Testing' /tmp/benchmark-rollback-dom.html
+          grep -F 'Application/product benchmark record.' /tmp/benchmark-rollback-dom.html
+          grep -F 'BEN-17 · Runline Event Board PRD Candidate Evaluation' /tmp/benchmark-rollback-dom.html
+          grep -F 'Type: Candidate Evaluation' /tmp/benchmark-rollback-dom.html
+          grep -F 'No candidate results recorded yet.' /tmp/benchmark-rollback-dom.html
+          if grep -F 'Result: Unknown / backfill.' /tmp/benchmark-rollback-dom.html; then
+            echo "Rollback fixture rendered Candidate Evaluation backfill semantics for a non-completed or Benchmark Testing record."
+            exit 1
+          fi
+          if grep -F 'href="https://benjamindrong80.atlassian.net/browse/BEN-6"' /tmp/benchmark-rollback-dom.html; then
+            echo "Rollback fixture projected excluded BEN-6 support history."
             exit 1
           fi
 
@@ -178,10 +257,11 @@ jobs:
           git fetch --no-tags origin main
           git diff --check FETCH_HEAD...HEAD
 
-      - name: Verify live Jira refresh for trusted owner PRs
+      - name: Verify HOME-24 Slice 1 live Jira-native and BEN-8 parity
         if: >-
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.head.ref == 'HOME-24-Slice-1-Jira-native-registry-projection-and-production-cutover' &&
           github.actor == github.repository_owner
         env:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
@@ -189,8 +269,11 @@ jobs:
           DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
           OUTPUT_PATH: /tmp/jira-flight-control.enc.json
           VERIFY_PROJECTS: MYR,LAN
-          VERIFY_BENCHMARK_REGISTRY: BEN-8
+          VERIFY_BENCHMARK_AUTHORITY: jira-native
         run: |
+          parity_output="$(node scripts/refresh-jira-flight-control.mjs --verify-benchmark-parity)"
+          printf '%s\n' "$parity_output"
+          printf '%s\n' "$parity_output" | node scripts/benchmark-registry-cutover-policy.mjs verify-parity-output
           node scripts/refresh-jira-flight-control.mjs
           node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
 
@@ -212,6 +295,22 @@ jobs:
           ref: dashboard-data
           path: _dashboard-data
 
+      - name: Resolve persistent Benchmark Review authority
+        env:
+          REQUESTED_BENCHMARK_REGISTRY_AUTHORITY: ${{ github.event_name == 'workflow_dispatch' && inputs.benchmark_registry_authority || '' }}
+        run: |
+          authority_path="_dashboard-data/dashboard/benchmark-registry-authority.txt"
+          mkdir -p "$(dirname "$authority_path")"
+          authority="$(node scripts/benchmark-registry-cutover-policy.mjs resolve-authority "$REQUESTED_BENCHMARK_REGISTRY_AUTHORITY" "$authority_path" jira-native)"
+          case "$REQUESTED_BENCHMARK_REGISTRY_AUTHORITY" in
+            jira-native|ben-8) authority_change_requested=true ;;
+            *) authority_change_requested=false ;;
+          esac
+          printf '%s\n' "$authority" > "$authority_path"
+          printf 'BENCHMARK_REGISTRY_AUTHORITY=%s\n' "$authority" >> "$GITHUB_ENV"
+          printf 'BENCHMARK_AUTHORITY_CHANGE_REQUESTED=%s\n' "$authority_change_requested" >> "$GITHUB_ENV"
+          echo "Benchmark registry authority resolved to $authority."
+
       - name: Refresh and verify encrypted Jira snapshot
         env:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
@@ -221,14 +320,18 @@ jobs:
           OUTPUT_PATH: _dashboard-data/dashboard/jira-flight-control.enc.json
         run: |
           node scripts/refresh-jira-flight-control.mjs
-          node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
+          if [ "$BENCHMARK_AUTHORITY_CHANGE_REQUESTED" = "true" ]; then
+            VERIFY_BENCHMARK_AUTHORITY="$BENCHMARK_REGISTRY_AUTHORITY" node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
+          else
+            node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
+          fi
 
-      - name: Publish changed snapshot
+      - name: Publish changed snapshot and authority state
         working-directory: _dashboard-data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dashboard/jira-flight-control.enc.json
+          git add dashboard/jira-flight-control.enc.json dashboard/benchmark-registry-authority.txt
           if git diff --cached --quiet; then
             echo "No Jira Flight Control changes."
             exit 0

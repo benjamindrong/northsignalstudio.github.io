@@ -1,35 +1,410 @@
 import assert from 'node:assert/strict';
-import { projectBenchmarkRegistry } from './benchmark-registry.mjs';
+import {
+  BEN18_MIGRATION_CUTOFF,
+  compareBenchmarkRegistryParity,
+  parseCanonicalResultSummary,
+  projectBenchmarkRegistry
+} from './benchmark-registry.mjs';
+import { projectBenchmarkRegistry as projectLegacyBenchmarkRegistry } from './benchmark-registry-legacy.mjs';
 
-const registry = projectBenchmarkRegistry(`
-## Benchmark Run Ledger
+const POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
 
-### BEN-13 — Crossmark X Handoff Benchmark
-- Status: Selected — next
-- Source: Crossmark CROS-1 Slice 2 handoff flow
+function issue(key, labels, category, {
+  summary = `${key} summary`,
+  description = '',
+  links = [],
+  updated = '2026-08-27T12:00:00.000Z'
+} = {}) {
+  return {
+    key,
+    fields: {
+      summary,
+      labels,
+      status: { statusCategory: { key: category } },
+      project: { key: 'BEN' },
+      updated,
+      description,
+      issuelinks: links
+    }
+  };
+}
 
-### BEN-14 — Crossmark Physical Signal Hunt Field Benchmark
-- Status: Blocked
-- Source: Crossmark physical-device field testing
+function relates(key, summary = `${key} source`) {
+  return {
+    type: { name: 'Relates' },
+    outwardIssue: { key, fields: { summary, project: { key: key.split('-')[0] } } }
+  };
+}
 
-### BEN-15 — Follow-on benchmark preparation
-- Status: Preparing
-- Source: Benchmark Review
+function pointer(
+  parentKey = 'BEN-17',
+  updated = '2026-08-27T12:01:00.000Z',
+  labels = [],
+  issuetype = { name: 'Subtask', subtask: true }
+) {
+  return {
+    key: 'BEN-21',
+    fields: {
+      summary: POINTER_SUMMARY,
+      parent: { key: parentKey },
+      updated,
+      labels,
+      issuetype
+    }
+  };
+}
 
-### BEN-11 — Crossmark Signal Hunt Benchmark
-- Status: Completed
-- Source: Crossmark CROS-1 Wild X hunt
-`);
+const summaryDescription = `
+## Notes
+
+### Completion Artifact
+
+#### Registry Result Summary
+- Outcome: Response B won.
+- Scores: RA 8.0 / RB 9.0.
+- Signal: Response B preserved the required state boundary.
+`;
+
+const records = [
+  issue('BEN-17', ['candidate-evaluation'], 'new', { summary: 'Runline Event Board PRD Candidate Evaluation', links: [relates('RUN-5')] }),
+  issue('BEN-40', ['candidate-evaluation', 'registry-blocked'], 'indeterminate'),
+  issue('BEN-41', ['candidate-evaluation'], 'indeterminate'),
+  issue('BEN-14', ['benchmark-testing'], 'done', { summary: 'Crossmark Physical Signal Hunt Field Benchmark', links: [relates('CROS-1')] }),
+  issue('BEN-9', ['candidate-evaluation', 'registry-result-summary'], 'done', { description: summaryDescription }),
+  issue('BEN-10', ['candidate-evaluation', 'registry-result-unknown'], 'done', { links: [relates('HOME-12')] }),
+  issue('BEN-13', ['candidate-evaluation', 'registry-idea'], 'new', { summary: 'Crossmark X Handoff Benchmark', links: [relates('CROS-1')] }),
+  issue('BEN-22', ['registry-idea', 'registry-idea-considered'], 'new', { summary: 'MyRAM Markdown Preview' }),
+  issue('BEN-25', ['registry-idea', 'registry-idea-fresh'], 'new', { summary: 'Runline Needs Anchoring' }),
+  issue('BEN-6', ['candidate-evaluation'], 'new', { summary: 'Legacy support history must stay excluded' }),
+  issue('BEN-21', ['candidate-evaluation'], 'new', { summary: POINTER_SUMMARY }),
+  issue('BEN-33', ['registry-idea', 'registry-idea-fresh'], 'new', { summary: 'VOID duplicate must stay excluded' })
+];
+
+const registry = projectBenchmarkRegistry(records, {
+  pointerIssue: pointer(),
+  pointerMatches: [pointer()]
+});
 
 assert.equal(registry.state, 'ready');
-assert.equal(registry.selectedNext?.key, 'BEN-13');
-assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.status, 'Blocked');
-assert.equal(registry.runs.find(run => run.key === 'BEN-15')?.status, 'Preparing');
-assert.equal(registry.runs.find(run => run.key === 'BEN-11')?.status, 'Completed');
-assert.equal(
-  registry.runs.filter(run => ['Preparing', 'Blocked', 'Running'].includes(run.status)).length,
-  2,
-  'selected-next and active-work state must remain independent'
-);
+assert.equal(registry.authority, 'jira-native');
+assert.equal(registry.sourceLabel, 'Jira-native BEN registry');
+assert.equal(registry.pointerUpdatedAt, '2026-08-27T12:01:00.000Z');
+assert.deepEqual(registry.invalidRecords, []);
+assert.equal(registry.selectedNext?.key, 'BEN-17');
+assert.equal(registry.selectedNext?.status, 'Preparing');
+assert.equal(registry.runs.find(run => run.key === 'BEN-40')?.status, 'Blocked');
+assert.equal(registry.runs.find(run => run.key === 'BEN-41')?.status, 'Running');
+assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.type, 'Benchmark Testing');
+assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.resultState, 'none');
+assert.deepEqual(registry.runs.find(run => run.key === 'BEN-9')?.resultLines, [
+  'Outcome: Response B won.',
+  'Scores: RA 8.0 / RB 9.0.',
+  'Signal: Response B preserved the required state boundary.'
+]);
+assert.equal(registry.runs.find(run => run.key === 'BEN-10')?.resultState, 'backfill');
+assert.equal(registry.runs.find(run => run.key === 'BEN-10')?.sourceKey, 'HOME-12');
+assert.equal(registry.runs.find(run => run.key === 'BEN-13')?.status, 'Unused');
+assert.equal(registry.previouslyConsidered[0]?.key, 'BEN-22');
+assert.equal(registry.previouslyConsidered[0]?.updatedAt, '2026-08-27T12:00:00.000Z');
+assert.equal(registry.freshBacklog[0]?.ideas[0]?.key, 'BEN-25');
+assert.equal(registry.freshBacklog[0]?.ideas[0]?.updatedAt, '2026-08-27T12:00:00.000Z');
+const allProjectedKeys = new Set([
+  ...registry.runs.map(record => record.key),
+  ...registry.previouslyConsidered.map(record => record.key),
+  ...registry.freshBacklog.flatMap(group => (group.ideas || []).map(record => record.key)),
+  ...registry.invalidRecords.map(record => record.key)
+]);
+assert.equal(allProjectedKeys.has('BEN-6'), false, 'BEN-6 must remain excluded even if registry labels are added accidentally');
+assert.equal(allProjectedKeys.has('BEN-21'), false, 'BEN-21 must never become projected benchmark work');
+assert.equal(allProjectedKeys.has('BEN-33'), false, 'BEN-33 must never enter any Jira-native projection bucket');
 
-console.log('benchmark registry active-state tests passed');
+const parsedSummary = parseCanonicalResultSummary(summaryDescription);
+assert.equal(parsedSummary.ok, true);
+assert.equal(parsedSummary.values.outcome, 'Response B won.');
+
+const malformedSummary = parseCanonicalResultSummary(`
+### Completion Artifact
+#### Registry Result Summary
+- Outcome: B
+- Scores: 9/8
+- Signal: X
+### Completion Artifact
+`);
+assert.equal(malformedSummary.ok, false);
+
+const nestedSummaryAdf = {
+  type: 'doc',
+  version: 1,
+  content: [
+    { type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: 'Completion Artifact' }] },
+    { type: 'heading', attrs: { level: 4 }, content: [{ type: 'text', text: 'Registry Result Summary' }] },
+    {
+      type: 'bulletList',
+      content: [
+        {
+          type: 'listItem',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Outcome: B' }] },
+            {
+              type: 'bulletList',
+              content: [
+                { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Extra: nested evidence' }] }] }
+              ]
+            }
+          ]
+        },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Scores: 9/8' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Signal: X' }] }] }
+      ]
+    }
+  ]
+};
+const nestedSummary = parseCanonicalResultSummary(nestedSummaryAdf);
+assert.equal(nestedSummary.ok, false);
+assert.match(nestedSummary.error, /three top-level bullet-list items/i);
+
+const orderedSummaryAdf = {
+  type: 'doc',
+  version: 1,
+  content: [
+    { type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: 'Completion Artifact' }] },
+    { type: 'heading', attrs: { level: 4 }, content: [{ type: 'text', text: 'Registry Result Summary' }] },
+    {
+      type: 'orderedList',
+      content: [
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Outcome: B' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Scores: 9/8' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Signal: X' }] }] }
+      ]
+    }
+  ]
+};
+const orderedSummary = parseCanonicalResultSummary(orderedSummaryAdf);
+assert.equal(orderedSummary.ok, false);
+assert.match(orderedSummary.error, /three top-level bullet-list items/i);
+
+const invalidRecords = [
+  issue('BEN-50', ['candidate-evaluation', 'benchmark-testing'], 'new'),
+  issue('BEN-51', ['registry-idea', 'registry-blocked'], 'new'),
+  issue('BEN-52', ['registry-idea-fresh'], 'new'),
+  issue('BEN-53', ['candidate-evaluation'], 'done'),
+  issue('BEN-54', ['candidate-evaluation', 'registry-result-summary'], 'done', { description: '### Completion Artifact\n- Missing result subsection' }),
+  issue('BEN-55', ['candidate-evaluation', 'registry-result-unknown'], 'done', { description: summaryDescription }),
+  issue('BEN-56', ['candidate-evaluation'], 'new', { links: [relates('HOME-1'), relates('RUN-1')] })
+];
+const invalidProjection = projectBenchmarkRegistry(invalidRecords, {
+  pointerIssue: pointer('BEN-50'),
+  pointerMatches: [pointer('BEN-50')]
+});
+assert.equal(invalidProjection.state, 'ready');
+assert.equal(invalidProjection.invalidRecords.length, invalidRecords.length);
+assert.equal(invalidProjection.runs.length, 0);
+assert.equal(invalidProjection.selectedNext, null);
+assert.match(invalidProjection.pointerError, /eligible/i);
+
+const duplicatePointer = projectBenchmarkRegistry([records[0]], {
+  pointerIssue: pointer(),
+  pointerMatches: [pointer(), { key: 'BEN-99', fields: { summary: POINTER_SUMMARY, parent: { key: 'BEN-17' } } }]
+});
+assert.equal(duplicatePointer.state, 'ready');
+assert.equal(duplicatePointer.selectedNext, null);
+assert.match(duplicatePointer.pointerError, /unique/i);
+
+const contaminatedPointer = projectBenchmarkRegistry([records[0]], {
+  pointerIssue: pointer('BEN-17', '2026-08-27T12:01:00.000Z', ['candidate-evaluation']),
+  pointerMatches: [pointer()]
+});
+assert.equal(contaminatedPointer.state, 'ready');
+assert.equal(contaminatedPointer.selectedNext, null);
+assert.match(contaminatedPointer.pointerError, /must not carry registry labels/i);
+
+const wrongTypePointer = projectBenchmarkRegistry([records[0]], {
+  pointerIssue: pointer('BEN-17', '2026-08-27T12:01:00.000Z', [], { name: 'Task', subtask: false }),
+  pointerMatches: [pointer()]
+});
+assert.equal(wrongTypePointer.state, 'ready');
+assert.equal(wrongTypePointer.selectedNext, null);
+assert.match(wrongTypePointer.pointerError, /permanent Subtask pointer/i);
+
+const ideaPointer = projectBenchmarkRegistry([records[0], records[6]], {
+  pointerIssue: pointer('BEN-13'),
+  pointerMatches: [pointer('BEN-13')]
+});
+assert.equal(ideaPointer.selectedNext, null);
+assert.match(ideaPointer.pointerError, /eligible/i);
+
+const malformedLegacy = projectLegacyBenchmarkRegistry('## Not the registry');
+assert.equal(malformedLegacy.state, 'unavailable');
+assert.equal(malformedLegacy.authority, 'ben-8');
+assert.equal(malformedLegacy.sourceLabel, 'BEN-8 temporary rollback authority');
+
+const duplicateNextLegacy = projectLegacyBenchmarkRegistry(`
+## Benchmark Run Ledger
+### BEN-17 — A
+- Status: Selected — next
+### BEN-18 — B
+- Status: Selected — next
+`);
+assert.equal(duplicateNextLegacy.state, 'unavailable');
+assert.equal(duplicateNextLegacy.authority, 'ben-8');
+assert.equal(duplicateNextLegacy.sourceLabel, 'BEN-8 temporary rollback authority');
+
+const legacy = projectLegacyBenchmarkRegistry(`
+## Benchmark Run Ledger
+### BEN-17 — Runline Event Board PRD Candidate Evaluation
+- Status: Selected — next
+- Source: RUN-5 large-format Runline Event Board
+### BEN-14 — Crossmark Physical Signal Hunt Field Benchmark
+- Status: Completed
+- Source: CROS-1 production field benchmark
+### BEN-9 — Runline Authority Handoff Console
+- Status: Completed
+- Source: Benchmark Review historical notes
+- Candidate results: Response B won.
+### BEN-10 — Homepage Dashboard PR Health Panel Benchmark
+- Status: Completed
+- Source: HOME-12 shared Compose PR Health panel
+- Exact scores/winners: Backfill from original review records.
+## Previously Considered / Unused Ideas
+- MyRAM Markdown Preview
+- Dashboard Display Mode
+## Fresh Idea Backlog
+### Runline
+- Runline Needs Anchoring
+`);
+assert.equal(legacy.authority, 'ben-8');
+assert.equal(legacy.sourceLabel, 'BEN-8 temporary rollback authority');
+
+const nativeParity = projectBenchmarkRegistry([
+  records[0], records[3], records[4], records[5], records[7], records[8]
+], {
+  pointerIssue: pointer(),
+  pointerMatches: [pointer()]
+});
+const parity = compareBenchmarkRegistryParity(nativeParity, legacy, {
+  runKeys: ['BEN-17', 'BEN-14', 'BEN-9', 'BEN-10'],
+  consideredKeys: ['BEN-22'],
+  freshKeys: ['BEN-25']
+});
+assert.equal(parity.ok, true, parity.errors.join('\n'));
+assert.deepEqual(parity.postMigrationDifferences, []);
+
+const swappedIdeaNative = projectBenchmarkRegistry([
+  records[0],
+  issue('BEN-22', ['registry-idea', 'registry-idea-considered'], 'new', { summary: 'Dashboard Display Mode' }),
+  issue('BEN-23', ['registry-idea', 'registry-idea-considered'], 'new', { summary: 'MyRAM Markdown Preview' })
+], {
+  pointerIssue: pointer(),
+  pointerMatches: [pointer()]
+});
+const swappedIdeaParity = compareBenchmarkRegistryParity(swappedIdeaNative, legacy, {
+  runKeys: ['BEN-17'],
+  consideredKeys: ['BEN-22', 'BEN-23'],
+  freshKeys: []
+});
+assert.equal(swappedIdeaParity.ok, false);
+assert.match(swappedIdeaParity.errors.join('\n'), /BEN-22 idea title mismatch/);
+
+const missingConsideredNative = projectBenchmarkRegistry([
+  records[0], records[3], records[4], records[5], records[8]
+], {
+  pointerIssue: pointer(),
+  pointerMatches: [pointer()]
+});
+const missingConsideredParity = compareBenchmarkRegistryParity(missingConsideredNative, legacy, {
+  runKeys: ['BEN-17', 'BEN-14', 'BEN-9', 'BEN-10'],
+  consideredKeys: ['BEN-22'],
+  freshKeys: ['BEN-25']
+});
+assert.equal(missingConsideredParity.ok, false);
+assert.match(missingConsideredParity.errors.join('\n'), /BEN-22 is missing/);
+
+const missingFreshNative = projectBenchmarkRegistry([
+  records[0], records[3], records[4], records[5], records[7]
+], {
+  pointerIssue: pointer(),
+  pointerMatches: [pointer()]
+});
+const missingFreshParity = compareBenchmarkRegistryParity(missingFreshNative, legacy, {
+  runKeys: ['BEN-17', 'BEN-14', 'BEN-9', 'BEN-10'],
+  consideredKeys: ['BEN-22'],
+  freshKeys: ['BEN-25']
+});
+assert.equal(missingFreshParity.ok, false);
+assert.match(missingFreshParity.errors.join('\n'), /BEN-25 is missing/);
+
+const missingSourceAfterCutoff = projectBenchmarkRegistry([
+  records[0],
+  issue('BEN-14', ['benchmark-testing'], 'done', {
+    summary: 'Crossmark Physical Signal Hunt Field Benchmark',
+    updated: '2026-08-28T14:00:00.000Z'
+  })
+], {
+  pointerIssue: pointer(),
+  pointerMatches: [pointer()]
+});
+const missingSourceParity = compareBenchmarkRegistryParity(missingSourceAfterCutoff, legacy, {
+  runKeys: ['BEN-17', 'BEN-14'],
+  consideredKeys: [],
+  freshKeys: []
+});
+assert.equal(missingSourceParity.ok, false);
+assert.match(missingSourceParity.errors.join('\n'), /BEN-14 structured source CROS-1.*missing/);
+
+const afterCutoff = '2026-08-28T14:00:00.000Z';
+const postMigrationNative = projectBenchmarkRegistry([
+  issue('BEN-17', ['candidate-evaluation', 'registry-idea'], 'new', {
+    summary: 'Runline Event Board PRD Candidate Evaluation',
+    links: [relates('RUN-5')],
+    updated: afterCutoff
+  }),
+  issue('BEN-34', ['candidate-evaluation'], 'new', {
+    summary: 'Vega-Lite JSON Generation Candidate Evaluation',
+    updated: afterCutoff
+  })
+], {
+  pointerIssue: pointer('BEN-34', afterCutoff),
+  pointerMatches: [pointer('BEN-34', afterCutoff)]
+});
+const postMigrationParity = compareBenchmarkRegistryParity(postMigrationNative, legacy, {
+  runKeys: ['BEN-17'],
+  consideredKeys: [],
+  freshKeys: []
+});
+assert.equal(postMigrationParity.ok, true, postMigrationParity.errors.join('\n'));
+assert.equal(postMigrationParity.postMigrationDifferences.length, 2);
+assert.match(postMigrationParity.postMigrationDifferences[0], /Selected-next advanced after BEN-18/);
+assert.match(postMigrationParity.postMigrationDifferences[1], /BEN-17 lifecycle advanced after BEN-18/);
+
+const movedIdeaNative = projectBenchmarkRegistry([
+  records[0],
+  issue('BEN-22', ['registry-idea', 'registry-idea-fresh'], 'new', {
+    summary: 'MyRAM Markdown Preview',
+    updated: afterCutoff
+  })
+], {
+  pointerIssue: pointer(),
+  pointerMatches: [pointer()]
+});
+const movedIdeaParity = compareBenchmarkRegistryParity(movedIdeaNative, legacy, {
+  runKeys: ['BEN-17'],
+  consideredKeys: ['BEN-22'],
+  freshKeys: []
+});
+assert.equal(movedIdeaParity.ok, true, movedIdeaParity.errors.join('\n'));
+assert.match(movedIdeaParity.postMigrationDifferences.join('\n'), /BEN-22 idea category advanced after BEN-18/);
+
+const preCutoffPointerMismatch = {
+  ...postMigrationNative,
+  pointerUpdatedAt: '2026-08-27T15:00:00.000Z'
+};
+const failedParity = compareBenchmarkRegistryParity(preCutoffPointerMismatch, legacy, {
+  runKeys: ['BEN-17'],
+  consideredKeys: [],
+  freshKeys: [],
+  migrationCutoff: BEN18_MIGRATION_CUTOFF
+});
+assert.equal(failedParity.ok, false);
+assert.match(failedParity.errors.join('\n'), /Selected-next mismatch at BEN-18 parity boundary/);
+
+console.log('benchmark Jira-native registry contract tests passed');

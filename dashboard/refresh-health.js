@@ -94,7 +94,6 @@
     if (Array.isArray(payload?.issues)) {
       renderBenchmarkReview(payload.benchmarkReview || {
         state: 'unavailable',
-        sourceKey: 'BEN-8',
         message: 'Benchmark registry is unavailable in the current Jira snapshot.'
       });
       pendingWorkSources.jira = payload;
