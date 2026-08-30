@@ -88,17 +88,21 @@
   }
 
   function activityTypeLabel(run) {
+    const activityKind = String(run?.activityKind || '').trim();
     const legacyType = String(run?.type || '').trim();
-    if (run?.activityKind === 'benchmark-testing' || legacyType.startsWith('Benchmark Testing')) {
+    if (activityKind === 'benchmark-testing') {
       return legacyType.startsWith('Benchmark Testing')
         ? legacyType.replace(/^Benchmark Testing/, 'Application Testing')
         : 'Application Testing';
     }
-    if (run?.activityKind === 'candidate-evaluation' || legacyType.startsWith('Candidate Evaluation')) {
+    if (activityKind === 'candidate-evaluation') {
       return legacyType.startsWith('Candidate Evaluation')
         ? legacyType.replace(/^Candidate Evaluation/, 'Comparative Evaluation')
         : 'Comparative Evaluation';
     }
+    if (activityKind) return legacyType;
+    if (legacyType.startsWith('Benchmark Testing')) return legacyType.replace(/^Benchmark Testing/, 'Application Testing');
+    if (legacyType.startsWith('Candidate Evaluation')) return legacyType.replace(/^Candidate Evaluation/, 'Comparative Evaluation');
     return legacyType;
   }
 
@@ -107,7 +111,7 @@
       for (const line of run.resultLines) container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, line));
       return;
     }
-    if (run.activityKind === 'benchmark-testing') {
+    if (activityTypeLabel(run).startsWith('Application Testing')) {
       container.appendChild(create('div', 'benchmark-result none', 'Application testing record.'));
       return;
     }
