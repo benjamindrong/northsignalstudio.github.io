@@ -12,6 +12,7 @@ on:
       - "scripts/benchmark-registry-legacy.mjs"
       - "scripts/benchmark-registry-cutover-policy.mjs"
       - "scripts/test-benchmark-registry.mjs"
+      - "scripts/test-home24-hardening.mjs"
       - "scripts/test-dashboard-refresh.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
@@ -40,6 +41,7 @@ on:
       - "scripts/benchmark-registry-legacy.mjs"
       - "scripts/benchmark-registry-cutover-policy.mjs"
       - "scripts/test-benchmark-registry.mjs"
+      - "scripts/test-home24-hardening.mjs"
       - "scripts/test-dashboard-refresh.mjs"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
@@ -69,6 +71,7 @@ jobs:
           node --check scripts/benchmark-registry-cutover-policy.mjs
           node --check scripts/refresh-jira-flight-control.mjs
           node scripts/test-benchmark-registry.mjs
+          node scripts/test-home24-hardening.mjs
           node scripts/benchmark-registry-cutover-policy.mjs --self-test
           node scripts/refresh-jira-flight-control.mjs --self-test
           node scripts/test-dashboard-refresh.mjs
@@ -156,6 +159,29 @@ jobs:
           </body></html>
           HTML
 
+          cat > dashboard/benchmark-review-rollback.html <<'HTML'
+          <!doctype html>
+          <html><head><meta charset="utf-8"></head><body>
+          <div class="dashboard-grid"></div>
+          <script src="./benchmark-review.js"></script>
+          <script type="module">
+            import { projectBenchmarkRegistry } from '../scripts/benchmark-registry-legacy.mjs';
+            const registry = projectBenchmarkRegistry(`
+          ## Benchmark Run Ledger
+          ### BEN-6 — Benchmark idea discovery
+          - Status: Completed
+          ### BEN-14 — Crossmark Physical Signal Hunt Field Benchmark
+          - Status: Completed
+          - Type: Benchmark Testing — production field benchmark
+          ### BEN-17 — Runline Event Board PRD Candidate Evaluation
+          - Status: Selected — next
+          - Type: Candidate Evaluation — comparative model documentation exercise
+            `);
+            DashboardBenchmarkReview.render(registry);
+          </script>
+          </body></html>
+          HTML
+
           python3 -m http.server 8000 >/tmp/dashboard-http.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
@@ -204,6 +230,24 @@ jobs:
           grep -F 'Invalid registry records · 1' /tmp/benchmark-active-dom.html
           if grep -F 'benchmark-columns completed-only' /tmp/benchmark-active-dom.html; then
             echo "Active-work case incorrectly used the completed-only layout."
+            exit 1
+          fi
+
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom \
+            http://127.0.0.1:8000/dashboard/benchmark-review-rollback.html > /tmp/benchmark-rollback-dom.html
+          grep -F 'BEN-8 temporary rollback authority' /tmp/benchmark-rollback-dom.html
+          grep -F 'BEN-14 · Crossmark Physical Signal Hunt Field Benchmark' /tmp/benchmark-rollback-dom.html
+          grep -F 'Type: Benchmark Testing' /tmp/benchmark-rollback-dom.html
+          grep -F 'Application/product benchmark record.' /tmp/benchmark-rollback-dom.html
+          grep -F 'BEN-17 · Runline Event Board PRD Candidate Evaluation' /tmp/benchmark-rollback-dom.html
+          grep -F 'Type: Candidate Evaluation' /tmp/benchmark-rollback-dom.html
+          grep -F 'No candidate results recorded yet.' /tmp/benchmark-rollback-dom.html
+          if grep -F 'Result: Unknown / backfill.' /tmp/benchmark-rollback-dom.html; then
+            echo "Rollback fixture rendered Candidate Evaluation backfill semantics for a non-completed or Benchmark Testing record."
+            exit 1
+          fi
+          if grep -F 'BEN-6' /tmp/benchmark-rollback-dom.html; then
+            echo "Rollback fixture projected excluded BEN-6 support history."
             exit 1
           fi
 
