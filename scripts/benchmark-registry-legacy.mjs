@@ -108,7 +108,7 @@ function normalizeStatus(raw) {
   const text = clean(raw);
   const lower = text.toLowerCase();
   const next = /\bnext\b/.test(lower);
-  const matched = [...STATUS_NAMES.entries()].find(([key]) => new RegExp(`\b${key}\b`, 'i').test(text));
+  const matched = [...STATUS_NAMES.entries()].find(([key]) => new RegExp(`\\b${key}\\b`, 'i').test(text));
   return { status: matched ? matched[1] : 'Unknown', statusRaw: text || 'Unknown', next };
 }
 
