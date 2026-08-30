@@ -47,6 +47,30 @@ function canonicalSummary(extra = []) {
 const valid = parseCanonicalResultSummary(canonicalSummary());
 assert.equal(valid.ok, true, valid.error);
 
+const reorderedSummary = parseCanonicalResultSummary({
+  type: 'doc',
+  version: 1,
+  content: [
+    heading(3, 'Completion Artifact'),
+    heading(4, 'Registry Result Summary'),
+    { type: 'bulletList', content: [bullet('Scores: 9/8'), bullet('Outcome: B'), bullet('Signal: X')] }
+  ]
+});
+assert.equal(reorderedSummary.ok, false);
+assert.match(reorderedSummary.error, /in that order/i);
+
+const lowerCaseSummary = parseCanonicalResultSummary({
+  type: 'doc',
+  version: 1,
+  content: [
+    heading(3, 'Completion Artifact'),
+    heading(4, 'Registry Result Summary'),
+    { type: 'bulletList', content: [bullet('outcome: B'), bullet('Scores: 9/8'), bullet('Signal: X')] }
+  ]
+});
+assert.equal(lowerCaseSummary.ok, false);
+assert.match(lowerCaseSummary.error, /exactly Outcome:/i);
+
 const nestedDuplicateResult = parseCanonicalResultSummary(canonicalSummary([
   {
     type: 'panel',
