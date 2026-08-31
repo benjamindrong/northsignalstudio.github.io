@@ -15,8 +15,17 @@ on:
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "3-58/5 * * * *"
   workflow_dispatch:
+    inputs:
+      trigger_kind:
+        description: "Refresh trigger kind"
+        required: false
+        default: "manual"
+        type: choice
+        options:
+          - "manual"
+          - "jira"
   push:
     branches: [main]
     paths:
@@ -37,7 +46,7 @@ permissions:
 
 concurrency:
   group: jira-flight-control-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
@@ -382,6 +391,9 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
+    concurrency:
+      group: dashboard-data-publish
+      cancel-in-progress: false
     steps:
       - name: Check out dashboard source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -402,6 +414,7 @@ jobs:
           DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
           PREVIOUS_PATH: _dashboard-data/dashboard/jira-flight-control.enc.json
           OUTPUT_PATH: _dashboard-data/dashboard/jira-flight-control.enc.json
+          REFRESH_TRIGGER_KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.trigger_kind || github.event_name }}
         run: |
           set -euo pipefail
           set +x
@@ -499,4 +512,5 @@ jobs:
             exit 0
           fi
           git commit -m "Refresh Jira Flight Control data"
+          git pull --rebase origin dashboard-data
           git push origin HEAD:dashboard-data
