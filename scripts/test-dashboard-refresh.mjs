@@ -92,8 +92,16 @@ assert.match(jiraWorkflow, /REFRESH_TRIGGER_KIND: \$\{\{ github\.event_name == '
 for (const [label, workflow] of [['Jira', jiraWorkflow], ['GitHub PR', githubWorkflow]]) {
   assert.match(workflow, /concurrency:\n\s+group: dashboard-data-publish\n\s+cancel-in-progress: false/, `${label} publisher should join the shared dashboard-data publication lock`);
 }
-assert.match(jiraWorkflow, /git pull --rebase origin dashboard-data\n\s+git push origin HEAD:dashboard-data/, 'Jira publisher should reconcile the remote data branch before normal push');
-assert.match(githubWorkflow, /git pull --rebase origin dashboard-data\n\s+git push origin HEAD:dashboard-data/, 'GitHub PR publisher should reconcile the remote data branch before normal push');
+assert.match(
+  jiraWorkflow,
+  /git pull --rebase origin dashboard-data[\s\S]*node \.\.\/scripts\/refresh-jira-flight-control\.mjs --verify-output dashboard\/jira-flight-control\.enc\.json[\s\S]*git push origin HEAD:dashboard-data/,
+  'Jira publisher should reconcile the remote data branch and reverify its owned artifact before normal push'
+);
+assert.match(
+  githubWorkflow,
+  /git pull --rebase origin dashboard-data[\s\S]*node \.\.\/scripts\/refresh-github-prs\.mjs --verify-output dashboard\/github-prs\.enc\.json[\s\S]*git push origin HEAD:dashboard-data/,
+  'GitHub PR publisher should reconcile the remote data branch and reverify its owned artifact before normal push'
+);
 assert.doesNotMatch(jiraWorkflow, /git push[^\n]*--force|git reset --hard[^\n]*dashboard-data/i, 'Jira publisher must never rewrite dashboard-data history');
 assert.doesNotMatch(githubWorkflow, /git push[^\n]*--force|git reset --hard[^\n]*dashboard-data/i, 'GitHub PR publisher must never rewrite dashboard-data history');
 
