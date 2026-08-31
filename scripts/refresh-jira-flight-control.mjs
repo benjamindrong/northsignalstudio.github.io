@@ -291,12 +291,8 @@ function contentHash(payload) {
 }
 
 function semanticView(payload) {
-  return {
-    version: payload?.version,
-    projects: payload?.projects,
-    issues: payload?.issues,
-    benchmarkReview: payload?.benchmarkReview
-  };
+  const { generatedAt: _ignoredGeneratedAt, ...semantic } = payload || {};
+  return semantic;
 }
 
 function canonicalizeSemantic(value) {
@@ -521,6 +517,7 @@ async function runSelfTest() {
   if (contentHash({ ...payload, benchmarkReview: { ...benchmarkReview, updatedAt: '2026-08-18T12:15:00.000Z' } }) === hash) throw new Error('benchmark registry must participate in snapshot identity');
   if (contentHash({ ...payload, generatedAt: '2026-08-12T12:15:00.000Z' }) === hash) throw new Error('generatedAt must participate in encrypted snapshot identity');
   if (semanticHash(payload) !== semanticHash({ ...payload, generatedAt: '2026-08-12T12:15:00.000Z' })) throw new Error('generatedAt must not participate in semantic identity');
+  if (semanticHash(payload) === semanticHash({ ...payload, futureTopLevelField: 'must-be-semantic' })) throw new Error('all top-level fields except generatedAt must participate in semantic identity');
   if (semanticHash(payload) === semanticHash({ ...payload, projects: ['BEN', 'MYR'] })) throw new Error('project array order must participate in semantic identity');
   if (semanticHash(payload) === semanticHash({ ...payload, issues: [{ key: 'MYR-2', projectKey: 'MYR' }] })) throw new Error('issue changes must participate in semantic identity');
   if (semanticHash({ ...payload, issues: [{ key: 'MYR-2' }, { key: 'MYR-1' }] }) === semanticHash({ ...payload, issues: [{ key: 'MYR-1' }, { key: 'MYR-2' }] })) throw new Error('issue array order must participate in semantic identity');
