@@ -300,16 +300,7 @@ function semanticView(payload) {
 }
 
 function canonicalizeSemantic(value) {
-  if (Array.isArray(value)) {
-    const items = value.map(canonicalizeSemantic);
-    if (items.every(item => item && typeof item === 'object' && !Array.isArray(item) && typeof item.key === 'string')) {
-      return items.sort((a, b) => a.key.localeCompare(b.key));
-    }
-    if (items.every(item => item && typeof item === 'object' && !Array.isArray(item) && typeof item.group === 'string')) {
-      return items.sort((a, b) => a.group.localeCompare(b.group));
-    }
-    return items;
-  }
+  if (Array.isArray(value)) return value.map(canonicalizeSemantic);
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonicalizeSemantic(value[key])]));
   }
@@ -530,8 +521,11 @@ async function runSelfTest() {
   if (contentHash({ ...payload, benchmarkReview: { ...benchmarkReview, updatedAt: '2026-08-18T12:15:00.000Z' } }) === hash) throw new Error('benchmark registry must participate in snapshot identity');
   if (contentHash({ ...payload, generatedAt: '2026-08-12T12:15:00.000Z' }) === hash) throw new Error('generatedAt must participate in encrypted snapshot identity');
   if (semanticHash(payload) !== semanticHash({ ...payload, generatedAt: '2026-08-12T12:15:00.000Z' })) throw new Error('generatedAt must not participate in semantic identity');
+  if (semanticHash(payload) === semanticHash({ ...payload, projects: ['BEN', 'MYR'] })) throw new Error('project array order must participate in semantic identity');
   if (semanticHash(payload) === semanticHash({ ...payload, issues: [{ key: 'MYR-2', projectKey: 'MYR' }] })) throw new Error('issue changes must participate in semantic identity');
-  if (semanticHash({ ...payload, issues: [{ key: 'MYR-2' }, { key: 'MYR-1' }] }) !== semanticHash({ ...payload, issues: [{ key: 'MYR-1' }, { key: 'MYR-2' }] })) throw new Error('keyed semantic collections must have deterministic total ordering');
+  if (semanticHash({ ...payload, issues: [{ key: 'MYR-2' }, { key: 'MYR-1' }] }) === semanticHash({ ...payload, issues: [{ key: 'MYR-1' }, { key: 'MYR-2' }] })) throw new Error('issue array order must participate in semantic identity');
+  const registryRuns = [{ key: 'BEN-1' }, { key: 'BEN-2' }];
+  if (semanticHash({ ...payload, benchmarkReview: { ...benchmarkReview, runs: registryRuns } }) === semanticHash({ ...payload, benchmarkReview: { ...benchmarkReview, runs: [...registryRuns].reverse() } })) throw new Error('benchmarkReview array order must participate in semantic identity');
   if (issuesInDeterministicOrder([{ projectKey: 'BEN', key: 'BEN-2' }, { projectKey: 'BEN', key: 'BEN-1' }])) throw new Error('unsorted prior issue collections must not qualify for byte reuse');
 
   const nowMs = Date.parse('2026-08-12T12:20:00.000Z');
@@ -578,6 +572,9 @@ async function runSelfTest() {
   try {
     const previousPath = path.join(tempDir, 'previous.enc.json');
     const reusedPath = path.join(tempDir, 'reused.enc.json');
+    const missingPath = path.join(tempDir, 'missing.enc.json');
+    if (await readPreviousState(missingPath, passphrase, nowMs)) throw new Error('missing prior state must not qualify for reuse');
+
     const rawEnvelope = `${JSON.stringify(envelope, null, 2)}\n`;
     await fs.writeFile(previousPath, rawEnvelope, 'utf8');
     const validPrevious = await readPreviousState(previousPath, passphrase, nowMs);
@@ -589,6 +586,9 @@ async function runSelfTest() {
     const futurePayload = { ...payload, generatedAt: new Date(nowMs + 60_000).toISOString() };
     await fs.writeFile(previousPath, `${JSON.stringify(encryptPayload(futurePayload, passphrase), null, 2)}\n`, 'utf8');
     if (await readPreviousState(previousPath, passphrase, nowMs)) throw new Error('future-dated prior envelope must not be reused');
+
+    await fs.writeFile(previousPath, '{not-json', 'utf8');
+    if (await readPreviousState(previousPath, passphrase, nowMs)) throw new Error('malformed prior state must not qualify for reuse');
 
     await fs.writeFile(previousPath, '{"version":1}\n', 'utf8');
     if (await readPreviousState(previousPath, passphrase, nowMs)) throw new Error('structurally invalid prior envelope must not be reused');
