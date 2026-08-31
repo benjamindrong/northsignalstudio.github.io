@@ -30,7 +30,7 @@ permissions:
 
 concurrency:
   group: github-prs-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
@@ -183,6 +183,9 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
+    concurrency:
+      group: dashboard-data-publish
+      cancel-in-progress: false
     steps:
       - name: Check out dashboard source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -210,6 +213,7 @@ jobs:
       - name: Publish changed snapshot
         working-directory: _dashboard-data
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add dashboard/github-prs.enc.json
