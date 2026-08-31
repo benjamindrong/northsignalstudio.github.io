@@ -147,8 +147,12 @@ function isDocumentation(file) {
   return /(?:^|\/)(?:docs?\/.*|[^/]+\.(?:md|markdown))$/i.test(file);
 }
 
+function isTestFile(file) {
+  return /(?:^|\/)(?:test-[^/]+|[^/]+\.(?:test|spec))\.(?:mjs|js|cjs|ts)$/i.test(file);
+}
+
 function isProductionReachableText(file) {
-  if (isDocumentation(file) || file === SELF) return false;
+  if (isDocumentation(file) || isTestFile(file) || file === SELF) return false;
   return /\.(?:mjs|js|cjs|ts|json|ya?ml|sh|html|txt)$/i.test(file);
 }
 
