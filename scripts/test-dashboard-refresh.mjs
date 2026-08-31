@@ -77,7 +77,14 @@ assert.equal('authority' in missingBenchmarkFallback, false, 'missing benchmarkR
 assert.equal('sourceKey' in missingBenchmarkFallback, false, 'missing benchmarkReview must not attribute the failure to BEN-8 or another source');
 assert.equal('sourceLabel' in missingBenchmarkFallback, false, 'missing benchmarkReview must keep source metadata authority-neutral');
 
+const indexSource = fs.readFileSync(new URL('../dashboard/index.html', import.meta.url), 'utf8');
+assert.match(indexSource, /const AUTO_REFRESH_MS = 15_000;/, 'unlocked visible dashboard should poll published feeds every 15 seconds');
+assert.match(indexSource, /if \(!sessionStorage\.getItem\('flight-control-passphrase'\) \|\| document\.hidden\) return;/, 'auto-refresh must stop while locked or hidden');
+assert.match(indexSource, /if \(refreshPromise\) return refreshPromise;/, 'overlapping browser refresh attempts must coalesce');
+assert.match(indexSource, /fetch\(`\$\{config\.dataUrl\}\?v=\$\{Date\.now\(\)\}`/, 'browser refresh must fetch the published encrypted feed URL');
+assert.doesNotMatch(indexSource, /\/rest\/api\/3\/|actions\/workflows|workflow_dispatch/i, 'browser polling must not call Jira or dispatch GitHub Actions');
+
 verifyInlineScripts(new URL('../dashboard/index.html', import.meta.url));
 verifyInlineScripts(new URL('../dashboard/display.html', import.meta.url));
 
-console.log('dashboard refresh-health regression and inline syntax tests passed');
+console.log('dashboard refresh-health regression, 15-second polling, and inline syntax tests passed');
