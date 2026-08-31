@@ -502,6 +502,9 @@ jobs:
 
       - name: Publish changed Jira-native snapshot
         working-directory: _dashboard-data
+        env:
+          DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
+          CONFIG_PATH: ../dashboard/jira-flight-control.config.json
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -513,4 +516,5 @@ jobs:
           fi
           git commit -m "Refresh Jira Flight Control data"
           git pull --rebase origin dashboard-data
+          node ../scripts/refresh-jira-flight-control.mjs --verify-output dashboard/jira-flight-control.enc.json
           git push origin HEAD:dashboard-data
