@@ -51,6 +51,23 @@ function captureMissingBenchmarkFallback() {
   return rendered;
 }
 
+function assertSafeDashboardDataPublisher({ label, workflow, ownedPath, siblingPath, verifyCommand }) {
+  assert.match(workflow, /concurrency:\n\s+group: dashboard-data-publish\n\s+cancel-in-progress: false/, `${label} publisher should join the shared dashboard-data publication lock`);
+  assert.ok(workflow.includes(`owned_path=${ownedPath}`), `${label} publisher should identify only its owned encrypted artifact`);
+  assert.ok(workflow.includes(`sibling_path=${siblingPath}`), `${label} publisher should preserve the sibling encrypted artifact`);
+  assert.match(workflow, /baseline_owned_blob="\$\(git rev-parse "HEAD:\$owned_path" 2>\/dev\/null \|\| printf '<missing>'\)"/, `${label} publisher should freeze its owned-path baseline before publication`);
+  assert.match(workflow, /git fetch --no-tags origin dashboard-data/, `${label} publisher should fetch the latest dashboard-data tip before reconciliation`);
+  assert.match(workflow, /remote_owned_blob="\$\(git rev-parse "FETCH_HEAD:\$owned_path" 2>\/dev\/null \|\| printf '<missing>'\)"/, `${label} publisher should inspect the latest remote owned-path identity`);
+  assert.match(workflow, /if \[ "\$remote_owned_blob" != "\$baseline_owned_blob" \]; then[\s\S]*refusing to replay stale[\s\S]*exit 1[\s\S]*fi/, `${label} publisher should fail closed when its owned path moved`);
+  assert.match(workflow, /git rebase FETCH_HEAD/, `${label} publisher should rebase only after the owned-path identity guard passes`);
+  assert.ok(workflow.includes('test -f "$owned_path"'), `${label} publisher should require its owned artifact after reconciliation`);
+  assert.ok(workflow.includes('test -f "$sibling_path"'), `${label} publisher should require the sibling artifact after reconciliation`);
+  assert.ok(workflow.includes(verifyCommand), `${label} publisher should reverify its owned artifact after reconciliation`);
+  assert.match(workflow, /git push origin HEAD:dashboard-data/, `${label} publisher should use a normal non-forced push`);
+  assert.doesNotMatch(workflow, /git pull --rebase origin dashboard-data/, `${label} publisher should not fetch again between the owned-path guard and rebase`);
+  assert.doesNotMatch(workflow, /git push[^\n]*--force|git reset --hard[^\n]*dashboard-data/i, `${label} publisher must never rewrite dashboard-data history`);
+}
+
 assert.equal(health.STALE_AFTER_MS, 30 * 60 * 1000, 'material staleness threshold should be 30 minutes');
 assert.equal(health.sourceState(success(recentPayload), NOW), 'current', 'recent producer snapshot should be current even when business data is unchanged');
 assert.equal(health.sourceState(success(oldPayload), NOW), 'stale', 'old producer snapshot should be stale');
@@ -89,23 +106,22 @@ const githubWorkflow = fs.readFileSync(new URL('../.github/workflows/refresh-git
 assert.match(jiraWorkflow, /cron: "3-58\/5 \* \* \* \*"/, 'Jira producer should attempt refresh every five minutes on the offset cadence');
 assert.match(jiraWorkflow, /trigger_kind:[\s\S]*default: "manual"[\s\S]*- "manual"[\s\S]*- "jira"/, 'workflow dispatch should expose only manual and Jira trigger kinds');
 assert.match(jiraWorkflow, /REFRESH_TRIGGER_KIND: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.trigger_kind \|\| github\.event_name \}\}/, 'publish job should pass the resolved trigger kind to the Jira refresh script');
-for (const [label, workflow] of [['Jira', jiraWorkflow], ['GitHub PR', githubWorkflow]]) {
-  assert.match(workflow, /concurrency:\n\s+group: dashboard-data-publish\n\s+cancel-in-progress: false/, `${label} publisher should join the shared dashboard-data publication lock`);
-}
-assert.match(
-  jiraWorkflow,
-  /git pull --rebase origin dashboard-data[\s\S]*node \.\.\/scripts\/refresh-jira-flight-control\.mjs --verify-output dashboard\/jira-flight-control\.enc\.json[\s\S]*git push origin HEAD:dashboard-data/,
-  'Jira publisher should reconcile the remote data branch and reverify its owned artifact before normal push'
-);
-assert.match(
-  githubWorkflow,
-  /git pull --rebase origin dashboard-data[\s\S]*node \.\.\/scripts\/refresh-github-prs\.mjs --verify-output dashboard\/github-prs\.enc\.json[\s\S]*git push origin HEAD:dashboard-data/,
-  'GitHub PR publisher should reconcile the remote data branch and reverify its owned artifact before normal push'
-);
-assert.doesNotMatch(jiraWorkflow, /git push[^\n]*--force|git reset --hard[^\n]*dashboard-data/i, 'Jira publisher must never rewrite dashboard-data history');
-assert.doesNotMatch(githubWorkflow, /git push[^\n]*--force|git reset --hard[^\n]*dashboard-data/i, 'GitHub PR publisher must never rewrite dashboard-data history');
+assertSafeDashboardDataPublisher({
+  label: 'Jira',
+  workflow: jiraWorkflow,
+  ownedPath: 'dashboard/jira-flight-control.enc.json',
+  siblingPath: 'dashboard/github-prs.enc.json',
+  verifyCommand: 'node ../scripts/refresh-jira-flight-control.mjs --verify-output "$owned_path"'
+});
+assertSafeDashboardDataPublisher({
+  label: 'GitHub PR',
+  workflow: githubWorkflow,
+  ownedPath: 'dashboard/github-prs.enc.json',
+  siblingPath: 'dashboard/jira-flight-control.enc.json',
+  verifyCommand: 'node ../scripts/refresh-github-prs.mjs --verify-output "$owned_path"'
+});
 
 verifyInlineScripts(new URL('../dashboard/index.html', import.meta.url));
 verifyInlineScripts(new URL('../dashboard/display.html', import.meta.url));
 
-console.log('dashboard refresh-health, 15-second polling, producer cadence, shared publication, and inline syntax tests passed');
+console.log('dashboard refresh-health, 15-second polling, producer cadence, fail-closed shared publication, and inline syntax tests passed');
