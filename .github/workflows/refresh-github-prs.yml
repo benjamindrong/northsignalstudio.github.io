@@ -212,6 +212,10 @@ jobs:
 
       - name: Publish changed snapshot
         working-directory: _dashboard-data
+        env:
+          DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
+          DASHBOARD_GITHUB_PRIVATE_REPOSITORIES: ${{ secrets.DASHBOARD_GITHUB_PRIVATE_REPOSITORIES }}
+          CONFIG_PATH: ../dashboard/github-prs.config.json
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -223,4 +227,5 @@ jobs:
           fi
           git commit -m "Refresh GitHub PR data"
           git pull --rebase origin dashboard-data
+          node ../scripts/refresh-github-prs.mjs --verify-output dashboard/github-prs.enc.json
           git push origin HEAD:dashboard-data
