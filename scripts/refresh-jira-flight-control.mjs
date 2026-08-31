@@ -3,17 +3,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import {
-  compareBenchmarkRegistryParity,
-  projectBenchmarkRegistry,
-  REGISTRY_QUERY_LABELS
-} from './benchmark-registry.mjs';
-import { projectBenchmarkRegistry as projectLegacyBenchmarkRegistry } from './benchmark-registry-legacy.mjs';
+import { projectBenchmarkRegistry, REGISTRY_QUERY_LABELS } from './benchmark-registry.mjs';
 
 const DEFAULT_CONFIG = 'dashboard/jira-flight-control.config.json';
 const DEFAULT_OUTPUT = 'dashboard/jira-flight-control.enc.json';
 const PBKDF2_ITERATIONS = 250_000;
 const RECENT_DONE_PER_PROJECT = 3;
+const BENCHMARK_PROJECT = 'BEN';
 const BENCHMARK_POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
 const BENCHMARK_PARTICIPANT_FIELDS = ['summary', 'status', 'project', 'labels', 'updated', 'issuelinks'];
 const BENCHMARK_RESULT_LABELS = new Set(['registry-result-summary', 'registry-result-unknown']);
@@ -46,6 +42,14 @@ function buildActiveJql(projects) {
 
 function buildDoneJql(project) {
   return `project = ${quoteJqlValue(project)} AND ${exclusionJql()} AND statusCategory = Done ORDER BY statusCategoryChangedDate DESC`;
+}
+
+function benchmarkProjectKey(config) {
+  const projectKey = String(config?.benchmarkRegistryProject || '').trim();
+  if (projectKey !== BENCHMARK_PROJECT) {
+    throw new Error(`Dashboard benchmarkRegistryProject must remain ${BENCHMARK_PROJECT}.`);
+  }
+  return projectKey;
 }
 
 export function buildBenchmarkRegistryJql(projectKey) {
@@ -90,9 +94,7 @@ export function latestStatusMove(histories) {
     if (!hasStatusChange || history.created == null) continue;
     const timestamp = historyTimestamp(history.created);
     if (Number.isNaN(timestamp)) continue;
-    if (!latest || timestamp > latest.timestamp) {
-      latest = { timestamp, value: new Date(timestamp).toISOString() };
-    }
+    if (!latest || timestamp > latest.timestamp) latest = { timestamp, value: new Date(timestamp).toISOString() };
   }
   return latest?.value || null;
 }
@@ -152,49 +154,18 @@ async function searchIssues(baseUrl, authHeader, projects, maxIssues) {
   const active = await searchJqlIssues(baseUrl, authHeader, buildActiveJql(projects), maxIssues);
   const recentDone = [];
   for (const project of projects) {
-    recentDone.push(...await searchJqlIssues(
-      baseUrl,
-      authHeader,
-      buildDoneJql(project),
-      RECENT_DONE_PER_PROJECT
-    ));
+    recentDone.push(...await searchJqlIssues(baseUrl, authHeader, buildDoneJql(project), RECENT_DONE_PER_PROJECT));
   }
   return [...active, ...recentDone];
-}
-
-function benchmarkAuthority(config) {
-  const authority = String(process.env.BENCHMARK_REGISTRY_AUTHORITY || config.benchmarkRegistryAuthority || 'jira-native').trim();
-  if (!['jira-native', 'ben-8'].includes(authority)) {
-    throw new Error(`Unsupported benchmark registry authority: ${authority || 'empty'}.`);
-  }
-  return authority;
-}
-
-function benchmarkSourceMetadata(config, authority) {
-  if (authority === 'jira-native') {
-    return {
-      sourceKey: String(config.benchmarkRegistryProject || 'BEN').trim(),
-      sourceLabel: 'Jira-native BEN registry'
-    };
-  }
-  if (authority === 'ben-8') {
-    return {
-      sourceKey: String(config.benchmarkRegistryLegacyKey || 'BEN-8').trim(),
-      sourceLabel: 'BEN-8 temporary rollback authority'
-    };
-  }
-  throw new Error(`Unsupported benchmark registry authority for source metadata: ${authority || 'empty'}.`);
 }
 
 async function hydrateBenchmarkResultDescriptions(baseUrl, authHeader, issues) {
   const required = (issues || []).filter(needsBenchmarkDescription);
   if (!required.length) return issues;
-
   const expectedKeys = required.map(issue => String(issue?.key || '').trim()).filter(Boolean);
   if (expectedKeys.length !== required.length || new Set(expectedKeys).size !== expectedKeys.length) {
     throw new Error('Result-mode BEN records contain missing or duplicate issue keys.');
   }
-
   const details = await searchJqlIssues(
     baseUrl,
     authHeader,
@@ -213,25 +184,17 @@ async function hydrateBenchmarkResultDescriptions(baseUrl, authHeader, issues) {
       throw new Error(`BEN registry result Description is unavailable for ${key}.`);
     }
   }
-
   return (issues || []).map(issue => {
     const key = String(issue?.key || '').trim();
     if (!detailByKey.has(key)) return issue;
-    return {
-      ...issue,
-      fields: {
-        ...issue.fields,
-        description: detailByKey.get(key).fields.description
-      }
-    };
+    return { ...issue, fields: { ...issue.fields, description: detailByKey.get(key).fields.description } };
   });
 }
 
 async function fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config) {
-  const projectKey = String(config.benchmarkRegistryProject || 'BEN').trim();
+  const projectKey = benchmarkProjectKey(config);
   const pointerKey = String(config.benchmarkRegistryPointerKey || 'BEN-21').trim();
   const maxIssues = Number.isFinite(Number(config.benchmarkRegistryMaxIssues)) ? Number(config.benchmarkRegistryMaxIssues) : 100;
-
   try {
     const participants = await searchJqlIssues(
       baseUrl,
@@ -287,55 +250,8 @@ async function fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config) {
   }
 }
 
-async function fetchLegacyBenchmarkRegistry(baseUrl, authHeader, config) {
-  const registryKey = String(config.benchmarkRegistryLegacyKey || 'BEN-8').trim();
-  try {
-    const issue = await jiraFetch(
-      `${baseUrl}/rest/api/3/issue/${encodeURIComponent(registryKey)}?fields=description,updated,summary`,
-      {},
-      authHeader
-    );
-    return projectLegacyBenchmarkRegistry(issue.fields?.description, {
-      sourceKey: issue.key || registryKey,
-      updatedAt: issue.fields?.updated || ''
-    });
-  } catch (error) {
-    console.warn(`Legacy benchmark registry ${registryKey} is unavailable: ${error instanceof Error ? error.message : String(error)}`);
-    return {
-      state: 'unavailable',
-      authority: 'ben-8',
-      sourceKey: registryKey,
-      sourceLabel: 'BEN-8 temporary rollback authority',
-      updatedAt: '',
-      message: 'BEN-8 rollback registry is unavailable.'
-    };
-  }
-}
-
-async function fetchBenchmarkRegistry(baseUrl, authHeader, config) {
-  const authority = benchmarkAuthority(config);
-  return authority === 'ben-8'
-    ? fetchLegacyBenchmarkRegistry(baseUrl, authHeader, config)
-    : fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config);
-}
-
-async function verifyBenchmarkParity(baseUrl, authHeader, config) {
-  const [nativeRegistry, legacyRegistry] = await Promise.all([
-    fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config),
-    fetchLegacyBenchmarkRegistry(baseUrl, authHeader, config)
-  ]);
-  const parity = compareBenchmarkRegistryParity(nativeRegistry, legacyRegistry);
-  if (!parity.ok) throw new Error(`Benchmark registry parity failed:\n- ${parity.errors.join('\n- ')}`);
-  if (parity.postMigrationDifferences.length) {
-    console.log('Accepted post-BEN-18 Jira-native differences:');
-    for (const difference of parity.postMigrationDifferences) console.log(`- ${difference}`);
-  }
-  console.log('Benchmark registry Jira-native/BEN-8 parity passed for HOME-24 legacy targets.');
-}
-
 async function fetchStatusChangelogs(baseUrl, authHeader, issues) {
   if (!issues.length) return new Map();
-
   const historiesByIssueId = new Map();
   let nextPageToken;
   do {
@@ -345,21 +261,17 @@ async function fetchStatusChangelogs(baseUrl, authHeader, issues) {
       maxResults: 1000
     };
     if (nextPageToken) body.nextPageToken = nextPageToken;
-
     const page = await jiraFetch(`${baseUrl}/rest/api/3/changelog/bulkfetch`, {
       method: 'POST',
       body: JSON.stringify(body)
     }, authHeader);
-
     for (const issueLog of page.issueChangeLogs || []) {
       const current = historiesByIssueId.get(String(issueLog.issueId)) || [];
       current.push(...(issueLog.changeHistories || []));
       historiesByIssueId.set(String(issueLog.issueId), current);
     }
-
     nextPageToken = page.nextPageToken;
   } while (nextPageToken);
-
   return historiesByIssueId;
 }
 
@@ -416,7 +328,6 @@ function canReuseEnvelope(previous, expectedHash, passphrase) {
     || previous?.iterations !== PBKDF2_ITERATIONS
     || previous?.contentSha256 !== expectedHash
   ) return false;
-
   try {
     return contentHash(decryptPayload(previous, passphrase)) === expectedHash;
   } catch {
@@ -454,9 +365,7 @@ async function runSelfTest() {
     { created: '2026-08-11T11:00:00.000-0500', items: [{ field: 'status', fieldId: 'status', fromString: 'To Do', toString: 'Ready' }] },
     { created: 1786473296, items: [{ field: 'status', fieldId: 'status', fromString: 'Ready', toString: 'In Progress' }] }
   ];
-  if (latestStatusMove(histories) !== '2026-08-11T18:34:56.000Z') {
-    throw new Error(`latestStatusMove self-test failed: ${latestStatusMove(histories)}`);
-  }
+  if (latestStatusMove(histories) !== '2026-08-11T18:34:56.000Z') throw new Error('latestStatusMove self-test failed');
 
   const selectedIssue = benchmarkFixtureIssue('BEN-17', ['candidate-evaluation'], 'new');
   const summaryIssue = benchmarkFixtureIssue('BEN-9', ['candidate-evaluation', 'registry-result-summary'], 'done');
@@ -467,10 +376,10 @@ async function runSelfTest() {
   const resultDescriptionJql = buildBenchmarkResultDescriptionJql(['BEN-9', 'BEN-10']);
   if (!resultDescriptionJql.includes('"BEN-9"') || !resultDescriptionJql.includes('"BEN-10"')) throw new Error('Result Description JQL must target exact result-mode keys');
 
-  const nativeMetadata = benchmarkSourceMetadata({ benchmarkRegistryProject: 'BEN', benchmarkRegistryLegacyKey: 'BEN-8' }, 'jira-native');
-  if (nativeMetadata.sourceKey !== 'BEN' || nativeMetadata.sourceLabel !== 'Jira-native BEN registry') throw new Error('Jira-native source metadata self-test failed');
-  const rollbackMetadata = benchmarkSourceMetadata({ benchmarkRegistryProject: 'BEN', benchmarkRegistryLegacyKey: 'BEN-8' }, 'ben-8');
-  if (rollbackMetadata.sourceKey !== 'BEN-8' || rollbackMetadata.sourceLabel !== 'BEN-8 temporary rollback authority') throw new Error('BEN-8 source metadata self-test failed');
+  benchmarkProjectKey({ benchmarkRegistryProject: 'BEN' });
+  let wrongProjectFailed = false;
+  try { benchmarkProjectKey({ benchmarkRegistryProject: 'OTHER' }); } catch { wrongProjectFailed = true; }
+  if (!wrongProjectFailed) throw new Error('Benchmark project drift must fail closed');
 
   const benchmarkReview = projectBenchmarkRegistry([selectedIssue], {
     pointerIssue: {
@@ -498,19 +407,11 @@ async function runSelfTest() {
   const passphrase = 'correct horse battery staple';
   const envelope = encryptPayload(payload, passphrase);
   if (JSON.stringify(decryptPayload(envelope, passphrase)) !== JSON.stringify(payload)) throw new Error('encryption self-test failed');
-
   const hash = contentHash(payload);
   if (!canReuseEnvelope(envelope, hash, passphrase)) throw new Error('same-key envelope reuse self-test failed');
   if (canReuseEnvelope(envelope, hash, 'rotated dashboard passphrase')) throw new Error('passphrase rotation self-test failed');
-
-  const changedRegistryPayload = {
-    ...payload,
-    benchmarkReview: { ...benchmarkReview, updatedAt: '2026-08-18T12:15:00.000Z' }
-  };
-  if (contentHash(changedRegistryPayload) === hash) throw new Error('benchmark registry must participate in snapshot identity');
-
-  const newerPayload = { ...payload, generatedAt: '2026-08-12T12:15:00.000Z' };
-  if (contentHash(newerPayload) === hash) throw new Error('generatedAt must participate in snapshot identity');
+  if (contentHash({ ...payload, benchmarkReview: { ...benchmarkReview, updatedAt: '2026-08-18T12:15:00.000Z' } }) === hash) throw new Error('benchmark registry must participate in snapshot identity');
+  if (contentHash({ ...payload, generatedAt: '2026-08-12T12:15:00.000Z' }) === hash) throw new Error('generatedAt must participate in snapshot identity');
 
   const activeJql = buildActiveJql(['MYR', 'HOME', 'BEN']);
   if (
@@ -541,13 +442,10 @@ async function runSelfTest() {
   if (!buildBenchmarkPointerIdentityJql('BEN').includes('Benchmark Registry Next Pointer')) throw new Error('Benchmark pointer identity JQL self-test failed');
 
   let boundedSearchFailed = false;
-  try {
-    assertCompleteSearch('next-page', 100, 100, 'BEN registry participant query');
-  } catch (error) {
+  try { assertCompleteSearch('next-page', 100, 100, 'BEN registry participant query'); } catch (error) {
     boundedSearchFailed = /exceeded the configured maximum/.test(String(error?.message || error));
   }
   if (!boundedSearchFailed) throw new Error('Benchmark registry bounded-query self-test failed');
-
   console.log('refresh-jira-flight-control self-test passed');
 }
 
@@ -556,32 +454,19 @@ async function verifyOutput(filePath) {
   const configPath = process.env.CONFIG_PATH || DEFAULT_CONFIG;
   const config = await readJson(configPath);
   const baseUrl = normalizeBaseUrl(config.jiraBaseUrl);
+  const projectKey = benchmarkProjectKey(config);
   const passphrase = requiredEnv('DASHBOARD_DATA_PASSPHRASE');
   const envelope = await readJson(filePath);
   const payload = decryptPayload(envelope, passphrase);
   if (Number.isNaN(Date.parse(payload.generatedAt || ''))) throw new Error('Encrypted snapshot payload generatedAt must be a valid timestamp.');
   if (payload.generatedAt !== envelope.generatedAt) throw new Error('Encrypted snapshot generatedAt metadata must match the decrypted payload.');
-
-  if (JSON.stringify(payload.projects) !== JSON.stringify(config.projects)) {
-    throw new Error('Encrypted snapshot project configuration does not match the dashboard config.');
-  }
+  if (JSON.stringify(payload.projects) !== JSON.stringify(config.projects)) throw new Error('Encrypted snapshot project configuration does not match the dashboard config.');
   if (!Array.isArray(payload.issues)) throw new Error('Encrypted snapshot issues must be an array.');
   if (!payload.benchmarkReview || typeof payload.benchmarkReview !== 'object') throw new Error('Encrypted snapshot benchmarkReview must be an object.');
-  const expectedAuthority = benchmarkAuthority(config);
-  if (payload.benchmarkReview.authority !== expectedAuthority) throw new Error(`Encrypted snapshot benchmark registry authority must be ${expectedAuthority}.`);
-  const expectedSource = benchmarkSourceMetadata(config, expectedAuthority);
-  if (payload.benchmarkReview.sourceKey !== expectedSource.sourceKey) {
-    throw new Error(`Encrypted snapshot benchmark registry source key must be ${expectedSource.sourceKey} for ${expectedAuthority}.`);
-  }
-  if (payload.benchmarkReview.sourceLabel !== expectedSource.sourceLabel) {
-    throw new Error(`Encrypted snapshot benchmark registry source label must be ${expectedSource.sourceLabel} for ${expectedAuthority}.`);
-  }
+  if (payload.benchmarkReview.authority !== 'jira-native') throw new Error('Encrypted snapshot benchmark registry authority must be jira-native.');
+  if (payload.benchmarkReview.sourceKey !== projectKey) throw new Error('Encrypted snapshot benchmark registry source key must be BEN.');
+  if (payload.benchmarkReview.sourceLabel !== 'Jira-native BEN registry') throw new Error('Encrypted snapshot benchmark registry source label must be Jira-native BEN registry.');
   if (!['ready', 'unavailable'].includes(payload.benchmarkReview.state)) throw new Error('Encrypted snapshot benchmarkReview state is invalid.');
-  const requiredBenchmarkAuthority = String(process.env.VERIFY_BENCHMARK_AUTHORITY || '').trim();
-  if (requiredBenchmarkAuthority) {
-    if (payload.benchmarkReview.authority !== requiredBenchmarkAuthority) throw new Error(`Benchmark registry authority must be ${requiredBenchmarkAuthority}.`);
-    if (payload.benchmarkReview.state !== 'ready') throw new Error(`Benchmark registry authority ${requiredBenchmarkAuthority} is not projectable.`);
-  }
 
   const observedProjects = new Set();
   const doneCountByProject = new Map();
@@ -599,15 +484,10 @@ async function verifyOutput(filePath) {
     }
     observedProjects.add(issue.projectKey);
   }
-
-  const requiredProjects = String(process.env.VERIFY_PROJECTS || '')
-    .split(',')
-    .map(value => value.trim())
-    .filter(Boolean);
+  const requiredProjects = String(process.env.VERIFY_PROJECTS || '').split(',').map(value => value.trim()).filter(Boolean);
   for (const project of requiredProjects) {
     if (!observedProjects.has(project)) throw new Error(`Live snapshot is missing required verification project ${project}.`);
   }
-
   console.log(`Verified encrypted Jira snapshot with ${payload.issues.length} issues across ${[...observedProjects].sort().join(', ') || 'no active projects'}; benchmark registry ${payload.benchmarkReview.authority}/${payload.benchmarkReview.state}.`);
 }
 
@@ -618,15 +498,11 @@ async function main() {
 
   const configPath = process.env.CONFIG_PATH || DEFAULT_CONFIG;
   const config = await readJson(configPath);
+  benchmarkProjectKey(config);
   const baseUrl = normalizeBaseUrl(config.jiraBaseUrl);
   const email = requiredEnv('JIRA_EMAIL');
   const apiToken = requiredEnv('JIRA_API_TOKEN');
   const authHeader = `Basic ${Buffer.from(`${email}:${apiToken}`).toString('base64')}`;
-
-  if (process.argv.includes('--verify-benchmark-parity')) {
-    return verifyBenchmarkParity(baseUrl, authHeader, config);
-  }
-
   const outputPath = process.env.OUTPUT_PATH || DEFAULT_OUTPUT;
   const previousPath = process.env.PREVIOUS_PATH || '';
   const passphrase = requiredEnv('DASHBOARD_DATA_PASSPHRASE');
@@ -634,7 +510,7 @@ async function main() {
 
   const [issues, benchmarkReview] = await Promise.all([
     searchIssues(baseUrl, authHeader, config.projects, maxIssues),
-    fetchBenchmarkRegistry(baseUrl, authHeader, config)
+    fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config)
   ]);
   const historiesByIssueId = await fetchStatusChangelogs(baseUrl, authHeader, issues);
   const mapped = issues.map(issue => ({
@@ -656,13 +532,9 @@ async function main() {
     issues: mapped,
     benchmarkReview
   };
-
   const previous = await readPreviousEnvelope(previousPath);
   const hash = contentHash(payload);
-  const envelope = canReuseEnvelope(previous, hash, passphrase)
-    ? previous
-    : encryptPayload(payload, passphrase);
-
+  const envelope = canReuseEnvelope(previous, hash, passphrase) ? previous : encryptPayload(payload, passphrase);
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
   await fs.writeFile(outputPath, `${JSON.stringify(envelope, null, 2)}\n`, 'utf8');
   console.log(`Wrote encrypted Jira Flight Control snapshot with ${mapped.length} issues and benchmark registry ${benchmarkReview.authority}/${benchmarkReview.state} to ${outputPath}`);
