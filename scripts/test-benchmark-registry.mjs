@@ -86,7 +86,9 @@ assert.equal(registry.runs.find(run => run.key === 'BEN-10')?.resultState, 'back
 assert.equal(registry.runs.find(run => run.key === 'BEN-10')?.sourceKey, 'HOME-12');
 assert.equal(registry.runs.find(run => run.key === 'BEN-13')?.status, 'Unused');
 assert.equal(registry.previouslyConsidered[0]?.key, 'BEN-22');
+assert.equal(registry.previouslyConsidered[0]?.updatedAt, '2026-08-27T12:00:00.000Z');
 assert.equal(registry.freshBacklog[0]?.ideas[0]?.key, 'BEN-25');
+assert.equal(registry.freshBacklog[0]?.ideas[0]?.updatedAt, '2026-08-27T12:00:00.000Z');
 
 const allProjectedKeys = new Set([
   ...registry.runs.map(record => record.key),
@@ -105,6 +107,57 @@ for (const bad of [
   `### Completion Artifact\n#### Registry Result Summary\n- Scores: 9/8\n- Outcome: B\n- Signal: X`,
   `### Completion Artifact\n#### Registry Result Summary\n- Outcome: B\n- Scores: 9/8`
 ]) assert.equal(parseCanonicalResultSummary(bad).ok, false);
+
+const nestedSummaryAdf = {
+  type: 'doc',
+  version: 1,
+  content: [
+    { type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: 'Completion Artifact' }] },
+    { type: 'heading', attrs: { level: 4 }, content: [{ type: 'text', text: 'Registry Result Summary' }] },
+    {
+      type: 'bulletList',
+      content: [
+        {
+          type: 'listItem',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Outcome: B' }] },
+            {
+              type: 'bulletList',
+              content: [
+                { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Extra: nested evidence' }] }] }
+              ]
+            }
+          ]
+        },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Scores: 9/8' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Signal: X' }] }] }
+      ]
+    }
+  ]
+};
+const nestedSummary = parseCanonicalResultSummary(nestedSummaryAdf);
+assert.equal(nestedSummary.ok, false);
+assert.match(nestedSummary.error, /three top-level bullet-list items/i);
+
+const orderedSummaryAdf = {
+  type: 'doc',
+  version: 1,
+  content: [
+    { type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: 'Completion Artifact' }] },
+    { type: 'heading', attrs: { level: 4 }, content: [{ type: 'text', text: 'Registry Result Summary' }] },
+    {
+      type: 'orderedList',
+      content: [
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Outcome: B' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Scores: 9/8' }] }] },
+        { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Signal: X' }] }] }
+      ]
+    }
+  ]
+};
+const orderedSummary = parseCanonicalResultSummary(orderedSummaryAdf);
+assert.equal(orderedSummary.ok, false);
+assert.match(orderedSummary.error, /three top-level bullet-list items/i);
 
 const invalidRecords = [
   issue('BEN-50', ['candidate-evaluation', 'benchmark-testing'], 'new'),
