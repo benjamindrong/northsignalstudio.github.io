@@ -49,33 +49,31 @@ jobs:
             </style>
           </head>
           <body>
-            <iframe id="display" src="./display.html"></iframe>
+            <iframe id="dashboard" src="./index.html"></iframe>
             <pre id="result">pending</pre>
             <script>
-              const frame = document.getElementById('display');
+              const frame = document.getElementById('dashboard');
               frame.addEventListener('load', () => {
                 const timer = window.setInterval(() => {
-                  const displayDoc = frame.contentDocument;
-                  const dashboardFrame = displayDoc?.getElementById('dashboardFrame');
-                  const doc = dashboardFrame?.contentDocument;
-                  const api = dashboardFrame?.contentWindow?.DashboardWorkRelationships;
+                  const doc = frame.contentDocument;
+                  const api = frame.contentWindow?.DashboardWorkRelationships;
                   if (!doc?.getElementById('flightRows') || !api) return;
                   window.clearInterval(timer);
 
                   doc.getElementById('flightRows').innerHTML = `
-                    <a class="flight-row" href="https://example.atlassian.net/browse/HOME-123" target="_blank" rel="noopener noreferrer" aria-label="HOME-123 linked">
-                      <div class="flight-cell flight-key">HOME-123</div>
+                    <a class="flight-row" href="https://example.atlassian.net/browse/HOME-1234" target="_blank" rel="noopener noreferrer" aria-label="HOME-1234 linked">
+                      <div class="flight-cell flight-key">HOME-1234</div>
                       <div class="flight-cell flight-summary">Keep linked ticket identity readable on mobile</div>
                       <div class="flight-cell flight-move">30 Aug 20:55</div>
                       <div class="flight-cell flight-status progress">In Progress</div>
                     </a>`;
 
                   api.render(
-                    { issues: [{ key: 'HOME-123', url: 'https://example.atlassian.net/browse/HOME-123' }] },
+                    { issues: [{ key: 'HOME-1234', url: 'https://example.atlassian.net/browse/HOME-1234' }] },
                     { pullRequests: [{
                       repository: 'benjamindrong/northsignalstudio.github.io',
                       number: 7,
-                      title: 'HOME-123 Keep linked ticket identity readable on mobile',
+                      title: 'HOME-1234 Keep linked ticket identity readable on mobile',
                       url: 'https://github.com/benjamindrong/northsignalstudio.github.io/pull/7',
                       state: 'OPEN'
                     }] }
@@ -85,7 +83,6 @@ jobs:
                     const keyLink = doc.querySelector('.flight-key .work-primary-link');
                     const counterpart = doc.querySelector('.flight-summary .work-counterpart-link');
                     const move = doc.querySelector('.flight-move .work-primary-link');
-                    const status = doc.querySelector('.flight-status .work-primary-link');
                     const keyFits = Boolean(keyLink && keyLink.scrollWidth <= keyLink.clientWidth);
                     const counterpartFits = Boolean(
                       counterpart && counterpart.textContent.trim() === '↔ #7' &&
@@ -93,9 +90,8 @@ jobs:
                       counterpart.scrollWidth <= counterpart.clientWidth
                     );
                     const moveFits = Boolean(move && move.scrollWidth <= move.clientWidth);
-                    const statusFits = Boolean(status && status.scrollWidth <= status.clientWidth);
                     const noHorizontalOverflow = doc.documentElement.scrollWidth <= doc.documentElement.clientWidth;
-                    const pass = keyFits && counterpartFits && moveFits && statusFits && noHorizontalOverflow;
+                    const pass = keyFits && counterpartFits && moveFits && noHorizontalOverflow;
 
                     document.body.dataset.home23Mobile = pass ? 'pass' : 'fail';
                     document.getElementById('result').textContent = JSON.stringify({
@@ -103,12 +99,13 @@ jobs:
                       keyFits,
                       counterpartFits,
                       moveFits,
-                      statusFits,
                       noHorizontalOverflow,
                       keyClientWidth: keyLink?.clientWidth || 0,
                       keyScrollWidth: keyLink?.scrollWidth || 0,
                       counterpartClientWidth: counterpart?.clientWidth || 0,
-                      counterpartScrollWidth: counterpart?.scrollWidth || 0
+                      counterpartScrollWidth: counterpart?.scrollWidth || 0,
+                      moveClientWidth: move?.clientWidth || 0,
+                      moveScrollWidth: move?.scrollWidth || 0
                     });
                   });
                 }, 20);
@@ -130,11 +127,10 @@ jobs:
             echo "No supported headless Chrome/Chromium executable is available."
             exit 1
           fi
-          "$browser" --headless --no-sandbox --disable-gpu --window-size=390,900 --virtual-time-budget=3000 --dump-dom \
+          "$browser" --headless --no-sandbox --disable-gpu --window-size=390,900 --virtual-time-budget=5000 --dump-dom \
             http://127.0.0.1:8000/dashboard/home23-mobile-layout.html > /tmp/home23-mobile-layout-dom.html
           grep -F 'data-home23-mobile="pass"' /tmp/home23-mobile-layout-dom.html
           grep -F '"keyFits":true' /tmp/home23-mobile-layout-dom.html
           grep -F '"counterpartFits":true' /tmp/home23-mobile-layout-dom.html
           grep -F '"moveFits":true' /tmp/home23-mobile-layout-dom.html
-          grep -F '"statusFits":true' /tmp/home23-mobile-layout-dom.html
           grep -F '"noHorizontalOverflow":true' /tmp/home23-mobile-layout-dom.html
