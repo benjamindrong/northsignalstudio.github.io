@@ -34,6 +34,18 @@ for (const token of ['--bg: #f4f6f8;', '--panel: #ffffff;', '--text: #15191e;', 
   if (!css.includes(token)) fail(`theme.css is missing required light token: ${token}`);
 }
 
+const compactFlightLayout = [
+  '@media (max-width: 470px)',
+  'grid-template-columns: 60px minmax(42px, 1fr) 68px 60px;',
+  'column-gap: 2px;',
+  '.flight-move {\n    font-size: 8px;'
+];
+for (const contract of compactFlightLayout) {
+  if (!css.includes(contract)) {
+    fail(`theme.css is missing the compact Flight Control identity contract: ${contract}`);
+  }
+}
+
 const benchmarkJs = await readFile(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
 for (const darkDeclaration of [
   'background: #15140e;',
