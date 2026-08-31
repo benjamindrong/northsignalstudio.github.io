@@ -9,8 +9,6 @@ on:
       - "dashboard/refresh-health.js"
       - "dashboard/jira-flight-control.config.json"
       - "scripts/benchmark-registry.mjs"
-      - "scripts/benchmark-registry-legacy.mjs"
-      - "scripts/benchmark-registry-cutover-policy.mjs"
       - "scripts/test-benchmark-registry.mjs"
       - "scripts/test-home24-hardening.mjs"
       - "scripts/test-dashboard-refresh.mjs"
@@ -19,16 +17,6 @@ on:
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
-    inputs:
-      benchmark_registry_authority:
-        description: "Benchmark Review runtime authority"
-        required: false
-        default: "preserve"
-        type: choice
-        options:
-          - "preserve"
-          - "jira-native"
-          - "ben-8"
   push:
     branches: [main]
     paths:
@@ -38,8 +26,6 @@ on:
       - "dashboard/refresh-health.js"
       - "dashboard/jira-flight-control.config.json"
       - "scripts/benchmark-registry.mjs"
-      - "scripts/benchmark-registry-legacy.mjs"
-      - "scripts/benchmark-registry-cutover-policy.mjs"
       - "scripts/test-benchmark-registry.mjs"
       - "scripts/test-home24-hardening.mjs"
       - "scripts/test-dashboard-refresh.mjs"
@@ -67,12 +53,9 @@ jobs:
       - name: Verify refresh logic
         run: |
           node --check scripts/benchmark-registry.mjs
-          node --check scripts/benchmark-registry-legacy.mjs
-          node --check scripts/benchmark-registry-cutover-policy.mjs
           node --check scripts/refresh-jira-flight-control.mjs
           node scripts/test-benchmark-registry.mjs
           node scripts/test-home24-hardening.mjs
-          node scripts/benchmark-registry-cutover-policy.mjs --self-test
           node scripts/refresh-jira-flight-control.mjs --self-test
           node scripts/test-dashboard-refresh.mjs
 
@@ -94,7 +77,7 @@ jobs:
             [health, 'payload.benchmarkReview', 'Jira snapshot Benchmark Review bridge'],
             [benchmark, "new Set(['Preparing', 'Blocked', 'Running'])", 'active benchmark statuses'],
             [benchmark, 'benchmark-columns completed-only', 'completed-only full-width layout'],
-            [benchmark, 'registry.sourceLabel', 'active registry authority metadata'],
+            [benchmark, 'registry.sourceLabel', 'registry source metadata'],
             [benchmark, "run.activityKind === 'benchmark-testing'", 'Application Testing result distinction'],
             [benchmark, 'Defined unused benchmarks', 'defined-unused registry distinction']
           ];
@@ -107,80 +90,54 @@ jobs:
       - name: Verify Benchmark Review browser states
         run: |
           cat > dashboard/benchmark-review-completed-only.html <<'HTML'
-          <!doctype html>
-          <html><head><meta charset="utf-8"></head><body>
-          <div class="dashboard-grid"></div>
-          <script src="./benchmark-review.js"></script>
-          <script>
-            DashboardBenchmarkReview.render({
-              state: 'ready',
-              authority: 'jira-native',
-              sourceKey: 'BEN',
-              sourceLabel: 'Jira-native BEN registry',
-              selectedNext: null,
-              pointerError: 'BEN-21 Parent is missing.',
-              invalidRecords: [],
-              runs: [
-                { key: 'BEN-14', title: 'Crossmark Physical Signal Hunt Field Benchmark', status: 'Completed', statusRaw: 'Completed', activityKind: 'benchmark-testing', type: 'Benchmark Testing', source: 'CROS-1', resultState: 'none', resultLines: [] },
-                { key: 'BEN-13', title: 'Crossmark X Handoff Benchmark', status: 'Unused', statusRaw: 'Unused', activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', source: 'CROS-1', resultState: 'none', resultLines: [] }
-              ],
-              previouslyConsidered: [{ key: 'BEN-22', title: 'MyRAM Markdown Preview', detail: '' }],
-              freshBacklog: []
-            });
-            document.querySelectorAll('script').forEach(node => node.remove());
-          </script>
-          </body></html>
+          <!doctype html><html><head><meta charset="utf-8"></head><body>
+          <div class="dashboard-grid"></div><script src="./benchmark-review.js"></script><script>
+          DashboardBenchmarkReview.render({
+            state:'ready',authority:'jira-native',sourceKey:'BEN',sourceLabel:'Jira-native BEN registry',
+            selectedNext:null,pointerError:'BEN-21 Parent is missing.',invalidRecords:[],
+            runs:[
+              {key:'BEN-14',title:'Crossmark Physical Signal Hunt Field Benchmark',status:'Completed',statusRaw:'Completed',activityKind:'benchmark-testing',type:'Benchmark Testing',source:'CROS-1',resultState:'none',resultLines:[]},
+              {key:'BEN-13',title:'Crossmark X Handoff Benchmark',status:'Unused',statusRaw:'Unused',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'CROS-1',resultState:'none',resultLines:[]}
+            ],
+            previouslyConsidered:[{key:'BEN-22',title:'MyRAM Markdown Preview',detail:''}],
+            freshBacklog:[{group:'Fresh idea backlog',ideas:[{key:'BEN-25',title:'Runline Needs Anchoring',detail:''}]}]
+          });
+          document.querySelectorAll('script').forEach(node=>node.remove());
+          </script></body></html>
           HTML
 
           cat > dashboard/benchmark-review-active.html <<'HTML'
-          <!doctype html>
-          <html><head><meta charset="utf-8"></head><body>
-          <div class="dashboard-grid"></div>
-          <script src="./benchmark-review.js"></script>
-          <script>
-            DashboardBenchmarkReview.render({
-              state: 'ready',
-              authority: 'jira-native',
-              sourceKey: 'BEN',
-              sourceLabel: 'Jira-native BEN registry',
-              selectedNext: { key: 'BEN-17', title: 'Runline Event Board PRD Candidate Evaluation', status: 'Preparing', statusRaw: 'Preparing', activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', source: 'RUN-5', resultState: 'none', resultLines: [] },
-              pointerError: '',
-              invalidRecords: [{ key: 'BEN-99', title: 'Invalid fixture', reasons: ['Invalid lifecycle fixture.'] }],
-              runs: [
-                { key: 'BEN-17', title: 'Runline Event Board PRD Candidate Evaluation', status: 'Preparing', statusRaw: 'Preparing', activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', source: 'RUN-5', resultState: 'none', resultLines: [] },
-                { key: 'BEN-40', title: 'Blocked candidate', status: 'Blocked', statusRaw: 'Blocked', activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', source: 'Unknown', resultState: 'none', resultLines: [] },
-                { key: 'BEN-11', title: 'Crossmark Signal Hunt Benchmark', status: 'Completed', statusRaw: 'Completed', activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', source: 'CROS-1', resultState: 'recorded', resultLines: ['Outcome: Response B won.', 'Scores: Unknown', 'Signal: State continuity.'] }
-              ],
-              previouslyConsidered: [],
-              freshBacklog: []
-            });
-            document.querySelectorAll('script').forEach(node => node.remove());
-          </script>
-          </body></html>
+          <!doctype html><html><head><meta charset="utf-8"></head><body>
+          <div class="dashboard-grid"></div><script src="./benchmark-review.js"></script><script>
+          DashboardBenchmarkReview.render({
+            state:'ready',authority:'jira-native',sourceKey:'BEN',sourceLabel:'Jira-native BEN registry',
+            selectedNext:{key:'BEN-17',title:'Runline Event Board PRD Candidate Evaluation',status:'Preparing',statusRaw:'Preparing',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'RUN-5',resultState:'none',resultLines:[]},
+            pointerError:'',invalidRecords:[{key:'BEN-99',title:'Invalid fixture',reasons:['Invalid lifecycle fixture.']}],
+            runs:[
+              {key:'BEN-17',title:'Runline Event Board PRD Candidate Evaluation',status:'Preparing',statusRaw:'Preparing',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'RUN-5',resultState:'none',resultLines:[]},
+              {key:'BEN-40',title:'Blocked candidate',status:'Blocked',statusRaw:'Blocked',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'Unknown',resultState:'none',resultLines:[]},
+              {key:'BEN-41',title:'Running candidate',status:'Running',statusRaw:'Running',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'Unknown',resultState:'none',resultLines:[]},
+              {key:'BEN-11',title:'Crossmark Signal Hunt Benchmark',status:'Completed',statusRaw:'Completed',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'CROS-1',resultState:'recorded',resultLines:['Outcome: Response B won.','Scores: Unknown','Signal: State continuity.']},
+              {key:'BEN-10',title:'PR Health',status:'Completed',statusRaw:'Completed',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'HOME-12',resultState:'backfill',resultLines:['Result: Unknown / backfill.']}
+            ],previouslyConsidered:[],freshBacklog:[]
+          });
+          document.querySelectorAll('script').forEach(node=>node.remove());
+          </script></body></html>
           HTML
 
-          cat > dashboard/benchmark-review-rollback.html <<'HTML'
-          <!doctype html>
-          <html><head><meta charset="utf-8"></head><body>
-          <div class="dashboard-grid"></div>
-          <script src="./benchmark-review.js"></script>
-          <script type="module">
-            import { projectBenchmarkRegistry } from '../scripts/benchmark-registry-legacy.mjs';
-            const registry = projectBenchmarkRegistry(`
-          ## Benchmark Run Ledger
-          ### BEN-6 — Benchmark idea discovery
-          - Status: Completed
-          ### BEN-14 — Crossmark Physical Signal Hunt Field Benchmark
-          - Status: Completed
-          - Type: Benchmark Testing — production field benchmark
-          ### BEN-17 — Runline Event Board PRD Candidate Evaluation
-          - Status: Selected — next
-          - Type: Candidate Evaluation — comparative model documentation exercise
-            `);
-            DashboardBenchmarkReview.render(registry);
-            document.querySelectorAll('script').forEach(node => node.remove());
-          </script>
-          </body></html>
+          cat > dashboard/benchmark-review-legacy-type.html <<'HTML'
+          <!doctype html><html><head><meta charset="utf-8"></head><body>
+          <div class="dashboard-grid"></div><script src="./benchmark-review.js"></script><script>
+          DashboardBenchmarkReview.render({
+            state:'ready',authority:'jira-native',sourceKey:'BEN',sourceLabel:'Jira-native BEN registry',
+            selectedNext:{key:'BEN-17',title:'Legacy candidate type fallback',status:'Preparing',statusRaw:'Preparing',type:'Candidate Evaluation — legacy snapshot',source:'RUN-5',resultState:'none',resultLines:[]},
+            pointerError:'',invalidRecords:[],runs:[
+              {key:'BEN-17',title:'Legacy candidate type fallback',status:'Preparing',statusRaw:'Preparing',type:'Candidate Evaluation — legacy snapshot',source:'RUN-5',resultState:'none',resultLines:[]},
+              {key:'BEN-14',title:'Legacy testing type fallback',status:'Completed',statusRaw:'Completed',type:'Benchmark Testing — legacy snapshot',source:'CROS-1',resultState:'none',resultLines:[]}
+            ],previouslyConsidered:[],freshBacklog:[]
+          });
+          document.querySelectorAll('script').forEach(node=>node.remove());
+          </script></body></html>
           HTML
 
           python3 -m http.server 8000 >/tmp/dashboard-http.log 2>&1 &
@@ -191,23 +148,17 @@ jobs:
             sleep 0.2
           done
           browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
-          if [ -z "$browser" ]; then
-            echo "No supported headless Chrome/Chromium executable is available."
-            exit 1
-          fi
+          test -n "$browser" || { echo "No supported headless Chrome/Chromium executable is available."; exit 1; }
 
-          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom \
-            http://127.0.0.1:8000/dashboard/index.html > /tmp/dashboard-index-dom.html
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/index.html > /tmp/dashboard-index-dom.html
           grep -F 'widget widget--benchmark' /tmp/dashboard-index-dom.html
           grep -F 'Unlock the dashboard to load Benchmark Review.' /tmp/dashboard-index-dom.html
 
-          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom \
-            http://127.0.0.1:8000/dashboard/display.html > /tmp/dashboard-display-dom.html
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/display.html > /tmp/dashboard-display-dom.html
           grep -F 'data-view="3"' /tmp/dashboard-display-dom.html
           grep -F '>Benchmark Review</button>' /tmp/dashboard-display-dom.html
 
-          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom \
-            http://127.0.0.1:8000/dashboard/benchmark-review-completed-only.html > /tmp/benchmark-completed-only-dom.html
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/benchmark-review-completed-only.html > /tmp/benchmark-completed-only-dom.html
           grep -F 'Jira-native BEN registry' /tmp/benchmark-completed-only-dom.html
           grep -F 'class="benchmark-columns completed-only"' /tmp/benchmark-completed-only-dom.html
           grep -F 'Completed · 1' /tmp/benchmark-completed-only-dom.html
@@ -215,67 +166,214 @@ jobs:
           grep -F 'Application testing record.' /tmp/benchmark-completed-only-dom.html
           grep -F 'Defined unused benchmarks' /tmp/benchmark-completed-only-dom.html
           grep -F 'Previously considered / unused' /tmp/benchmark-completed-only-dom.html
-          if grep -F 'Active ·' /tmp/benchmark-completed-only-dom.html; then
-            echo "Completed-only case unexpectedly rendered an Active group."
-            exit 1
-          fi
+          grep -F 'Fresh · Fresh idea backlog' /tmp/benchmark-completed-only-dom.html
+          if grep -F 'Active ·' /tmp/benchmark-completed-only-dom.html; then exit 1; fi
 
-          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom \
-            http://127.0.0.1:8000/dashboard/benchmark-review-active.html > /tmp/benchmark-active-dom.html
-          grep -F 'Active · 2' /tmp/benchmark-active-dom.html
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/benchmark-review-active.html > /tmp/benchmark-active-dom.html
+          grep -F 'Active · 3' /tmp/benchmark-active-dom.html
           grep -F 'BEN-17 · Runline Event Board PRD Candidate Evaluation' /tmp/benchmark-active-dom.html
           grep -F 'Type: Comparative Evaluation' /tmp/benchmark-active-dom.html
           grep -F 'class="benchmark-status blocked"' /tmp/benchmark-active-dom.html
-          grep -F '>Blocked</span>' /tmp/benchmark-active-dom.html
-          grep -F 'Completed · 1' /tmp/benchmark-active-dom.html
+          grep -F 'class="benchmark-status running"' /tmp/benchmark-active-dom.html
+          grep -F 'Completed · 2' /tmp/benchmark-active-dom.html
+          grep -F 'Outcome: Response B won.' /tmp/benchmark-active-dom.html
+          grep -F 'Result: Unknown / backfill.' /tmp/benchmark-active-dom.html
           grep -F 'Invalid registry records · 1' /tmp/benchmark-active-dom.html
-          if grep -F 'benchmark-columns completed-only' /tmp/benchmark-active-dom.html; then
-            echo "Active-work case incorrectly used the completed-only layout."
-            exit 1
-          fi
+          if grep -F 'benchmark-columns completed-only' /tmp/benchmark-active-dom.html; then exit 1; fi
 
-          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom \
-            http://127.0.0.1:8000/dashboard/benchmark-review-rollback.html > /tmp/benchmark-rollback-dom.html
-          grep -F 'BEN-8 temporary rollback authority' /tmp/benchmark-rollback-dom.html
-          grep -F 'BEN-14 · Crossmark Physical Signal Hunt Field Benchmark' /tmp/benchmark-rollback-dom.html
-          grep -F 'Type: Application Testing' /tmp/benchmark-rollback-dom.html
-          grep -F 'Application testing record.' /tmp/benchmark-rollback-dom.html
-          grep -F 'BEN-17 · Runline Event Board PRD Candidate Evaluation' /tmp/benchmark-rollback-dom.html
-          grep -F 'Type: Comparative Evaluation' /tmp/benchmark-rollback-dom.html
-          grep -F 'No comparative results recorded yet.' /tmp/benchmark-rollback-dom.html
-          if grep -F 'Result: Unknown / backfill.' /tmp/benchmark-rollback-dom.html; then
-            echo "Rollback fixture rendered Comparative Evaluation backfill semantics for a non-completed or Application Testing record."
-            exit 1
-          fi
-          if grep -F 'href="https://benjamindrong80.atlassian.net/browse/BEN-6"' /tmp/benchmark-rollback-dom.html; then
-            echo "Rollback fixture projected excluded BEN-6 support history."
-            exit 1
-          fi
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/benchmark-review-legacy-type.html > /tmp/benchmark-legacy-type-dom.html
+          grep -F 'Type: Application Testing — legacy snapshot' /tmp/benchmark-legacy-type-dom.html
+          grep -F 'Type: Comparative Evaluation — legacy snapshot' /tmp/benchmark-legacy-type-dom.html
+          grep -F 'Application testing record.' /tmp/benchmark-legacy-type-dom.html
+          grep -F 'No comparative results recorded yet.' /tmp/benchmark-legacy-type-dom.html
+
+          rm -f dashboard/benchmark-review-completed-only.html dashboard/benchmark-review-active.html dashboard/benchmark-review-legacy-type.html
 
       - name: Verify candidate diff
         run: |
           git fetch --no-tags origin main
           git diff --check FETCH_HEAD...HEAD
 
-      - name: Verify HOME-24 Slice 1 live Jira-native and BEN-8 parity
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          github.event.pull_request.head.ref == 'HOME-24-Slice-1-Jira-native-registry-projection-and-production-cutover' &&
-          github.actor == github.repository_owner
+  live-gate:
+    name: HOME-24 reviewed live gate
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.actor == github.repository_owner &&
+      startsWith(github.ref_name, 'HOME-24-Slice-2-live-gate-pr')
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify frozen ref and reviewed PR identity
+        id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ref="$GITHUB_REF_NAME"
+          if [[ ! "$ref" =~ ^HOME-24-Slice-2-live-gate-pr([0-9]+)-([0-9a-f]{40})$ ]]; then
+            echo "Malformed HOME-24 live-gate ref."
+            exit 1
+          fi
+          pr_number="${BASH_REMATCH[1]}"
+          encoded_sha="${BASH_REMATCH[2]}"
+          test "$encoded_sha" = "$GITHUB_SHA" || { echo "Frozen ref SHA does not match encoded reviewed SHA."; exit 1; }
+          pr_json="$(curl --fail-with-body --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$pr_number")"
+          test "$(jq -r '.state' <<<"$pr_json")" = "open" || { echo "Reviewed PR is not open."; exit 1; }
+          test "$(jq -r '.base.ref' <<<"$pr_json")" = "main" || { echo "Reviewed PR base is not main."; exit 1; }
+          test "$(jq -r '.head.repo.full_name' <<<"$pr_json")" = "$GITHUB_REPOSITORY" || { echo "Reviewed PR head is not same-repository."; exit 1; }
+          head_ref="$(jq -r '.head.ref' <<<"$pr_json")"
+          if [ "$head_ref" != "HOME-24-Slice-2-Remove-legacy-parser-and-finalize-registry-authority" ] && \
+             [[ ! "$head_ref" =~ ^HOME-24-Slice-2-Remove-legacy-parser-and-finalize-registry-authority-repair-.+ ]]; then
+            echo "Reviewed PR head branch is not an approved HOME-24 Slice 2 branch."
+            exit 1
+          fi
+          head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
+          test "$head_sha" = "$GITHUB_SHA" || { echo "Reviewed PR head SHA changed."; exit 1; }
+          test "$head_sha" = "$encoded_sha" || { echo "Reviewed PR SHA does not match frozen-ref identity."; exit 1; }
+          echo "identity_verified=true" >> "$GITHUB_OUTPUT"
+          echo "reviewed_pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "reviewed_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "Frozen HOME-24 live-gate identity verified for PR #$pr_number at $head_sha."
+
+      - name: Check out exact reviewed candidate
+        if: success() && steps.identity.outputs.identity_verified == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Confirm exact checkout
+        if: success() && steps.identity.outputs.identity_verified == 'true'
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Run credentialed candidate and production read-only gate
+        if: success() && steps.identity.outputs.identity_verified == 'true'
         env:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
-          OUTPUT_PATH: /tmp/jira-flight-control.enc.json
+          GH_TOKEN: ${{ github.token }}
+          OUTPUT_PATH: /tmp/home24-slice2-live.enc.json
           VERIFY_PROJECTS: MYR,LAN
-          VERIFY_BENCHMARK_AUTHORITY: jira-native
         run: |
-          parity_output="$(node scripts/refresh-jira-flight-control.mjs --verify-benchmark-parity)"
-          printf '%s\n' "$parity_output"
-          printf '%s\n' "$parity_output" | node scripts/benchmark-registry-cutover-policy.mjs verify-parity-output
+          set -euo pipefail
+          set +x
           node scripts/refresh-jira-flight-control.mjs
           node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { decryptPayload } from './scripts/refresh-jira-flight-control.mjs';
+
+          const jiraBase = 'https://benjamindrong80.atlassian.net';
+          const jiraAuth = `Basic ${Buffer.from(`${process.env.JIRA_EMAIL}:${process.env.JIRA_API_TOKEN}`).toString('base64')}`;
+          const ghHeaders = {
+            Accept: 'application/vnd.github+json',
+            Authorization: `Bearer ${process.env.GH_TOKEN}`,
+            'X-GitHub-Api-Version': '2022-11-28'
+          };
+          const forbiddenPointerLabels = new Set([
+            'candidate-evaluation','benchmark-testing','registry-idea','registry-blocked','registry-retired',
+            'registry-idea-considered','registry-idea-fresh','registry-result-summary','registry-result-unknown'
+          ]);
+          async function jira(url, options = {}) {
+            const response = await fetch(url, { ...options, headers: { Accept:'application/json', Authorization:jiraAuth, ...(options.body ? {'Content-Type':'application/json'} : {}) } });
+            if (!response.ok) throw new Error(`Jira read failed: ${response.status}`);
+            return response.json();
+          }
+          async function independentPointer() {
+            const issues = [];
+            let nextPageToken;
+            do {
+              const body = {
+                jql: 'project = "BEN" AND summary ~ "\\\"Benchmark Registry Next Pointer\\\"" ORDER BY key ASC',
+                maxResults: Math.min(20 - issues.length, 20),
+                fields: ['summary']
+              };
+              if (nextPageToken) body.nextPageToken = nextPageToken;
+              const page = await jira(`${jiraBase}/rest/api/3/search/jql`, { method:'POST', body:JSON.stringify(body) });
+              issues.push(...(page.issues || []));
+              nextPageToken = page.nextPageToken;
+              if (nextPageToken && issues.length >= 20) throw new Error('Pointer identity search exceeded bound of 20.');
+            } while (nextPageToken);
+            const normalize = value => String(value || '').replace(/\s+/g,' ').trim().toLowerCase();
+            const exact = issues.filter(issue => normalize(issue.fields?.summary) === 'benchmark registry next pointer');
+            if (exact.length !== 1 || exact[0].key !== 'BEN-21') throw new Error('Independent pointer-title identity check did not resolve uniquely to BEN-21.');
+            const pointer = await jira(`${jiraBase}/rest/api/3/issue/BEN-21?fields=summary,parent,updated,labels,issuetype`);
+            if (pointer.fields?.issuetype?.subtask !== true) throw new Error('BEN-21 is not a Subtask.');
+            if ((pointer.fields?.labels || []).some(label => forbiddenPointerLabels.has(String(label).trim().toLowerCase()))) throw new Error('BEN-21 carries a pointer-forbidden label.');
+            const parentKey = String(pointer.fields?.parent?.key || '').trim();
+            if (!/^BEN-\d+$/.test(parentKey)) throw new Error('BEN-21 Parent is missing or outside BEN.');
+            const parent = await jira(`${jiraBase}/rest/api/3/issue/${encodeURIComponent(parentKey)}?fields=summary,status,labels,updated,issuetype`);
+            const labels = new Set((parent.fields?.labels || []).map(label => String(label).trim().toLowerCase()));
+            const activities = ['candidate-evaluation','benchmark-testing'].filter(label => labels.has(label));
+            if (activities.length !== 1 || ['registry-idea','registry-retired','registry-idea-considered','registry-idea-fresh','registry-result-summary','registry-result-unknown'].some(label => labels.has(label))) throw new Error('BEN-21 Parent is not an eligible registry activity.');
+            if (normalize(pointer.fields?.summary) !== 'benchmark registry next pointer') throw new Error('Fetched BEN-21 summary identity is invalid.');
+            const category = String(parent.fields?.status?.statusCategory?.key || '').toLowerCase();
+            const blocked = labels.has('registry-blocked');
+            const eligible = blocked ? ['new','indeterminate'].includes(category) : ['new','indeterminate'].includes(category);
+            if (!eligible) throw new Error('BEN-21 Parent lifecycle is not Preparing, Blocked, or Running.');
+            return { key:'BEN-21', parentKey, updated:String(pointer.fields?.updated || ''), parentUpdated:String(parent.fields?.updated || '') };
+          }
+          function assertRegistry(registry, parentKey, label) {
+            if (registry?.authority !== 'jira-native' || registry?.sourceKey !== 'BEN' || registry?.sourceLabel !== 'Jira-native BEN registry') throw new Error(`${label} source metadata is not Jira-native BEN.`);
+            if (registry?.state !== 'ready') throw new Error(`${label} registry is not ready.`);
+            if (registry?.pointerError) throw new Error(`${label} registry has a pointer error.`);
+            if (registry?.selectedNext?.key !== parentKey) throw new Error(`${label} selected-next does not match independently observed BEN-21 Parent.`);
+          }
+          function writePage(file, registry) {
+            fs.writeFileSync(file, `<!doctype html><html><head><meta charset="utf-8"></head><body><div class="dashboard-grid"></div><script src="./benchmark-review.js"></script><script>DashboardBenchmarkReview.render(${JSON.stringify(registry)});document.querySelectorAll('script').forEach(n=>n.remove());</script></body></html>`);
+          }
+
+          const pointer = await independentPointer();
+          const candidateEnvelope = JSON.parse(fs.readFileSync(process.env.OUTPUT_PATH, 'utf8'));
+          const candidate = decryptPayload(candidateEnvelope, process.env.DASHBOARD_DATA_PASSPHRASE).benchmarkReview;
+          assertRegistry(candidate, pointer.parentKey, 'Candidate');
+          writePage('dashboard/.home24-live-candidate.html', candidate);
+
+          async function githubJson(url) {
+            const response = await fetch(url, { headers: ghHeaders });
+            if (!response.ok) throw new Error(`GitHub read failed: ${response.status}`);
+            return response.json();
+          }
+          const branchUrl = `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/branches/dashboard-data`;
+          const firstHead = (await githubJson(branchUrl)).commit.sha;
+          const content = await githubJson(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/contents/dashboard/jira-flight-control.enc.json?ref=${firstHead}`);
+          const productionEnvelope = JSON.parse(Buffer.from(String(content.content || '').replace(/\n/g,''), 'base64').toString('utf8'));
+          const production = decryptPayload(productionEnvelope, process.env.DASHBOARD_DATA_PASSPHRASE).benchmarkReview;
+          assertRegistry(production, pointer.parentKey, 'Production');
+          const secondHead = (await githubJson(branchUrl)).commit.sha;
+          if (secondHead !== firstHead) throw new Error('dashboard-data moved during production snapshot check.');
+          writePage('dashboard/.home24-live-production.html', production);
+          fs.writeFileSync('/tmp/home24-pointer.json', JSON.stringify(pointer));
+          console.log(`HOME-24 live gate data checks passed: BEN-21 -> ${pointer.parentKey}; dashboard-data ${firstHead}.`);
+          NODE
+
+          python3 -m http.server 8000 >/tmp/home24-live-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do curl -fsS http://127.0.0.1:8000/dashboard/index.html >/dev/null && break; sleep 0.2; done
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          test -n "$browser"
+          parent_key="$(node -e "console.log(JSON.parse(require('fs').readFileSync('/tmp/home24-pointer.json','utf8')).parentKey)")"
+          for page in candidate production; do
+            "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom "http://127.0.0.1:8000/dashboard/.home24-live-$page.html" > "/tmp/home24-$page-dom.html"
+            grep -F 'Jira-native BEN registry' "/tmp/home24-$page-dom.html"
+            grep -F "$parent_key" "/tmp/home24-$page-dom.html"
+            grep -F 'Application Testing' "/tmp/home24-$page-dom.html"
+            grep -F 'Comparative Evaluation' "/tmp/home24-$page-dom.html"
+            if grep -F 'temporary rollback authority' "/tmp/home24-$page-dom.html"; then echo "Alternate authority presentation detected."; exit 1; fi
+          done
+          rm -f dashboard/.home24-live-candidate.html dashboard/.home24-live-production.html
+          echo "HOME-24 exact-candidate live browser gate passed."
 
   publish:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -288,6 +386,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Check out encrypted data branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -295,23 +394,7 @@ jobs:
           ref: dashboard-data
           path: _dashboard-data
 
-      - name: Resolve persistent Benchmark Review authority
-        env:
-          REQUESTED_BENCHMARK_REGISTRY_AUTHORITY: ${{ github.event_name == 'workflow_dispatch' && inputs.benchmark_registry_authority || '' }}
-        run: |
-          authority_path="_dashboard-data/dashboard/benchmark-registry-authority.txt"
-          mkdir -p "$(dirname "$authority_path")"
-          authority="$(node scripts/benchmark-registry-cutover-policy.mjs resolve-authority "$REQUESTED_BENCHMARK_REGISTRY_AUTHORITY" "$authority_path" jira-native)"
-          case "$REQUESTED_BENCHMARK_REGISTRY_AUTHORITY" in
-            jira-native|ben-8) authority_change_requested=true ;;
-            *) authority_change_requested=false ;;
-          esac
-          printf '%s\n' "$authority" > "$authority_path"
-          printf 'BENCHMARK_REGISTRY_AUTHORITY=%s\n' "$authority" >> "$GITHUB_ENV"
-          printf 'BENCHMARK_AUTHORITY_CHANGE_REQUESTED=%s\n' "$authority_change_requested" >> "$GITHUB_ENV"
-          echo "Benchmark registry authority resolved to $authority."
-
-      - name: Refresh and verify encrypted Jira snapshot
+      - name: Refresh and verify Jira-native encrypted snapshot
         env:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
@@ -319,19 +402,96 @@ jobs:
           PREVIOUS_PATH: _dashboard-data/dashboard/jira-flight-control.enc.json
           OUTPUT_PATH: _dashboard-data/dashboard/jira-flight-control.enc.json
         run: |
+          set -euo pipefail
+          set +x
           node scripts/refresh-jira-flight-control.mjs
-          if [ "$BENCHMARK_AUTHORITY_CHANGE_REQUESTED" = "true" ]; then
-            VERIFY_BENCHMARK_AUTHORITY="$BENCHMARK_REGISTRY_AUTHORITY" node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
-          else
-            node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
-          fi
+          node scripts/refresh-jira-flight-control.mjs --verify-output "$OUTPUT_PATH"
 
-      - name: Publish changed snapshot and authority state
+      - name: Detect one-time cutover finalization
+        run: |
+          # HOME-24 CUTOVER FINALIZATION BEGIN
+          if test -e "_dashboard-data/dashboard/benchmark-registry-authority.txt"; then
+            echo "HOME24_CUTOVER_PENDING=true" >> "$GITHUB_ENV"
+          else
+            echo "HOME24_CUTOVER_PENDING=false" >> "$GITHUB_ENV"
+          fi
+          # HOME-24 CUTOVER FINALIZATION END
+
+      - name: Verify first Jira-native cutover before state deletion
+        if: env.HOME24_CUTOVER_PENDING == 'true'
+        env:
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          set +x
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { decryptPayload } from './scripts/refresh-jira-flight-control.mjs';
+          const base = 'https://benjamindrong80.atlassian.net';
+          const auth = `Basic ${Buffer.from(`${process.env.JIRA_EMAIL}:${process.env.JIRA_API_TOKEN}`).toString('base64')}`;
+          async function jira(url, options={}) {
+            const response = await fetch(url,{...options,headers:{Accept:'application/json',Authorization:auth,...(options.body?{'Content-Type':'application/json'}:{})}});
+            if(!response.ok) throw new Error(`Jira read failed: ${response.status}`);
+            return response.json();
+          }
+          const issues=[]; let token;
+          do {
+            const body={jql:'project = "BEN" AND summary ~ "\\\"Benchmark Registry Next Pointer\\\"" ORDER BY key ASC',maxResults:Math.min(20-issues.length,20),fields:['summary']};
+            if(token) body.nextPageToken=token;
+            const page=await jira(`${base}/rest/api/3/search/jql`,{method:'POST',body:JSON.stringify(body)});
+            issues.push(...(page.issues||[])); token=page.nextPageToken;
+            if(token && issues.length>=20) throw new Error('Pointer identity search exceeded bound of 20.');
+          } while(token);
+          const normalize=v=>String(v||'').replace(/\s+/g,' ').trim().toLowerCase();
+          const exact=issues.filter(issue=>normalize(issue.fields?.summary)==='benchmark registry next pointer');
+          if(exact.length!==1 || exact[0].key!=='BEN-21') throw new Error('Pointer identity is not uniquely BEN-21.');
+          const pointer=await jira(`${base}/rest/api/3/issue/BEN-21?fields=summary,parent,updated,labels,issuetype`);
+          const forbidden=new Set(['candidate-evaluation','benchmark-testing','registry-idea','registry-blocked','registry-retired','registry-idea-considered','registry-idea-fresh','registry-result-summary','registry-result-unknown']);
+          if(pointer.fields?.issuetype?.subtask!==true || normalize(pointer.fields?.summary)!=='benchmark registry next pointer' || (pointer.fields?.labels||[]).some(label=>forbidden.has(String(label).trim().toLowerCase()))) throw new Error('BEN-21 pointer identity/labels invalid.');
+          const parentKey=String(pointer.fields?.parent?.key||'').trim();
+          const parent=await jira(`${base}/rest/api/3/issue/${encodeURIComponent(parentKey)}?fields=status,labels,updated`);
+          const labels=new Set((parent.fields?.labels||[]).map(v=>String(v).trim().toLowerCase()));
+          const activities=['candidate-evaluation','benchmark-testing'].filter(v=>labels.has(v));
+          const category=String(parent.fields?.status?.statusCategory?.key||'').toLowerCase();
+          if(activities.length!==1 || ['registry-idea','registry-retired','registry-idea-considered','registry-idea-fresh','registry-result-summary','registry-result-unknown'].some(label=>labels.has(label)) || !['new','indeterminate'].includes(category)) throw new Error('BEN-21 Parent is not eligible.');
+          const envelope=JSON.parse(fs.readFileSync('_dashboard-data/dashboard/jira-flight-control.enc.json','utf8'));
+          const registry=decryptPayload(envelope,process.env.DASHBOARD_DATA_PASSPHRASE).benchmarkReview;
+          if(registry?.authority!=='jira-native'||registry?.sourceKey!=='BEN'||registry?.sourceLabel!=='Jira-native BEN registry'||registry?.state!=='ready'||registry?.pointerError||registry?.selectedNext?.key!==parentKey) throw new Error('First-cutover snapshot failed Jira-native ready/pointer assertions.');
+          fs.writeFileSync('dashboard/.home24-cutover.html',`<!doctype html><html><body><div class="dashboard-grid"></div><script src="./benchmark-review.js"></script><script>DashboardBenchmarkReview.render(${JSON.stringify(registry)});document.querySelectorAll('script').forEach(n=>n.remove());</script></body></html>`);
+          fs.writeFileSync('/tmp/home24-cutover-parent.txt',parentKey);
+          NODE
+          python3 -m http.server 8000 >/tmp/home24-cutover-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do curl -fsS http://127.0.0.1:8000/dashboard/index.html >/dev/null && break; sleep 0.2; done
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          test -n "$browser"
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/.home24-cutover.html > /tmp/home24-cutover-dom.html
+          grep -F 'Jira-native BEN registry' /tmp/home24-cutover-dom.html
+          grep -F "$(cat /tmp/home24-cutover-parent.txt)" /tmp/home24-cutover-dom.html
+          grep -F 'Application Testing' /tmp/home24-cutover-dom.html
+          grep -F 'Comparative Evaluation' /tmp/home24-cutover-dom.html
+          if grep -F 'temporary rollback authority' /tmp/home24-cutover-dom.html; then echo "Alternate authority presentation detected."; exit 1; fi
+          rm -f dashboard/.home24-cutover.html
+          echo "First Jira-native cutover snapshot and live browser seam verified."
+
+      - name: Finalize one-time cutover state
+        if: env.HOME24_CUTOVER_PENDING == 'true'
+        run: |
+          # HOME-24 CUTOVER FINALIZATION BEGIN
+          rm -f "_dashboard-data/dashboard/benchmark-registry-authority.txt"
+          git -C _dashboard-data add -A "dashboard/benchmark-registry-authority.txt"
+          # HOME-24 CUTOVER FINALIZATION END
+
+      - name: Publish changed Jira-native snapshot
         working-directory: _dashboard-data
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dashboard/jira-flight-control.enc.json dashboard/benchmark-registry-authority.txt
+          git add dashboard/jira-flight-control.enc.json
           if git diff --cached --quiet; then
             echo "No Jira Flight Control changes."
             exit 0
