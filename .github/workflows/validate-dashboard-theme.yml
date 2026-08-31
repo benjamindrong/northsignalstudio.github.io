@@ -129,6 +129,7 @@ jobs:
           fi
           "$browser" --headless --no-sandbox --disable-gpu --window-size=390,900 --virtual-time-budget=5000 --dump-dom \
             http://127.0.0.1:8000/dashboard/home23-mobile-layout.html > /tmp/home23-mobile-layout-dom.html
+          grep -F '<pre id="result">' /tmp/home23-mobile-layout-dom.html || true
           grep -F 'data-home23-mobile="pass"' /tmp/home23-mobile-layout-dom.html
           grep -F '"keyFits":true' /tmp/home23-mobile-layout-dom.html
           grep -F '"counterpartFits":true' /tmp/home23-mobile-layout-dom.html
