@@ -414,11 +414,31 @@ async function runSelfTest() {
   if (contentHash({ ...payload, generatedAt: '2026-08-12T12:15:00.000Z' }) === hash) throw new Error('generatedAt must participate in snapshot identity');
 
   const activeJql = buildActiveJql(['MYR', 'HOME', 'BEN']);
-  if (!activeJql.includes('project in ("MYR", "HOME", "BEN")') || !activeJql.includes('statusCategory != Done') || activeJql.includes('"Open"')) throw new Error('active JQL self-test failed');
+  if (
+    !activeJql.includes('project in ("MYR", "HOME", "BEN")')
+    || !activeJql.includes('status != Shelved')
+    || !activeJql.includes('statusCategory != Done')
+    || !activeJql.includes('status NOT IN ("To Do", "Backlog", "Ready", "New")')
+    || activeJql.includes('"Open"')
+  ) throw new Error('active JQL self-test failed');
+
   const doneJql = buildDoneJql('BEN');
-  if (!doneJql.includes('project = "BEN"') || !doneJql.includes('statusCategory = Done') || doneJql.includes('-7d')) throw new Error('Done JQL self-test failed');
+  if (
+    !doneJql.includes('project = "BEN"')
+    || !doneJql.includes('statusCategory = Done')
+    || !doneJql.includes('ORDER BY statusCategoryChangedDate DESC')
+    || doneJql.includes('-7d')
+  ) throw new Error('Done JQL self-test failed');
+
   const registryJql = buildBenchmarkRegistryJql('BEN');
-  if (!registryJql.includes('"candidate-evaluation"') || !registryJql.includes('"benchmark-testing"') || !registryJql.includes('"registry-idea"') || registryJql.includes('"registry-blocked"')) throw new Error('Benchmark registry JQL participation-boundary self-test failed');
+  if (
+    !registryJql.includes('labels IN (')
+    || !registryJql.includes('"candidate-evaluation"')
+    || !registryJql.includes('"benchmark-testing"')
+    || !registryJql.includes('"registry-idea"')
+    || registryJql.includes('"registry-blocked"')
+    || registryJql.includes('"registry-result-summary"')
+  ) throw new Error('Benchmark registry JQL participation-boundary self-test failed');
   if (!buildBenchmarkPointerIdentityJql('BEN').includes('Benchmark Registry Next Pointer')) throw new Error('Benchmark pointer identity JQL self-test failed');
 
   let boundedSearchFailed = false;
