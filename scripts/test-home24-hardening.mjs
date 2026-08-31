@@ -190,23 +190,49 @@ for (const { file, source } of trackedTextFiles()) {
   });
 }
 
-const workflowSource = fs.readFileSync(WORKFLOW, 'utf8');
-const cutoverBlocks = [...workflowSource.matchAll(CUTOVER_BLOCK)].map(match => match[1]);
-assert.equal(cutoverBlocks.length, 2, 'workflow must contain only the two reviewed one-time cutover-finalization blocks');
-const workflowOutsideCutover = workflowSource.replace(CUTOVER_BLOCK, '');
-assert.equal(workflowOutsideCutover.includes(AUTHORITY_STATE_PATH), false, 'authority-state path may appear only inside marked cutover-finalization blocks');
-
-const stateLines = cutoverBlocks
-  .flatMap(block => block.split(/\r?\n/))
-  .map(line => line.trim())
-  .filter(line => line.includes(AUTHORITY_STATE_PATH))
-  .sort();
 const expectedStateLines = [
   `if test -e "_dashboard-data/${AUTHORITY_STATE_PATH}"; then`,
   `rm -f "_dashboard-data/${AUTHORITY_STATE_PATH}"`,
   `git -C _dashboard-data add -A "${AUTHORITY_STATE_PATH}"`
 ].sort();
-assert.deepEqual(stateLines, expectedStateLines, 'authority-state file may only be existence-tested, deleted, and staged for deletion');
+
+function assertAuthorityStateWorkflow(source) {
+  const cutoverBlocks = [...source.matchAll(CUTOVER_BLOCK)].map(match => match[1]);
+  assert.equal(cutoverBlocks.length, 2, 'workflow must contain only the two reviewed one-time cutover-finalization blocks');
+
+  const outsideCutover = source.replace(CUTOVER_BLOCK, '');
+  assert.equal(outsideCutover.includes(AUTHORITY_STATE_PATH), false, 'authority-state path may appear only inside marked cutover-finalization blocks');
+
+  const stateLines = cutoverBlocks
+    .flatMap(block => block.split(/\r?\n/))
+    .map(line => line.trim())
+    .filter(line => line.includes(AUTHORITY_STATE_PATH))
+    .sort();
+  assert.deepEqual(stateLines, expectedStateLines, 'authority-state file may only be existence-tested, deleted, and staged for deletion');
+}
+
+const workflowSource = fs.readFileSync(WORKFLOW, 'utf8');
+assertAuthorityStateWorkflow(workflowSource);
+
+const hiddenReadWorkflow = workflowSource.replace(
+  `rm -f "_dashboard-data/${AUTHORITY_STATE_PATH}"`,
+  `cat "_dashboard-data/${AUTHORITY_STATE_PATH}" >/dev/null\n          rm -f "_dashboard-data/${AUTHORITY_STATE_PATH}"`
+);
+assert.throws(
+  () => assertAuthorityStateWorkflow(hiddenReadWorkflow),
+  /authority-state file may only be existence-tested, deleted, and staged for deletion/,
+  'a hidden authority-state read in a later cutover block must fail the whole-workflow audit'
+);
+
+const recreationWorkflow = workflowSource.replace(
+  `rm -f "_dashboard-data/${AUTHORITY_STATE_PATH}"`,
+  `printf 'jira-native\\n' > "_dashboard-data/${AUTHORITY_STATE_PATH}"\n          rm -f "_dashboard-data/${AUTHORITY_STATE_PATH}"`
+);
+assert.throws(
+  () => assertAuthorityStateWorkflow(recreationWorkflow),
+  /authority-state file may only be existence-tested, deleted, and staged for deletion/,
+  'authority-state recreation in a later cutover block must fail the whole-workflow audit'
+);
 
 const serializedRegistryCount = (workflowSource.match(/Buffer\.from\(JSON\.stringify\(registry\), 'utf8'\)\.toString\('base64'\)/g) || []).length;
 assert.equal(serializedRegistryCount, 2, 'both credentialed browser seams must serialize registry payloads as inert base64 data');
