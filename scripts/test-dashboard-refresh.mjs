@@ -84,7 +84,20 @@ assert.match(indexSource, /if \(refreshPromise\) return refreshPromise;/, 'overl
 assert.match(indexSource, /fetch\(`\$\{config\.dataUrl\}\?v=\$\{Date\.now\(\)\}`/, 'browser refresh must fetch the published encrypted feed URL');
 assert.doesNotMatch(indexSource, /\/rest\/api\/3\/|actions\/workflows|workflow_dispatch/i, 'browser polling must not call Jira or dispatch GitHub Actions');
 
+const jiraWorkflow = fs.readFileSync(new URL('../.github/workflows/refresh-jira-flight-control.yml', import.meta.url), 'utf8');
+const githubWorkflow = fs.readFileSync(new URL('../.github/workflows/refresh-github-prs.yml', import.meta.url), 'utf8');
+assert.match(jiraWorkflow, /cron: "3-58\/5 \* \* \* \*"/, 'Jira producer should attempt refresh every five minutes on the offset cadence');
+assert.match(jiraWorkflow, /trigger_kind:[\s\S]*default: "manual"[\s\S]*- "manual"[\s\S]*- "jira"/, 'workflow dispatch should expose only manual and Jira trigger kinds');
+assert.match(jiraWorkflow, /REFRESH_TRIGGER_KIND: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.trigger_kind \|\| github\.event_name \}\}/, 'publish job should pass the resolved trigger kind to the Jira refresh script');
+for (const [label, workflow] of [['Jira', jiraWorkflow], ['GitHub PR', githubWorkflow]]) {
+  assert.match(workflow, /concurrency:\n\s+group: dashboard-data-publish\n\s+cancel-in-progress: false/, `${label} publisher should join the shared dashboard-data publication lock`);
+}
+assert.match(jiraWorkflow, /git pull --rebase origin dashboard-data\n\s+git push origin HEAD:dashboard-data/, 'Jira publisher should reconcile the remote data branch before normal push');
+assert.match(githubWorkflow, /git pull --rebase origin dashboard-data\n\s+git push origin HEAD:dashboard-data/, 'GitHub PR publisher should reconcile the remote data branch before normal push');
+assert.doesNotMatch(jiraWorkflow, /git push[^\n]*--force|git reset --hard[^\n]*dashboard-data/i, 'Jira publisher must never rewrite dashboard-data history');
+assert.doesNotMatch(githubWorkflow, /git push[^\n]*--force|git reset --hard[^\n]*dashboard-data/i, 'GitHub PR publisher must never rewrite dashboard-data history');
+
 verifyInlineScripts(new URL('../dashboard/index.html', import.meta.url));
 verifyInlineScripts(new URL('../dashboard/display.html', import.meta.url));
 
-console.log('dashboard refresh-health regression, 15-second polling, and inline syntax tests passed');
+console.log('dashboard refresh-health, 15-second polling, producer cadence, shared publication, and inline syntax tests passed');
