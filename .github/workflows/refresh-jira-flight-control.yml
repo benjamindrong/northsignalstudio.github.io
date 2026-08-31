@@ -140,7 +140,7 @@ jobs:
           </script></body></html>
           HTML
 
-          python3 -m http.server 8000 >/tmp/dashboard-http.log 2>&1 &
+          python3 -m http.server 8000 --bind 127.0.0.1 >/tmp/dashboard-http.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           for attempt in {1..20}; do
@@ -330,7 +330,8 @@ jobs:
             if (registry?.selectedNext?.key !== parentKey) throw new Error(`${label} selected-next does not match independently observed BEN-21 Parent.`);
           }
           function writePage(file, registry) {
-            fs.writeFileSync(file, `<!doctype html><html><head><meta charset="utf-8"></head><body><div class="dashboard-grid"></div><script src="./benchmark-review.js"></script><script>DashboardBenchmarkReview.render(${JSON.stringify(registry)});document.querySelectorAll('script').forEach(n=>n.remove());</script></body></html>`);
+            const registryBase64 = Buffer.from(JSON.stringify(registry), 'utf8').toString('base64');
+            fs.writeFileSync(file, `<!doctype html><html><head><meta charset="utf-8"></head><body><div class="dashboard-grid"></div><script src="./benchmark-review.js"></script><script>const bytes=Uint8Array.from(atob('${registryBase64}'),c=>c.charCodeAt(0));const registry=JSON.parse(new TextDecoder().decode(bytes));DashboardBenchmarkReview.render(registry);document.querySelectorAll('script').forEach(n=>n.remove());</script></body></html>`);
           }
 
           const pointer = await independentPointer();
@@ -357,7 +358,7 @@ jobs:
           console.log(`HOME-24 live gate data checks passed: BEN-21 -> ${pointer.parentKey}; dashboard-data ${firstHead}.`);
           NODE
 
-          python3 -m http.server 8000 >/tmp/home24-live-http.log 2>&1 &
+          python3 -m http.server 8000 --bind 127.0.0.1 >/tmp/home24-live-http.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           for attempt in {1..20}; do curl -fsS http://127.0.0.1:8000/dashboard/index.html >/dev/null && break; sleep 0.2; done
@@ -459,10 +460,11 @@ jobs:
           const envelope=JSON.parse(fs.readFileSync('_dashboard-data/dashboard/jira-flight-control.enc.json','utf8'));
           const registry=decryptPayload(envelope,process.env.DASHBOARD_DATA_PASSPHRASE).benchmarkReview;
           if(registry?.authority!=='jira-native'||registry?.sourceKey!=='BEN'||registry?.sourceLabel!=='Jira-native BEN registry'||registry?.state!=='ready'||registry?.pointerError||registry?.selectedNext?.key!==parentKey) throw new Error('First-cutover snapshot failed Jira-native ready/pointer assertions.');
-          fs.writeFileSync('dashboard/.home24-cutover.html',`<!doctype html><html><body><div class="dashboard-grid"></div><script src="./benchmark-review.js"></script><script>DashboardBenchmarkReview.render(${JSON.stringify(registry)});document.querySelectorAll('script').forEach(n=>n.remove());</script></body></html>`);
+          const registryBase64 = Buffer.from(JSON.stringify(registry), 'utf8').toString('base64');
+          fs.writeFileSync('dashboard/.home24-cutover.html',`<!doctype html><html><body><div class="dashboard-grid"></div><script src="./benchmark-review.js"></script><script>const bytes=Uint8Array.from(atob('${registryBase64}'),c=>c.charCodeAt(0));const registry=JSON.parse(new TextDecoder().decode(bytes));DashboardBenchmarkReview.render(registry);document.querySelectorAll('script').forEach(n=>n.remove());</script></body></html>`);
           fs.writeFileSync('/tmp/home24-cutover-parent.txt',parentKey);
           NODE
-          python3 -m http.server 8000 >/tmp/home24-cutover-http.log 2>&1 &
+          python3 -m http.server 8000 --bind 127.0.0.1 >/tmp/home24-cutover-http.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           for attempt in {1..20}; do curl -fsS http://127.0.0.1:8000/dashboard/index.html >/dev/null && break; sleep 0.2; done
