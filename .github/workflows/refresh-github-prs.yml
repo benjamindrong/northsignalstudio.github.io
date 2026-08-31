@@ -30,7 +30,7 @@ permissions:
 
 concurrency:
   group: github-prs-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
@@ -183,6 +183,9 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
+    concurrency:
+      group: dashboard-data-publish
+      cancel-in-progress: false
     steps:
       - name: Check out dashboard source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -209,14 +212,31 @@ jobs:
 
       - name: Publish changed snapshot
         working-directory: _dashboard-data
+        env:
+          DASHBOARD_DATA_PASSPHRASE: ${{ secrets.DASHBOARD_DATA_PASSPHRASE }}
+          DASHBOARD_GITHUB_PRIVATE_REPOSITORIES: ${{ secrets.DASHBOARD_GITHUB_PRIVATE_REPOSITORIES }}
+          CONFIG_PATH: ../dashboard/github-prs.config.json
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dashboard/github-prs.enc.json
+          owned_path=dashboard/github-prs.enc.json
+          sibling_path=dashboard/jira-flight-control.enc.json
+          baseline_owned_blob="$(git rev-parse "HEAD:$owned_path" 2>/dev/null || printf '<missing>')"
+          git add "$owned_path"
           if git diff --cached --quiet; then
             echo "No GitHub PR changes."
             exit 0
           fi
           git commit -m "Refresh GitHub PR data"
-          git pull --rebase origin dashboard-data
+          git fetch --no-tags origin dashboard-data
+          remote_owned_blob="$(git rev-parse "FETCH_HEAD:$owned_path" 2>/dev/null || printf '<missing>')"
+          if [ "$remote_owned_blob" != "$baseline_owned_blob" ]; then
+            echo "dashboard-data $owned_path moved after acquisition; refusing to replay stale GitHub PR state."
+            exit 1
+          fi
+          git rebase FETCH_HEAD
+          test -f "$owned_path"
+          test -f "$sibling_path"
+          node ../scripts/refresh-github-prs.mjs --verify-output "$owned_path"
           git push origin HEAD:dashboard-data
