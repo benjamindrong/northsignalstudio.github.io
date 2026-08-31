@@ -7,6 +7,7 @@ const POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
 const SELF = 'scripts/test-home24-hardening.mjs';
 const WORKFLOW = '.github/workflows/refresh-jira-flight-control.yml';
 const AUTHORITY_STATE_PATH = 'dashboard/benchmark-registry-authority.txt';
+const CUTOVER_BLOCK = /# HOME-24 CUTOVER FINALIZATION BEGIN([\s\S]*?)# HOME-24 CUTOVER FINALIZATION END/g;
 
 function text(value) { return { type: 'text', text: value }; }
 function heading(level, value) { return { type: 'heading', attrs: { level }, content: [text(value)] }; }
@@ -76,6 +77,22 @@ const nestedCanonicalOnly = parseCanonicalResultSummary({
 assert.equal(nestedCanonicalOnly.ok, false);
 assert.match(nestedCanonicalOnly.error, /top-level Description sections/i);
 
+const panelWrappedBullets = parseCanonicalResultSummary({
+  type: 'doc',
+  version: 1,
+  content: [
+    heading(3, 'Completion Artifact'),
+    heading(4, 'Registry Result Summary'),
+    {
+      type: 'panel',
+      attrs: { panelType: 'info' },
+      content: [{ type: 'bulletList', content: [bullet('Outcome: B'), bullet('Scores: 9/8'), bullet('Signal: X')] }]
+    }
+  ]
+});
+assert.equal(panelWrappedBullets.ok, false);
+assert.match(panelWrappedBullets.error, /top-level bullet-list items|only the three required bullets/i);
+
 const unknownWithNestedSummary = projectBenchmarkRegistry([{
   key: 'BEN-90', fields: {
     summary: 'Unknown result fixture',
@@ -130,12 +147,8 @@ function isDocumentation(file) {
   return /(?:^|\/)(?:docs?\/.*|[^/]+\.(?:md|markdown))$/i.test(file);
 }
 
-function isTest(file) {
-  return /(?:^|\/)(?:test[^/]*|[^/]*\.test)\.(?:mjs|js|cjs|ts)$/i.test(file) || file === SELF;
-}
-
 function isProductionReachableText(file) {
-  if (isTest(file) || isDocumentation(file)) return false;
+  if (isDocumentation(file) || file === SELF) return false;
   return /\.(?:mjs|js|cjs|ts|json|ya?ml|sh|html|txt)$/i.test(file);
 }
 
@@ -160,42 +173,46 @@ for (const { file, source } of trackedTextFiles()) {
         findings.push({ allowed: true, file, line: index + 1, classification: 'documentation/history', literal });
         continue;
       }
-      if (isTest(file)) {
-        findings.push({ allowed: true, file, line: index + 1, classification: 'negative test guard', literal });
-        continue;
-      }
-      findings.push({ allowed: false, file, line: index + 1, classification: 'forbidden runtime mechanism', literal });
+      findings.push({ allowed: false, file, line: index + 1, classification: 'forbidden runtime/test mechanism', literal });
     }
 
-    if (line.includes(AUTHORITY_STATE_PATH) && file !== SELF) {
-      if (file === WORKFLOW) {
-        const allowedUse = /test -e|rm -f|git(?:\s+-C\s+\S+)?\s+add\s+-A/.test(line);
-        findings.push({ allowed: allowedUse, file, line: index + 1, classification: allowedUse ? 'one-time cutover existence/delete seam' : 'forbidden authority-state use', literal: AUTHORITY_STATE_PATH });
-      } else if (isDocumentation(file)) {
+    if (line.includes(AUTHORITY_STATE_PATH) && file !== SELF && file !== WORKFLOW) {
+      if (isDocumentation(file)) {
         findings.push({ allowed: true, file, line: index + 1, classification: 'documentation/history', literal: AUTHORITY_STATE_PATH });
-      } else if (isTest(file)) {
-        findings.push({ allowed: true, file, line: index + 1, classification: 'negative test guard', literal: AUTHORITY_STATE_PATH });
       } else {
-        findings.push({ allowed: false, file, line: index + 1, classification: 'forbidden authority-state runtime use', literal: AUTHORITY_STATE_PATH });
+        findings.push({ allowed: false, file, line: index + 1, classification: 'forbidden authority-state use', literal: AUTHORITY_STATE_PATH });
       }
     }
 
     if (isProductionReachableText(file) && /\bben-8\b|projectLegacyBenchmarkRegistry|fetchLegacyBenchmarkRegistry/i.test(line)) {
-      const workflowNegativeAssertion = file === WORKFLOW && /grep|includes|assert|forbid|reject|alternate|rollback/i.test(line);
-      findings.push({ allowed: workflowNegativeAssertion, file, line: index + 1, classification: workflowNegativeAssertion ? 'negative runtime assertion' : 'forbidden BEN-8 runtime projection/source metadata', literal: 'BEN-8 runtime path' });
+      findings.push({ allowed: false, file, line: index + 1, classification: 'forbidden BEN-8 runtime projection/source metadata', literal: 'BEN-8 runtime path' });
     }
   });
 }
 
 const workflowSource = fs.readFileSync(WORKFLOW, 'utf8');
-const cutoverBlocks = [...workflowSource.matchAll(/# HOME-24 CUTOVER FINALIZATION BEGIN([\s\S]*?)# HOME-24 CUTOVER FINALIZATION END/g)].map(match => match[1]);
-assert.ok(cutoverBlocks.length >= 1, 'workflow must mark the one-time cutover-finalization block');
-const combinedCutover = cutoverBlocks.join('\n');
-assert.ok(combinedCutover.includes(`test -e "_dashboard-data/${AUTHORITY_STATE_PATH}"`), 'cutover may test only authority-state path existence');
-assert.ok(combinedCutover.includes(`rm -f "_dashboard-data/${AUTHORITY_STATE_PATH}"`), 'cutover must delete the obsolete authority-state path after proof');
-assert.doesNotMatch(combinedCutover, /cat\s+.*benchmark-registry-authority|readFile.*benchmark-registry-authority|<\s*.*benchmark-registry-authority/i, 'cutover blocks must never read or resolve authority from the state file');
-assert.doesNotMatch(workflowSource, /printf[^\n>]*>[^\n]*benchmark-registry-authority|touch[^\n]*benchmark-registry-authority/i, 'workflow must never recreate the authority-state file');
+const cutoverBlocks = [...workflowSource.matchAll(CUTOVER_BLOCK)].map(match => match[1]);
+assert.equal(cutoverBlocks.length, 2, 'workflow must contain only the two reviewed one-time cutover-finalization blocks');
+const workflowOutsideCutover = workflowSource.replace(CUTOVER_BLOCK, '');
+assert.equal(workflowOutsideCutover.includes(AUTHORITY_STATE_PATH), false, 'authority-state path may appear only inside marked cutover-finalization blocks');
+
+const stateLines = cutoverBlocks
+  .flatMap(block => block.split(/\r?\n/))
+  .map(line => line.trim())
+  .filter(line => line.includes(AUTHORITY_STATE_PATH))
+  .sort();
+const expectedStateLines = [
+  `if test -e "_dashboard-data/${AUTHORITY_STATE_PATH}"; then`,
+  `rm -f "_dashboard-data/${AUTHORITY_STATE_PATH}"`,
+  `git -C _dashboard-data add -A "${AUTHORITY_STATE_PATH}"`
+].sort();
+assert.deepEqual(stateLines, expectedStateLines, 'authority-state file may only be existence-tested, deleted, and staged for deletion');
+
+const serializedRegistryCount = (workflowSource.match(/Buffer\.from\(JSON\.stringify\(registry\), 'utf8'\)\.toString\('base64'\)/g) || []).length;
+assert.equal(serializedRegistryCount, 2, 'both credentialed browser seams must serialize registry payloads as inert base64 data');
+assert.doesNotMatch(workflowSource, /DashboardBenchmarkReview\.render\(\$\{JSON\.stringify\(registry\)\}\)/, 'credentialed browser seams must never interpolate raw registry JSON into executable script');
+assert.match(workflowSource, /python3 -m http\.server 8000 --bind 127\.0\.0\.1/g, 'browser fixtures must bind their temporary server to loopback');
 
 const rejected = findings.filter(finding => !finding.allowed);
 assert.deepEqual(rejected, [], rejected.map(finding => `${finding.file}:${finding.line} ${finding.classification} (${finding.literal})`).join('\n'));
-console.log(`HOME-24 adversarial registry hardening tests passed; classified ${findings.length} legacy/state occurrence(s).`);
+console.log(`HOME-24 adversarial registry hardening tests passed; classified ${findings.length} non-production legacy/state occurrence(s).`);
