@@ -2,7 +2,6 @@
   'use strict';
 
   const JIRA_BASE_URL = 'https://benjamindrong80.atlassian.net/browse/';
-  const ACTIVE_STATUSES = new Set(['Preparing', 'Blocked', 'Running']);
 
   function create(tag, className, text) {
     const element = document.createElement(tag);
@@ -20,8 +19,9 @@
       .benchmark-board { margin-top: 16px; min-width: 0; min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--board-line); background: var(--board-bg); color: var(--board-text); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
       .benchmark-meta { min-height: 34px; display: flex; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--board-line); background: var(--board-panel); color: #a8aea8; font-size: 9px; letter-spacing: .055em; text-transform: uppercase; }
       .benchmark-content { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px; display: grid; gap: 10px; }
-      .benchmark-next { border: 1px solid #ffd166; padding: 10px; background: #15140e; }
-      .benchmark-next-label { color: #ffd166; font-size: 8px; font-weight: 950; letter-spacing: .09em; text-transform: uppercase; }
+      .benchmark-active { border: 1px solid #ffd166; padding: 10px; background: #15140e; }
+      .benchmark-active-label { color: #ffd166; font-size: 8px; font-weight: 950; letter-spacing: .09em; text-transform: uppercase; }
+      .benchmark-active .benchmark-run { padding-left: 0; padding-right: 0; }
       .benchmark-run-title { margin-top: 4px; color: #fff7d3; font-size: 13px; font-weight: 900; text-decoration: none; }
       .benchmark-run-title:hover { text-decoration: underline; }
       .benchmark-run-meta { margin-top: 4px; color: #a8aea8; font-size: 9px; }
@@ -141,6 +141,16 @@
     content.appendChild(group);
   }
 
+  function orderedNextRuns(registry) {
+    const preparing = registry.runs.filter(run => run.status === 'Preparing');
+    const selectedKey = registry.selectedNext?.key;
+    if (!selectedKey) return preparing;
+    const selectedIndex = preparing.findIndex(run => run.key === selectedKey);
+    if (selectedIndex <= 0) return preparing;
+    const selected = preparing[selectedIndex];
+    return [selected, ...preparing.slice(0, selectedIndex), ...preparing.slice(selectedIndex + 1)];
+  }
+
   function appendIdeas(content, registry) {
     const definedUnused = Array.isArray(registry.runs) ? registry.runs.filter(run => run.status === 'Unused') : [];
     const previous = Array.isArray(registry.previouslyConsidered) ? registry.previouslyConsidered : [];
@@ -204,28 +214,27 @@
     }
 
     source.textContent = registry.sourceLabel || `${registry.sourceKey || 'BEN'} · benchmark registry`;
-    const next = registry.selectedNext;
-    const nextCard = create('section', 'benchmark-next');
-    nextCard.appendChild(create('div', 'benchmark-next-label', 'Next benchmark'));
-    if (next) {
-      nextCard.appendChild(runLink(next));
-      const activityType = activityTypeLabel(next);
-      const metadata = [next.source && `Source: ${next.source}`, activityType && `Type: ${activityType}`].filter(Boolean).join(' · ');
-      if (metadata) nextCard.appendChild(create('div', 'benchmark-run-meta', metadata));
-      appendResults(nextCard, next);
-    } else {
-      nextCard.appendChild(create('div', 'benchmark-result unknown', registry.pointerError || 'No benchmark is selected as next.'));
-    }
-    content.appendChild(nextCard);
 
-    const activeRuns = registry.runs.filter(run => ACTIVE_STATUSES.has(run.status));
+    const activeRuns = registry.runs.filter(run => run.status === 'Running');
+    if (activeRuns.length) {
+      const active = create('section', 'benchmark-active');
+      active.appendChild(create('div', 'benchmark-active-label', `Active · ${activeRuns.length}`));
+      for (const run of activeRuns) appendRun(active, run);
+      content.appendChild(active);
+    }
+
+    const nextRuns = orderedNextRuns(registry);
     const completedRuns = registry.runs
       .filter(run => run.status === 'Completed')
       .sort((a, b) => String(b.key || '').localeCompare(String(a.key || ''), undefined, { numeric: true }));
-    const columns = create('div', activeRuns.length ? 'benchmark-columns' : 'benchmark-columns completed-only');
-    if (activeRuns.length) appendRunGroup(columns, 'Active', activeRuns);
+    const columns = create('div', nextRuns.length ? 'benchmark-columns' : 'benchmark-columns completed-only');
+    if (nextRuns.length) appendRunGroup(columns, 'Next', nextRuns);
     appendRunGroup(columns, 'Completed', completedRuns);
     content.appendChild(columns);
+
+    const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');
+    if (blockedRuns.length) appendRunGroup(content, 'Blocked', blockedRuns);
+
     appendIdeas(content, registry);
     appendInvalidRecords(content, registry);
   }
