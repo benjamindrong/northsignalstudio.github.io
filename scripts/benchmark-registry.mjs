@@ -28,7 +28,7 @@ const POINTER_FORBIDDEN_LABELS = new Set([
 ]);
 
 const POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
-const ELIGIBLE_NEXT_STATUSES = new Set(['Preparing', 'Blocked', 'Running']);
+const ELIGIBLE_NEXT_STATUSES = new Set(['Preparing']);
 const EXCLUDED_REGISTRY_KEYS = new Set(['BEN-6', 'BEN-21', 'BEN-33']);
 
 function clean(value) {
@@ -336,7 +336,7 @@ function resolveSelectedNext(pointerIssue, pointerMatches, runs) {
   if (!parentKey) return { selectedNext: null, pointerError: 'BEN-21 Parent is missing.' };
   const target = runs.find(run => run.key === parentKey);
   if (!target || !ELIGIBLE_NEXT_STATUSES.has(target.status)) {
-    return { selectedNext: null, pointerError: 'BEN-21 Parent does not identify an eligible Preparing, Blocked, or Running registry item.' };
+    return { selectedNext: null, pointerError: 'BEN-21 Parent does not identify an eligible Preparing registry item.' };
   }
   return { selectedNext: target, pointerError: '' };
 }
