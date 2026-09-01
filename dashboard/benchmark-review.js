@@ -219,7 +219,9 @@
     content.appendChild(nextCard);
 
     const activeRuns = registry.runs.filter(run => ACTIVE_STATUSES.has(run.status));
-    const completedRuns = registry.runs.filter(run => run.status === 'Completed');
+    const completedRuns = registry.runs
+      .filter(run => run.status === 'Completed')
+      .sort((a, b) => String(b.key || '').localeCompare(String(a.key || ''), undefined, { numeric: true }));
     const columns = create('div', activeRuns.length ? 'benchmark-columns' : 'benchmark-columns completed-only');
     if (activeRuns.length) appendRunGroup(columns, 'Active', activeRuns);
     appendRunGroup(columns, 'Completed', completedRuns);
