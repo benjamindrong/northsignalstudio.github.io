@@ -84,7 +84,10 @@ jobs:
             [display, 'MutationObserver', 'dynamic widget Display Mode guard'],
             [health, "script.src = './benchmark-review.js'", 'Benchmark Review loader'],
             [health, 'payload.benchmarkReview', 'Jira snapshot Benchmark Review bridge'],
-            [benchmark, "new Set(['Preparing', 'Blocked', 'Running'])", 'active benchmark statuses'],
+            [benchmark, "run.status === 'Running'", 'running-only active benchmark grouping'],
+            [benchmark, "run.status === 'Preparing'", 'preparing benchmark next grouping'],
+            [benchmark, "run.status === 'Blocked'", 'blocked benchmark grouping'],
+            [benchmark, 'orderedNextRuns', 'BEN-21-first next ordering'],
             [benchmark, 'benchmark-columns completed-only', 'completed-only full-width layout'],
             [benchmark, 'registry.sourceLabel', 'registry source metadata'],
             [benchmark, "run.activityKind === 'benchmark-testing'", 'Application Testing result distinction'],
@@ -123,6 +126,7 @@ jobs:
             selectedNext:{key:'BEN-17',title:'Runline Event Board PRD Candidate Evaluation',status:'Preparing',statusRaw:'Preparing',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'RUN-5',resultState:'none',resultLines:[]},
             pointerError:'',invalidRecords:[{key:'BEN-99',title:'Invalid fixture',reasons:['Invalid lifecycle fixture.']}],
             runs:[
+              {key:'BEN-42',title:'Later prepared candidate',status:'Preparing',statusRaw:'Preparing',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'Unknown',resultState:'none',resultLines:[]},
               {key:'BEN-17',title:'Runline Event Board PRD Candidate Evaluation',status:'Preparing',statusRaw:'Preparing',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'RUN-5',resultState:'none',resultLines:[]},
               {key:'BEN-40',title:'Blocked candidate',status:'Blocked',statusRaw:'Blocked',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'Unknown',resultState:'none',resultLines:[]},
               {key:'BEN-41',title:'Running candidate',status:'Running',statusRaw:'Running',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'Unknown',resultState:'none',resultLines:[]},
@@ -179,8 +183,11 @@ jobs:
           if grep -F 'Active ·' /tmp/benchmark-completed-only-dom.html; then exit 1; fi
 
           "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/benchmark-review-active.html > /tmp/benchmark-active-dom.html
-          grep -F 'Active · 3' /tmp/benchmark-active-dom.html
+          grep -F 'Active · 1' /tmp/benchmark-active-dom.html
+          grep -F 'Next · 2' /tmp/benchmark-active-dom.html
+          grep -F 'Blocked · 1' /tmp/benchmark-active-dom.html
           grep -F 'BEN-17 · Runline Event Board PRD Candidate Evaluation' /tmp/benchmark-active-dom.html
+          grep -F 'BEN-42 · Later prepared candidate' /tmp/benchmark-active-dom.html
           grep -F 'Type: Comparative Evaluation' /tmp/benchmark-active-dom.html
           grep -F 'class="benchmark-status blocked"' /tmp/benchmark-active-dom.html
           grep -F 'class="benchmark-status running"' /tmp/benchmark-active-dom.html
@@ -189,6 +196,13 @@ jobs:
           grep -F 'Result: Unknown / backfill.' /tmp/benchmark-active-dom.html
           grep -F 'Invalid registry records · 1' /tmp/benchmark-active-dom.html
           if grep -F 'benchmark-columns completed-only' /tmp/benchmark-active-dom.html; then exit 1; fi
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const dom = fs.readFileSync('/tmp/benchmark-active-dom.html', 'utf8');
+          const selected = dom.indexOf('BEN-17 · Runline Event Board PRD Candidate Evaluation');
+          const later = dom.indexOf('BEN-42 · Later prepared candidate');
+          if (selected < 0 || later < 0 || selected >= later) throw new Error('BEN-21 selected Next benchmark was not rendered first.');
+          NODE
 
           "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/benchmark-review-legacy-type.html > /tmp/benchmark-legacy-type-dom.html
           grep -F 'Type: Application Testing — legacy snapshot' /tmp/benchmark-legacy-type-dom.html
