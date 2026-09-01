@@ -227,6 +227,20 @@ const ideaPointer = projectBenchmarkRegistry([records[0], records[6]], {
 assert.equal(ideaPointer.selectedNext, null);
 assert.match(ideaPointer.pointerError, /eligible/i);
 
+const blockedPointer = projectBenchmarkRegistry([records[1]], {
+  pointerIssue: pointer('BEN-40'),
+  pointerMatches: [pointer('BEN-40')]
+});
+assert.equal(blockedPointer.selectedNext, null);
+assert.match(blockedPointer.pointerError, /Preparing/i);
+
+const runningPointer = projectBenchmarkRegistry([records[2]], {
+  pointerIssue: pointer('BEN-41'),
+  pointerMatches: [pointer('BEN-41')]
+});
+assert.equal(runningPointer.selectedNext, null);
+assert.match(runningPointer.pointerError, /Preparing/i);
+
 const exactSource = projectBenchmarkRegistry([
   issue('BEN-70', ['benchmark-testing'], 'done', { links: [relates('RUN-5')] })
 ], { pointerIssue: null, pointerMatches: [] });
