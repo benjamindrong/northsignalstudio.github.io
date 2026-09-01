@@ -143,12 +143,20 @@
 
   function orderedNextRuns(registry) {
     const preparing = registry.runs.filter(run => run.status === 'Preparing');
-    const selectedKey = registry.selectedNext?.key;
+    const selectedKey = registry.selectedNext?.status === 'Preparing' ? registry.selectedNext.key : '';
     if (!selectedKey) return preparing;
     const selectedIndex = preparing.findIndex(run => run.key === selectedKey);
     if (selectedIndex <= 0) return preparing;
     const selected = preparing[selectedIndex];
     return [selected, ...preparing.slice(0, selectedIndex), ...preparing.slice(selectedIndex + 1)];
+  }
+
+  function pointerErrorMessage(registry) {
+    if (registry.pointerError) return registry.pointerError;
+    if (registry.selectedNext && registry.selectedNext.status !== 'Preparing') {
+      return 'BEN-21 Parent does not identify an eligible Preparing registry item.';
+    }
+    return '';
   }
 
   function appendIdeas(content, registry) {
@@ -214,6 +222,9 @@
     }
 
     source.textContent = registry.sourceLabel || `${registry.sourceKey || 'BEN'} · benchmark registry`;
+
+    const pointerError = pointerErrorMessage(registry);
+    if (pointerError) content.appendChild(create('div', 'benchmark-result backfill', `Next pointer unavailable: ${pointerError}`));
 
     const activeRuns = registry.runs.filter(run => run.status === 'Running');
     if (activeRuns.length) {
