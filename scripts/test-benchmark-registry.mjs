@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { parseCanonicalResultSummary, projectBenchmarkRegistry } from './benchmark-registry.mjs';
 
+const require = createRequire(import.meta.url);
+const { orderedNextRuns, pointerErrorMessage } = require('../dashboard/benchmark-review.js');
 const POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
 
 function issue(key, labels, category, {
@@ -89,6 +92,22 @@ assert.equal(registry.previouslyConsidered[0]?.key, 'BEN-22');
 assert.equal(registry.previouslyConsidered[0]?.updatedAt, '2026-08-27T12:00:00.000Z');
 assert.equal(registry.freshBacklog[0]?.ideas[0]?.key, 'BEN-25');
 assert.equal(registry.freshBacklog[0]?.ideas[0]?.updatedAt, '2026-08-27T12:00:00.000Z');
+
+const uiPreparingRuns = [
+  { key: 'BEN-42', status: 'Preparing' },
+  { key: 'BEN-17', status: 'Preparing' }
+];
+assert.deepEqual(
+  orderedNextRuns({ runs: uiPreparingRuns, selectedNext: { key: 'BEN-17', status: 'Preparing' }, pointerError: '' }).map(run => run.key),
+  ['BEN-17', 'BEN-42']
+);
+const missingPointerUi = { runs: uiPreparingRuns, selectedNext: null, pointerError: 'BEN-21 Parent is missing.' };
+assert.deepEqual(orderedNextRuns(missingPointerUi), []);
+assert.match(pointerErrorMessage(missingPointerUi), /Parent is missing/i);
+assert.deepEqual(
+  orderedNextRuns({ runs: uiPreparingRuns, selectedNext: { key: 'BEN-17', status: 'Running' }, pointerError: '' }),
+  []
+);
 
 const allProjectedKeys = new Set([
   ...registry.runs.map(record => record.key),
