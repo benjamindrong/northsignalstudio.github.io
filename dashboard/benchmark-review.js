@@ -142,6 +142,7 @@
   }
 
   function orderedNextRuns(registry) {
+    if (pointerErrorMessage(registry)) return [];
     const preparing = registry.runs.filter(run => run.status === 'Preparing');
     const selectedKey = registry.selectedNext?.status === 'Preparing' ? registry.selectedNext.key : '';
     if (!selectedKey) return preparing;
@@ -261,6 +262,7 @@
     }
   }
 
-  ensureSurface();
+  if (typeof document !== 'undefined') ensureSurface();
+  if (typeof module !== 'undefined' && module.exports) module.exports = { orderedNextRuns, pointerErrorMessage };
   root.DashboardBenchmarkReview = { render, locked };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
