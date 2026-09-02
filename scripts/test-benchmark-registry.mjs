@@ -104,10 +104,20 @@ assert.deepEqual(
 const missingPointerUi = { runs: uiPreparingRuns, selectedNext: null, pointerError: 'BEN-21 Parent is missing.' };
 assert.deepEqual(orderedNextRuns(missingPointerUi), []);
 assert.match(pointerErrorMessage(missingPointerUi), /Parent is missing/i);
+const missingPointerErrorUi = { runs: uiPreparingRuns, selectedNext: null, pointerError: '' };
+assert.deepEqual(orderedNextRuns(missingPointerErrorUi), []);
+assert.match(pointerErrorMessage(missingPointerErrorUi), /selected Preparing/i);
 assert.deepEqual(
   orderedNextRuns({ runs: uiPreparingRuns, selectedNext: { key: 'BEN-17', status: 'Running' }, pointerError: '' }),
   []
 );
+const missingSelectedRunUi = {
+  runs: [{ key: 'BEN-42', status: 'Preparing' }],
+  selectedNext: { key: 'BEN-17', status: 'Preparing' },
+  pointerError: ''
+};
+assert.deepEqual(orderedNextRuns(missingSelectedRunUi), []);
+assert.match(pointerErrorMessage(missingSelectedRunUi), /unavailable from the Preparing registry projection/i);
 
 const allProjectedKeys = new Set([
   ...registry.runs.map(record => record.key),
