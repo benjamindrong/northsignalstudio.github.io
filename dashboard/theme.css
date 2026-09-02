@@ -162,3 +162,16 @@
     color: #64707a !important;
   }
 }
+
+/* Keep Jira identity intact on compact Flight Control layouts before spending width on spacing. */
+@media (max-width: 470px) {
+  .flight-columns,
+  .flight-row {
+    grid-template-columns: 60px minmax(42px, 1fr) 68px 60px;
+    column-gap: 2px;
+  }
+
+  .flight-move {
+    font-size: 8px;
+  }
+}
