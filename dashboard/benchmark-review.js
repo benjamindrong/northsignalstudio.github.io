@@ -144,18 +144,25 @@
   function orderedNextRuns(registry) {
     if (pointerErrorMessage(registry)) return [];
     const preparing = registry.runs.filter(run => run.status === 'Preparing');
-    const selectedKey = registry.selectedNext?.status === 'Preparing' ? registry.selectedNext.key : '';
-    if (!selectedKey) return preparing;
+    const selectedKey = registry.selectedNext.key;
     const selectedIndex = preparing.findIndex(run => run.key === selectedKey);
-    if (selectedIndex <= 0) return preparing;
+    if (selectedIndex < 0) return [];
+    if (selectedIndex === 0) return preparing;
     const selected = preparing[selectedIndex];
     return [selected, ...preparing.slice(0, selectedIndex), ...preparing.slice(selectedIndex + 1)];
   }
 
   function pointerErrorMessage(registry) {
-    if (registry.pointerError) return registry.pointerError;
-    if (registry.selectedNext && registry.selectedNext.status !== 'Preparing') {
+    if (registry?.pointerError) return registry.pointerError;
+    if (!registry?.selectedNext) {
+      return 'BEN-21 does not identify a selected Preparing registry item.';
+    }
+    if (registry.selectedNext.status !== 'Preparing') {
       return 'BEN-21 Parent does not identify an eligible Preparing registry item.';
+    }
+    const selectedKey = registry.selectedNext.key;
+    if (!Array.isArray(registry.runs) || !registry.runs.some(run => run.status === 'Preparing' && run.key === selectedKey)) {
+      return 'BEN-21 Parent is unavailable from the Preparing registry projection.';
     }
     return '';
   }
