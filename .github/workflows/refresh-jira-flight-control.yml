@@ -84,7 +84,11 @@ jobs:
             [display, 'MutationObserver', 'dynamic widget Display Mode guard'],
             [health, "script.src = './benchmark-review.js'", 'Benchmark Review loader'],
             [health, 'payload.benchmarkReview', 'Jira snapshot Benchmark Review bridge'],
-            [benchmark, "new Set(['Preparing', 'Blocked', 'Running'])", 'active benchmark statuses'],
+            [benchmark, "run.status === 'Running'", 'running-only active benchmark grouping'],
+            [benchmark, "run.status === 'Preparing'", 'preparing benchmark next grouping'],
+            [benchmark, "run.status === 'Blocked'", 'blocked benchmark grouping'],
+            [benchmark, 'orderedNextRuns', 'BEN-21-first next ordering'],
+            [benchmark, 'Next pointer unavailable:', 'visible BEN-21 pointer failure'],
             [benchmark, 'benchmark-columns completed-only', 'completed-only full-width layout'],
             [benchmark, 'registry.sourceLabel', 'registry source metadata'],
             [benchmark, "run.activityKind === 'benchmark-testing'", 'Application Testing result distinction'],
@@ -123,11 +127,12 @@ jobs:
             selectedNext:{key:'BEN-17',title:'Runline Event Board PRD Candidate Evaluation',status:'Preparing',statusRaw:'Preparing',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'RUN-5',resultState:'none',resultLines:[]},
             pointerError:'',invalidRecords:[{key:'BEN-99',title:'Invalid fixture',reasons:['Invalid lifecycle fixture.']}],
             runs:[
+              {key:'BEN-42',title:'Later prepared candidate',status:'Preparing',statusRaw:'Preparing',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'Unknown',resultState:'none',resultLines:[]},
               {key:'BEN-17',title:'Runline Event Board PRD Candidate Evaluation',status:'Preparing',statusRaw:'Preparing',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'RUN-5',resultState:'none',resultLines:[]},
               {key:'BEN-40',title:'Blocked candidate',status:'Blocked',statusRaw:'Blocked',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'Unknown',resultState:'none',resultLines:[]},
               {key:'BEN-41',title:'Running candidate',status:'Running',statusRaw:'Running',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'Unknown',resultState:'none',resultLines:[]},
-              {key:'BEN-11',title:'Crossmark Signal Hunt Benchmark',status:'Completed',statusRaw:'Completed',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'CROS-1',resultState:'recorded',resultLines:['Outcome: Response B won.','Scores: Unknown','Signal: State continuity.']},
-              {key:'BEN-10',title:'PR Health',status:'Completed',statusRaw:'Completed',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'HOME-12',resultState:'backfill',resultLines:['Result: Unknown / backfill.']}
+              {key:'BEN-10',title:'PR Health',status:'Completed',statusRaw:'Completed',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'HOME-12',resultState:'backfill',resultLines:['Result: Unknown / backfill.']},
+              {key:'BEN-11',title:'Crossmark Signal Hunt Benchmark',status:'Completed',statusRaw:'Completed',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'CROS-1',resultState:'recorded',resultLines:['Outcome: Response B won.','Scores: Unknown','Signal: State continuity.']}
             ],previouslyConsidered:[],freshBacklog:[]
           });
           document.querySelectorAll('script').forEach(node=>node.remove());
@@ -169,6 +174,7 @@ jobs:
 
           "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/benchmark-review-completed-only.html > /tmp/benchmark-completed-only-dom.html
           grep -F 'Jira-native BEN registry' /tmp/benchmark-completed-only-dom.html
+          grep -F 'Next pointer unavailable: BEN-21 Parent is missing.' /tmp/benchmark-completed-only-dom.html
           grep -F 'class="benchmark-columns completed-only"' /tmp/benchmark-completed-only-dom.html
           grep -F 'Completed · 1' /tmp/benchmark-completed-only-dom.html
           grep -F 'Type: Application Testing' /tmp/benchmark-completed-only-dom.html
@@ -179,8 +185,11 @@ jobs:
           if grep -F 'Active ·' /tmp/benchmark-completed-only-dom.html; then exit 1; fi
 
           "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/benchmark-review-active.html > /tmp/benchmark-active-dom.html
-          grep -F 'Active · 3' /tmp/benchmark-active-dom.html
+          grep -F 'Active · 1' /tmp/benchmark-active-dom.html
+          grep -F 'Next · 2' /tmp/benchmark-active-dom.html
+          grep -F 'Blocked · 1' /tmp/benchmark-active-dom.html
           grep -F 'BEN-17 · Runline Event Board PRD Candidate Evaluation' /tmp/benchmark-active-dom.html
+          grep -F 'BEN-42 · Later prepared candidate' /tmp/benchmark-active-dom.html
           grep -F 'Type: Comparative Evaluation' /tmp/benchmark-active-dom.html
           grep -F 'class="benchmark-status blocked"' /tmp/benchmark-active-dom.html
           grep -F 'class="benchmark-status running"' /tmp/benchmark-active-dom.html
@@ -188,7 +197,18 @@ jobs:
           grep -F 'Outcome: Response B won.' /tmp/benchmark-active-dom.html
           grep -F 'Result: Unknown / backfill.' /tmp/benchmark-active-dom.html
           grep -F 'Invalid registry records · 1' /tmp/benchmark-active-dom.html
+          if grep -F 'Next pointer unavailable:' /tmp/benchmark-active-dom.html; then exit 1; fi
           if grep -F 'benchmark-columns completed-only' /tmp/benchmark-active-dom.html; then exit 1; fi
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const dom = fs.readFileSync('/tmp/benchmark-active-dom.html', 'utf8');
+          const selected = dom.indexOf('BEN-17 · Runline Event Board PRD Candidate Evaluation');
+          const later = dom.indexOf('BEN-42 · Later prepared candidate');
+          if (selected < 0 || later < 0 || selected >= later) throw new Error('BEN-21 selected Next benchmark was not rendered first.');
+          const newestCompleted = dom.indexOf('BEN-11 · Crossmark Signal Hunt Benchmark');
+          const olderCompleted = dom.indexOf('BEN-10 · PR Health');
+          if (newestCompleted < 0 || olderCompleted < 0 || newestCompleted >= olderCompleted) throw new Error('Completed benchmarks were not rendered newest-first.');
+          NODE
 
           "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/benchmark-review-legacy-type.html > /tmp/benchmark-legacy-type-dom.html
           grep -F 'Type: Application Testing — legacy snapshot' /tmp/benchmark-legacy-type-dom.html
@@ -327,9 +347,7 @@ jobs:
             if (activities.length !== 1 || ['registry-idea','registry-retired','registry-idea-considered','registry-idea-fresh','registry-result-summary','registry-result-unknown'].some(label => labels.has(label))) throw new Error('BEN-21 Parent is not an eligible registry activity.');
             if (normalize(pointer.fields?.summary) !== 'benchmark registry next pointer') throw new Error('Fetched BEN-21 summary identity is invalid.');
             const category = String(parent.fields?.status?.statusCategory?.key || '').toLowerCase();
-            const blocked = labels.has('registry-blocked');
-            const eligible = blocked ? ['new','indeterminate'].includes(category) : ['new','indeterminate'].includes(category);
-            if (!eligible) throw new Error('BEN-21 Parent lifecycle is not Preparing, Blocked, or Running.');
+            if (labels.has('registry-blocked') || category !== 'new') throw new Error('BEN-21 Parent lifecycle is not Preparing.');
             return { key:'BEN-21', parentKey, updated:String(pointer.fields?.updated || ''), parentUpdated:String(parent.fields?.updated || '') };
           }
           function assertRegistry(registry, parentKey, label) {
@@ -469,7 +487,7 @@ jobs:
           const labels=new Set((parent.fields?.labels||[]).map(v=>String(v).trim().toLowerCase()));
           const activities=['candidate-evaluation','benchmark-testing'].filter(v=>labels.has(v));
           const category=String(parent.fields?.status?.statusCategory?.key||'').toLowerCase();
-          if(activities.length!==1 || ['registry-idea','registry-retired','registry-idea-considered','registry-idea-fresh','registry-result-summary','registry-result-unknown'].some(label=>labels.has(label)) || !['new','indeterminate'].includes(category)) throw new Error('BEN-21 Parent is not eligible.');
+          if(activities.length!==1 || labels.has('registry-blocked') || ['registry-idea','registry-retired','registry-idea-considered','registry-idea-fresh','registry-result-summary','registry-result-unknown'].some(label=>labels.has(label)) || category!=='new') throw new Error('BEN-21 Parent is not an eligible Preparing registry activity.');
           const envelope=JSON.parse(fs.readFileSync('_dashboard-data/dashboard/jira-flight-control.enc.json','utf8'));
           const registry=decryptPayload(envelope,process.env.DASHBOARD_DATA_PASSPHRASE).benchmarkReview;
           if(registry?.authority!=='jira-native'||registry?.sourceKey!=='BEN'||registry?.sourceLabel!=='Jira-native BEN registry'||registry?.state!=='ready'||registry?.pointerError||registry?.selectedNext?.key!==parentKey) throw new Error('First-cutover snapshot failed Jira-native ready/pointer assertions.');
