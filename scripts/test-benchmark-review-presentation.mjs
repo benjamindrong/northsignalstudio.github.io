@@ -12,16 +12,17 @@ const registry = {
     { key: 'BEN-39', status: 'Completed' },
     { key: 'BEN-20', status: 'Completed' },
     { key: 'BEN-14', status: 'Completed' },
+    { key: 'BEN-7', status: 'Completed' },
     { key: 'BEN-99', status: 'Running' }
   ]
 };
 
 const completed = completedRunsForDisplay(registry);
-assert.equal(completed.total, 6, 'Completed heading count must retain the full completed total.');
+assert.equal(completed.total, 7, 'Completed heading count must retain the full completed total.');
 assert.deepEqual(
   completed.runs.map(run => run.key),
-  ['BEN-50', 'BEN-39', 'BEN-20', 'BEN-14'],
-  'Completed display must preserve existing newest-BEN-key-first ordering before applying the four-item limit.'
+  ['BEN-50', 'BEN-39', 'BEN-20', 'BEN-14', 'BEN-11', 'BEN-7'],
+  'Completed display must preserve existing newest-BEN-key-first ordering before applying the six-item limit.'
 );
 
 const resultLines = [
