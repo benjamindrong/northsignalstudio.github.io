@@ -37,6 +37,35 @@
     return `${day} ${month} ${time}`;
   }
 
+  function compactDetailLines(lines) {
+    return (lines || []).filter(Boolean).map(line => String(line)).slice(0, 2);
+  }
+
+  function jiraDetailLines(issue) {
+    const project = issue?.projectName || issue?.projectKey || '';
+    const status = issue?.status || 'Unavailable';
+    return compactDetailLines([
+      [project && `Project: ${project}`, `Status: ${status}`].filter(Boolean).join(' · '),
+      `Last move: ${formatDateTime(issue?.lastMove || issue?.updatedAt)}`
+    ]);
+  }
+
+  function githubDetailLines(pull) {
+    const repository = pull?.repository || 'Repository';
+    const number = Number(pull?.number);
+    return compactDetailLines([
+      `${repository}${Number.isInteger(number) && number > 0 ? ` #${number}` : ''} · ${pull?.state || 'OPEN'}`,
+      `Updated: ${formatDateTime(pull?.updatedAt)}`
+    ]);
+  }
+
+  function recentDetailLines(item) {
+    return compactDetailLines([
+      `${item?.source || 'SOURCE'} · ${item?.identity || 'Item'}`,
+      `Updated: ${formatDateTime(item?.updatedAt)}`
+    ]);
+  }
+
   function recentTimestamp(value) {
     const timestamp = Date.parse(value || '');
     return Number.isNaN(timestamp) ? 0 : timestamp;
@@ -268,7 +297,24 @@
     element.classList.add(STATUS_CLASSES.includes(className) ? className : 'unknown');
   }
 
-  function updateCommonRow(row, descriptor, url, baseAria, summaryText) {
+  function updateDetails(details, summaryText, detailLines) {
+    details.replaceChildren();
+    const title = document.createElement('div');
+    title.className = 'work-detail-title';
+    title.textContent = summaryText;
+    details.appendChild(title);
+    for (const line of compactDetailLines(detailLines)) {
+      const meta = document.createElement('div');
+      meta.className = 'work-detail-meta';
+      meta.textContent = line;
+      meta.style.marginTop = '4px';
+      meta.style.color = '#9da59d';
+      meta.style.fontSize = '.85em';
+      details.appendChild(meta);
+    }
+  }
+
+  function updateCommonRow(row, descriptor, url, baseAria, summaryText, detailLines) {
     row.dataset.workKind = descriptor.kind;
     row.dataset.workId = descriptor.id;
     row.dataset.workPrimaryUrl = String(url || '');
@@ -279,14 +325,14 @@
     primary.href = String(url || '');
     primary.setAttribute('aria-label', `Open ${descriptor.id}`);
     const details = row.querySelector('[data-work-details]');
-    details.textContent = summaryText;
+    updateDetails(details, summaryText, detailLines);
   }
 
   function updateJiraRow(row, descriptor) {
     const issue = descriptor.item;
     const summaryText = issue.summary || 'Unavailable';
     const baseAria = `${issue.key}: ${summaryText}; last move ${formatDateTime(issue.lastMove)}; status ${issue.status || 'Unavailable'}`;
-    updateCommonRow(row, descriptor, issue.url, baseAria, summaryText);
+    updateCommonRow(row, descriptor, issue.url, baseAria, summaryText, jiraDetailLines(issue));
     const key = row.querySelector('.flight-key'); key.textContent = issue.key || 'Unavailable'; key.title = issue.key || 'Unavailable';
     const summary = row.querySelector('.flight-summary'); summary.textContent = summaryText; summary.title = summaryText;
     const move = row.querySelector('.flight-move'); move.textContent = formatDateTime(issue.lastMove); move.title = issue.lastMove || 'No status transition recorded';
@@ -299,7 +345,7 @@
     const shortRepo = String(pull.repository || '').split('/').pop() || pull.repository || 'Repository';
     const titleText = pull.title || 'Untitled pull request';
     const baseAria = `${pull.repository} pull request ${pull.number}: ${titleText}; ${pull.state || 'OPEN'}; updated ${formatDateTime(pull.updatedAt)}`;
-    updateCommonRow(row, descriptor, pull.url, baseAria, titleText);
+    updateCommonRow(row, descriptor, pull.url, baseAria, titleText, githubDetailLines(pull));
     const repoName = row.querySelector('.github-pr-repo-name'); repoName.textContent = shortRepo;
     const number = row.querySelector('.github-pr-number'); number.textContent = `#${pull.number}`;
     const repo = row.querySelector('.github-pr-repo'); repo.title = pull.repository || '';
@@ -312,7 +358,7 @@
   function updateRecentRow(row, descriptor) {
     const item = descriptor.item;
     const baseAria = `${item.source} ${item.identity}: ${item.title}; updated ${formatDateTime(item.updatedAt)}`;
-    updateCommonRow(row, descriptor, item.url, baseAria, item.title);
+    updateCommonRow(row, descriptor, item.url, baseAria, item.title, recentDetailLines(item));
     const badge = row.querySelector('.recent-source-badge'); badge.className = `recent-source-badge ${item.source.toLowerCase()}`; badge.textContent = item.source;
     const identityText = row.querySelector('.recent-identity-text'); identityText.textContent = item.identity;
     const identity = row.querySelector('.recent-identity'); identity.title = `${item.source} · ${item.identity}`;
@@ -404,6 +450,10 @@
     statusInfo,
     pullIdentity,
     formatDateTime,
+    compactDetailLines,
+    jiraDetailLines,
+    githubDetailLines,
+    recentDetailLines,
     recentTimestamp,
     recentActivityCompare,
     flightDescriptors,
