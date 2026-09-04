@@ -57,7 +57,7 @@ def assert_production_markers(index_html: str) -> None:
         fail("dashboard/index.html does not load ./refresh-health.js.")
     if index_html.index(work_items) > index_html.index(refresh_health):
         fail("dashboard/index.html must load work-items.js before refresh-health.js.")
-    for marker in ("DashboardWorkItems", "renderFlight", "renderGithub", "renderRecent"):
+    for marker in ("DashboardWorkItems", "DashboardBenchmarkReview", "renderFlight", "renderGithub", "renderRecent"):
         if marker not in index_html:
             fail(f"dashboard/index.html is missing HOME-29 production marker: {marker}")
 
@@ -96,6 +96,26 @@ FETCH_STUB = r'''<script>
     ...Array.from({length:16}, (_, i) => ({ key:`MYR-${300+i}`, projectKey:'MYR', projectName:'MyRAM', summary:`Filler row ${i} for deterministic scroll preservation`, status:'To Do', statusCategory:'new', lastMove:iso(6), updatedAt:iso(6), url:jiraUrl(`MYR-${300+i}`) }))
   ];
 
+  const benchmarkRegistry = () => ({
+    state:'ready',
+    sourceKey:'BEN',
+    sourceLabel:'Jira-native BEN registry',
+    selectedNext:{ key:'BEN-54', status:'Preparing' },
+    runs:[
+      { key:'BEN-34', title:'Active benchmark with expanded result detail', source:'Homepage Dashboard', activityKind:'candidate-evaluation', type:'Candidate Evaluation', status:'Running', statusRaw:'Running', turnsCompleted:'3', resultState:'recorded', resultLines:['Active result summary line one.', 'Active result detail line two with complete expanded benchmark content.'] },
+      { key:'BEN-54', title:'Next benchmark remains selected by BEN-21', source:'Homepage Dashboard', activityKind:'benchmark-testing', type:'Benchmark Testing - Field Test', status:'Preparing', statusRaw:'Preparing', resultState:'none', resultLines:[] },
+      { key:'BEN-20', title:'Completed benchmark with multiple result lines', source:'Homepage Dashboard', activityKind:'candidate-evaluation', type:'Candidate Evaluation', status:'Completed', statusRaw:'Completed', turnsCompleted:'5', resultState:'recorded', resultLines:['Completed result summary line one.', 'Completed result detail line two remains available when expanded.'] },
+      { key:'BEN-19', title:'Completed benchmark 19', source:'Homepage Dashboard', activityKind:'benchmark-testing', type:'Benchmark Testing', status:'Completed', statusRaw:'Completed', resultState:'none', resultLines:[] },
+      { key:'BEN-18', title:'Completed benchmark 18', source:'Homepage Dashboard', activityKind:'candidate-evaluation', type:'Candidate Evaluation', status:'Completed', statusRaw:'Completed', resultState:'unknown', resultLines:[] },
+      { key:'BEN-17', title:'Completed benchmark 17', source:'Homepage Dashboard', activityKind:'candidate-evaluation', type:'Candidate Evaluation', status:'Completed', statusRaw:'Completed', resultState:'recorded', resultLines:['BEN-17 summary.'] },
+      { key:'BEN-16', title:'Completed benchmark 16', source:'Homepage Dashboard', activityKind:'candidate-evaluation', type:'Candidate Evaluation', status:'Completed', statusRaw:'Completed', resultState:'recorded', resultLines:['BEN-16 summary.'] },
+      { key:'BEN-15', title:'Blocked benchmark preserves grouping', source:'Homepage Dashboard', activityKind:'benchmark-testing', type:'Benchmark Testing', status:'Blocked', statusRaw:'Blocked', resultState:'none', resultLines:[] }
+    ],
+    previouslyConsidered:[],
+    freshBacklog:[],
+    invalidRecords:[]
+  });
+
   function jiraPayload(revision) {
     const issues = baseIssues();
     if (revision >= 1) {
@@ -109,7 +129,7 @@ FETCH_STUB = r'''<script>
       issues.splice(removeIndex, 1);
       issues.push({ key:'HOME-32', projectKey:'HOME', projectName:'Homepage Dashboard', summary:'Inserted row', status:'Blocked', statusCategory:'indeterminate', lastMove:iso(29), updatedAt:iso(29), url:jiraUrl('HOME-32') });
     }
-    return { generatedAt: iso(30 + revision), projects:['HOME','MYR'], issues, benchmarkReview:{ state:'unavailable', message:'HOME-29 local browser fixture' } };
+    return { generatedAt: iso(30 + revision), projects:['HOME','MYR'], issues, benchmarkReview:benchmarkRegistry() };
   }
 
   function githubPayload(revision) {
@@ -172,6 +192,7 @@ MAIN_DRIVER = r'''<script>
   const tick = async () => { await Promise.resolve(); await wait(0); await Promise.resolve(); };
   const assert = (condition, name) => { checks[name] = Boolean(condition); if (!condition) throw new Error(name); };
   const rowById = id => document.querySelector(`[data-work-id="${CSS.escape(id)}"]`);
+  const benchmarkByKey = key => document.querySelector(`[data-benchmark-key="${CSS.escape(key)}"]`);
   const counterpart = row => row?.querySelector('.work-counterpart-link');
 
   try {
@@ -181,22 +202,36 @@ MAIN_DRIVER = r'''<script>
     input.value = 'home29-local-verification';
     form.dispatchEvent(new Event('submit', { bubbles:true, cancelable:true }));
     for (let i=0; i<50 && !rowById('HOME-29'); i++) await wait(20);
+    for (let i=0; i<50 && !benchmarkByKey('BEN-34'); i++) await wait(20);
     await tick();
     for (let i=0; i<50 && !counterpart(rowById('HOME-23')); i++) await wait(20);
 
     const home29 = rowById('HOME-29');
     const home23 = rowById('HOME-23');
     const pr7 = rowById('benjamindrong/northsignalstudio.github.io#7');
+    const activeBenchmark = benchmarkByKey('BEN-34');
+    const completedBenchmark = benchmarkByKey('BEN-20');
     assert(home29 && home23 && pr7, 'initial production rows render');
+    assert(activeBenchmark && completedBenchmark, 'initial Benchmark Review rows render');
     assert(home29.querySelector('.work-disclosure')?.getAttribute('aria-expanded') === 'false', 'initial Jira row collapsed');
     assert(pr7.querySelector('.work-disclosure')?.getAttribute('aria-expanded') === 'false', 'initial PR row collapsed');
+    assert(activeBenchmark.querySelector('.benchmark-disclosure')?.getAttribute('aria-expanded') === 'false', 'initial active Benchmark Review item collapsed');
+    assert(completedBenchmark.querySelector('.benchmark-disclosure')?.getAttribute('aria-expanded') === 'false', 'initial completed Benchmark Review item collapsed');
+    assert(!activeBenchmark.querySelector('[data-benchmark-summary]').hidden && activeBenchmark.querySelector('[data-benchmark-details]').hidden, 'collapsed Benchmark Review summary visible and detail hidden');
 
     home29.querySelector('.work-disclosure').click();
     pr7.querySelector('.work-disclosure').click();
+    activeBenchmark.querySelector('.benchmark-disclosure').click();
+    completedBenchmark.querySelector('.benchmark-disclosure').click();
     assert(home29.querySelector('[data-work-details]').hidden === false, 'Jira expanded detail visible');
     assert(pr7.querySelector('[data-work-details]').hidden === false, 'PR expanded detail visible');
     assert(home29.querySelector('[data-work-details]').textContent.includes('long summary'), 'full Jira summary exposed');
     assert(pr7.querySelector('[data-work-details]').textContent.includes('long pull request title'), 'full PR title exposed');
+    assert(activeBenchmark.querySelector('[data-benchmark-summary]').hidden && !activeBenchmark.querySelector('[data-benchmark-details]').hidden, 'active Benchmark Review item expands independently');
+    assert(activeBenchmark.querySelector('[data-benchmark-details]').textContent.includes('Active result detail line two'), 'active Benchmark Review full result detail exposed');
+    assert(completedBenchmark.querySelector('[data-benchmark-details]').textContent.includes('Completed result detail line two'), 'completed Benchmark Review full result detail exposed');
+    assert(document.querySelector('.benchmark-group h3')?.textContent.includes('Next'), 'Benchmark Review Next grouping preserved');
+    assert([...document.querySelectorAll('.benchmark-group h3')].some(header => header.textContent === 'Completed · 5'), 'Benchmark Review Completed count preserved');
 
     const flightRows = document.getElementById('flightRows');
     flightRows.scrollTop = 60;
@@ -215,12 +250,16 @@ MAIN_DRIVER = r'''<script>
     await tick();
     const home29After = rowById('HOME-29');
     const home23After = rowById('HOME-23');
+    const activeBenchmarkAfter = benchmarkByKey('BEN-34');
+    const completedBenchmarkAfter = benchmarkByKey('BEN-20');
     assert(home29After === home29, 'surviving Jira row object preserved');
     assert(home29After.querySelector('.work-primary-link') === home29Primary, 'primary link object preserved');
     assert(home29After.querySelector('.work-disclosure') === home29Disclosure, 'disclosure object preserved');
     assert(document.activeElement === home29Disclosure, 'focused surviving control preserved');
     assert(flightRows.scrollTop === scrollBefore, 'panel scrollTop preserved');
     assert(home29After.dataset.workExpanded === 'true' && !home29After.querySelector('[data-work-details]').hidden, 'Jira expansion preserved');
+    assert(activeBenchmarkAfter.querySelector('.benchmark-disclosure').getAttribute('aria-expanded') === 'true' && !activeBenchmarkAfter.querySelector('[data-benchmark-details]').hidden, 'active Benchmark Review expansion preserved across refresh');
+    assert(completedBenchmarkAfter.querySelector('.benchmark-disclosure').getAttribute('aria-expanded') === 'true' && !completedBenchmarkAfter.querySelector('[data-benchmark-details]').hidden, 'completed Benchmark Review expansion preserved across refresh');
     assert(rowById('GITHUB:benjamindrong/northsignalstudio.github.io#7')?.dataset.workExpanded !== undefined, 'Recently Active stable GitHub identity rendered');
     assert(document.querySelector('[data-work-header-id="HOME:active"]') === activeHeader, 'active header identity preserved');
     assert(document.querySelector('[data-work-header-id="HOME:recently-done"]') === doneHeader, 'recently-done header identity preserved');
@@ -232,12 +271,17 @@ MAIN_DRIVER = r'''<script>
     assert(home23After.querySelector('.work-primary-link') === home23Primary, 'linked primary node preserved');
     assert(counterpart(home29After)?.href.endsWith('/pull/29'), 'relationship appearance applied in place');
 
+    const benchmarkDisclosureBeforeRefresh = activeBenchmarkAfter.querySelector('.benchmark-disclosure');
+    benchmarkDisclosureBeforeRefresh.focus();
     window.__home29Fixture.revision = 2;
     await window.dashboardRefresh();
     await tick();
     const changedCounterpart = counterpart(rowById('HOME-23'));
+    const benchmarkDisclosureAfterRefresh = benchmarkByKey('BEN-34').querySelector('.benchmark-disclosure');
     assert(changedCounterpart && changedCounterpart !== home23Counterpart && changedCounterpart.href.endsWith('/pull/8'), 'relationship destination change replaces counterpart only');
     assert(rowById('HOME-23') === home23, 'destination change preserves outer row');
+    assert(document.activeElement === benchmarkDisclosureAfterRefresh, 'Benchmark Review disclosure focus restored across refresh');
+    assert(benchmarkDisclosureAfterRefresh.getAttribute('aria-expanded') === 'true', 'Benchmark Review expanded state retained after focused refresh');
 
     window.__home29Fixture.revision = 3;
     await window.dashboardRefresh();
@@ -253,6 +297,7 @@ MAIN_DRIVER = r'''<script>
     assert(rowById('HOME-29') === retainedJira, 'Jira failure retains Jira row');
     assert([...document.querySelectorAll('[data-work-kind="recent"]')].some(row => row.dataset.workId === 'JIRA:HOME-29'), 'Recently Active retains failed Jira source payload');
     assert(rowById('GITHUB:benjamindrong/HomepageDashboard#99'.toLowerCase()) || document.querySelector('[data-work-id$="#99"]'), 'successful GitHub sibling updates during Jira failure');
+    assert(benchmarkByKey('BEN-34').querySelector('.benchmark-disclosure').getAttribute('aria-expanded') === 'true', 'retained Jira payload preserves Benchmark Review expansion through Jira failure');
     window.__home29Fixture.jiraFail = false;
 
     const retainedGithub = document.querySelector('[data-work-id="benjamindrong/homepagedashboard#40"]');
@@ -265,12 +310,15 @@ MAIN_DRIVER = r'''<script>
     const nested = document.querySelectorAll('a a, a button, button a').length;
     assert(nested === 0, 'no nested interactive controls');
     assert(rowById('HOME-29').querySelector('.work-primary-link').href === 'https://example.atlassian.net/browse/HOME-29', 'primary destination correct');
+    assert(benchmarkByKey('BEN-34').querySelector('.benchmark-run-title').href.endsWith('/BEN-34'), 'Benchmark Review BEN destination correct');
     const mobileHome23 = rowById('HOME-23');
     assert(mobileHome23.querySelector('.flight-key').scrollWidth <= mobileHome23.querySelector('.flight-key').clientWidth, '390px Jira key visible');
     assert(mobileHome23.querySelector('.flight-move').scrollWidth <= mobileHome23.querySelector('.flight-move').clientWidth, '390px Last Move visible');
     assert(document.documentElement.scrollWidth <= document.documentElement.clientWidth, '390px collapsed/expanded no document overflow');
     const detailsStyle = getComputedStyle(rowById('HOME-29').querySelector('[data-work-details]'));
     assert(detailsStyle.whiteSpace !== 'nowrap' && detailsStyle.textOverflow !== 'ellipsis', 'expanded details wrap without ellipsis');
+    const benchmarkDetailsStyle = getComputedStyle(benchmarkByKey('BEN-34').querySelector('[data-benchmark-details]'));
+    assert(benchmarkDetailsStyle.whiteSpace !== 'nowrap' && benchmarkDetailsStyle.textOverflow !== 'ellipsis', 'expanded Benchmark Review details wrap without ellipsis');
 
     window.__home29Fixture.revision = 5;
     for (let i=0; i<20 && !window.dashboardRefreshState().refreshing && !rowById('HOME-29').querySelector('[data-work-details]').textContent.includes('Automatic refresh revision 5'); i++) {
@@ -280,6 +328,7 @@ MAIN_DRIVER = r'''<script>
     if (window.dashboardRefreshState().refreshing) await window.dashboardRefresh();
     await tick();
     assert(rowById('HOME-29').querySelector('[data-work-details]').textContent.includes('Automatic refresh revision 5'), 'production 15-second automatic refresh observed');
+    assert(benchmarkByKey('BEN-34').querySelector('.benchmark-disclosure').getAttribute('aria-expanded') === 'true', 'Benchmark Review expansion survives production automatic refresh');
 
     document.documentElement.dataset.home29Python = 'pass';
     result.textContent = JSON.stringify({ pass:true, checks });
@@ -310,10 +359,11 @@ DISPLAY_CHILD_DRIVER = r'''<script>
   const input = document.getElementById('unlockPassphrase');
   input.value = 'home29-local-verification';
   form.dispatchEvent(new Event('submit', { bubbles:true, cancelable:true }));
-  for (let i=0; i<50 && !document.querySelector('[data-work-id="HOME-29"]'); i++) await wait(20);
+  for (let i=0; i<50 && (!document.querySelector('[data-work-id="HOME-29"]') || !document.querySelector('[data-benchmark-key="BEN-34"]')); i++) await wait(20);
   const row = document.querySelector('[data-work-id="HOME-29"]');
+  const benchmark = document.querySelector('[data-benchmark-key="BEN-34"]');
   row?.querySelector('.work-disclosure')?.click();
-  document.documentElement.dataset.home29DisplayChild = row ? 'ready' : 'fail';
+  document.documentElement.dataset.home29DisplayChild = row && benchmark ? 'ready' : 'fail';
 })();
 </script>'''
 
@@ -344,11 +394,23 @@ DISPLAY_PARENT_DRIVER = r'''<script>
     if (!githubRow) throw new Error('Code Review row unavailable under Display Mode');
     githubRow.querySelector('.work-disclosure').click();
     if (githubRow.querySelector('[data-work-details]').hidden) throw new Error('disclosure did not expand under Display Mode overrides');
+
+    document.querySelector('[data-view="3"]').click();
+    await wait(20);
+    const benchmarkWidget = child.querySelector('.widget--benchmark');
+    if (benchmarkWidget?.getAttribute('data-display-active') !== 'true') throw new Error('real Display Mode controls did not activate Benchmark Review');
+    const benchmarkRow = child.querySelector('[data-benchmark-key="BEN-34"]');
+    if (!benchmarkRow) throw new Error('Benchmark Review row unavailable under Display Mode');
+    const benchmarkDisclosure = benchmarkRow.querySelector('.benchmark-disclosure');
+    benchmarkDisclosure.click();
+    if (benchmarkDisclosure.getAttribute('aria-expanded') !== 'true' || benchmarkRow.querySelector('[data-benchmark-details]').hidden) throw new Error('Benchmark Review disclosure did not expand under Display Mode overrides');
+    if (!benchmarkRow.querySelector('[data-benchmark-details]').textContent.includes('Active result detail line two')) throw new Error('Benchmark Review full detail unavailable under Display Mode');
+
     const childRoot = child.documentElement;
     if (!childRoot) throw new Error('Display Mode child document root became unavailable');
     if (childRoot.scrollWidth > childRoot.clientWidth) throw new Error('Display Mode child has horizontal overflow');
     document.documentElement.dataset.home29DisplayPython = 'pass';
-    result.textContent = JSON.stringify({ pass:true, active:'Code Review', expanded:true });
+    result.textContent = JSON.stringify({ pass:true, active:'Benchmark Review', expanded:true });
   } catch (error) {
     document.documentElement.dataset.home29DisplayPython = 'fail';
     result.textContent = JSON.stringify({ pass:false, error:String(error?.stack || error) });
