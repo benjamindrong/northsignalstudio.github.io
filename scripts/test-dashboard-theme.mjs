@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 
+const require = createRequire(import.meta.url);
 const fail = message => { throw new Error(message); };
 const docs = ['index.html', 'display.html'];
 
@@ -88,6 +90,12 @@ for (const selector of [
   if (!css.includes(selector)) {
     fail(`theme.css is missing Benchmark Review light-mode selector: ${selector}`);
   }
+}
+
+const { expandedResultLines } = require('../dashboard/benchmark-review.js');
+const compactBenchmarkDetails = expandedResultLines({ resultLines: ['one', 'two', 'three'] });
+if (compactBenchmarkDetails.length !== 2 || compactBenchmarkDetails.join('|') !== 'one|two') {
+  fail('Benchmark Review expanded result detail must be capped at two existing result lines.');
 }
 
 const hexToRgb = hex => {
