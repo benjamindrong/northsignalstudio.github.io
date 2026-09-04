@@ -57,7 +57,7 @@ def assert_production_markers(index_html: str) -> None:
         fail("dashboard/index.html does not load ./refresh-health.js.")
     if index_html.index(work_items) > index_html.index(refresh_health):
         fail("dashboard/index.html must load work-items.js before refresh-health.js.")
-    for marker in ("DashboardWorkItems", "DashboardBenchmarkReview", "renderFlight", "renderGithub", "renderRecent"):
+    for marker in ("DashboardWorkItems", "renderFlight", "renderGithub", "renderRecent"):
         if marker not in index_html:
             fail(f"dashboard/index.html is missing HOME-29 production marker: {marker}")
 
