@@ -308,7 +308,7 @@
       meta.className = 'work-detail-meta';
       meta.textContent = line;
       meta.style.marginTop = '4px';
-      meta.style.color = '#9da59d';
+      meta.style.color = 'var(--muted)';
       meta.style.fontSize = '.85em';
       details.appendChild(meta);
     }
