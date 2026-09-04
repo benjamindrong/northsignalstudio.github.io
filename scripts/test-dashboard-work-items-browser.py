@@ -125,10 +125,14 @@ FETCH_STUB = r'''<script>
   }
 
   const state = window.__home29Fixture = { revision:0, jiraFail:false, githubFail:false, requests:[] };
+  const keyPromise = (async () => {
+    const material = await crypto.subtle.importKey('raw', text.encode(PASS), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name:'PBKDF2', hash:'SHA-256', salt:fixedSalt, iterations:1000 }, material, { name:'AES-GCM', length:256 }, false, ['encrypt']);
+  })();
+  state.keyReady = keyPromise;
 
   async function encrypt(payload) {
-    const material = await crypto.subtle.importKey('raw', text.encode(PASS), 'PBKDF2', false, ['deriveKey']);
-    const key = await crypto.subtle.deriveKey({ name:'PBKDF2', hash:'SHA-256', salt:fixedSalt, iterations:1000 }, material, { name:'AES-GCM', length:256 }, false, ['encrypt']);
+    const key = await keyPromise;
     const bytes = new Uint8Array(await crypto.subtle.encrypt({ name:'AES-GCM', iv:fixedIv, tagLength:128 }, key, text.encode(JSON.stringify(payload))));
     const tag = bytes.slice(bytes.length - 16);
     const ciphertext = bytes.slice(0, bytes.length - 16);
@@ -171,6 +175,7 @@ MAIN_DRIVER = r'''<script>
   const counterpart = row => row?.querySelector('.work-counterpart-link');
 
   try {
+    await window.__home29Fixture.keyReady;
     const form = document.getElementById('unlockForm');
     const input = document.getElementById('unlockPassphrase');
     input.value = 'home29-local-verification';
@@ -285,6 +290,7 @@ MAIN_DRIVER = r'''<script>
 DISPLAY_CHILD_DRIVER = r'''<script>
 (async () => {
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  await window.__home29Fixture.keyReady;
   const form = document.getElementById('unlockForm');
   const input = document.getElementById('unlockPassphrase');
   input.value = 'home29-local-verification';
