@@ -65,4 +65,31 @@ const recentDescriptors = workItems.recentDescriptors(
 );
 assert.deepEqual(recentDescriptors.map(item => item.id), ['JIRA:HOME-29', 'GITHUB:ben/repo#7']);
 
+assert.deepEqual(workItems.compactDetailLines(['one', 'two', 'three']), ['one', 'two']);
+assert.deepEqual(workItems.jiraDetailLines({
+  projectName: 'Homepage Dashboard',
+  status: 'In Progress',
+  lastMove: '2026-09-03T12:00:00Z'
+}).map(line => line.replace(/\s+/g, ' ')), [
+  'Project: Homepage Dashboard · Status: In Progress',
+  `Last move: ${workItems.formatDateTime('2026-09-03T12:00:00Z')}`
+]);
+assert.deepEqual(workItems.githubDetailLines({
+  repository: 'benjamindrong/northsignalstudio.github.io',
+  number: 36,
+  state: 'OPEN',
+  updatedAt: '2026-09-03T12:00:00Z'
+}), [
+  'benjamindrong/northsignalstudio.github.io #36 · OPEN',
+  `Updated: ${workItems.formatDateTime('2026-09-03T12:00:00Z')}`
+]);
+assert.deepEqual(workItems.recentDetailLines({
+  source: 'JIRA',
+  identity: 'HOME-29',
+  updatedAt: '2026-09-03T12:00:00Z'
+}), [
+  'JIRA · HOME-29',
+  `Updated: ${workItems.formatDateTime('2026-09-03T12:00:00Z')}`
+]);
+
 console.log('dashboard work-item projection regressions passed');
