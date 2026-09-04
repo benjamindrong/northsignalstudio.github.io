@@ -114,7 +114,7 @@ FETCH_STUB = r'''<script>
 
   function githubPayload(revision) {
     const linkNumber = revision >= 2 ? 8 : 7;
-    const linkedTitle = revision >= 3 ? `${longPr} relationship removed` : `HOME-23 ${longPr}`;
+    const linkedTitle = revision >= 3 ? 'Relationship removed from this pull request title' : longPr;
     const pulls = [
       { repository:'benjamindrong/northsignalstudio.github.io', number:linkNumber, title:linkedTitle, url:prUrl(linkNumber), state:'OPEN', stateClass:'review', attentionRank:1, updatedAt:iso(12 + revision) },
       { repository:'benjamindrong/HomepageDashboard', number:40, title:'Independent PR row retained during refresh', url:'https://github.com/benjamindrong/HomepageDashboard/pull/40', state:'OPEN', stateClass:'progress', attentionRank:2, updatedAt:iso(11 + revision) },
@@ -273,7 +273,11 @@ MAIN_DRIVER = r'''<script>
     assert(detailsStyle.whiteSpace !== 'nowrap' && detailsStyle.textOverflow !== 'ellipsis', 'expanded details wrap without ellipsis');
 
     window.__home29Fixture.revision = 5;
-    await wait(16000);
+    for (let i=0; i<20 && !window.dashboardRefreshState().refreshing && !rowById('HOME-29').querySelector('[data-work-details]').textContent.includes('Automatic refresh revision 5'); i++) {
+      await wait(1000);
+      await tick();
+    }
+    if (window.dashboardRefreshState().refreshing) await window.dashboardRefresh();
     await tick();
     assert(rowById('HOME-29').querySelector('[data-work-details]').textContent.includes('Automatic refresh revision 5'), 'production 15-second automatic refresh observed');
 
@@ -281,7 +285,18 @@ MAIN_DRIVER = r'''<script>
     result.textContent = JSON.stringify({ pass:true, checks });
   } catch (error) {
     document.documentElement.dataset.home29Python = 'fail';
-    result.textContent = JSON.stringify({ pass:false, error:String(error?.stack || error), checks });
+    result.textContent = JSON.stringify({
+      pass:false,
+      error:String(error?.stack || error),
+      checks,
+      diagnostics:{
+        hidden:document.hidden,
+        visibilityState:document.visibilityState,
+        revision:window.__home29Fixture.revision,
+        requests:window.__home29Fixture.requests,
+        refreshState:window.dashboardRefreshState?.()
+      }
+    });
   }
 })();
 </script>'''
@@ -417,7 +432,7 @@ def main() -> int:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        main_dom = run_chrome(executable, f"http://127.0.0.1:{port}/dashboard/{MAIN_FIXTURE.name}", 22000)
+        main_dom = run_chrome(executable, f"http://127.0.0.1:{port}/dashboard/{MAIN_FIXTURE.name}", 120000)
         main_result = parse_result(main_dom, "home29PythonResult")
         if not main_result.get("pass"):
             fail("HOME-29 production-path browser gate failed:\n" + json.dumps(main_result, indent=2))

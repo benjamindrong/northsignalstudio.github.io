@@ -37,8 +37,11 @@ for (const token of ['--bg: #f4f6f8;', '--panel: #ffffff;', '--text: #15191e;', 
 const compactFlightLayout = [
   '@media (max-width: 470px)',
   'grid-template-columns: 60px minmax(42px, 1fr) 68px 60px;',
+  'grid-template-columns: minmax(0, 1fr) auto 68px 60px 24px;',
+  'grid-template-columns: 60px minmax(0, 1fr);',
   'column-gap: 2px;',
-  '.flight-move {\n    font-size: 8px;'
+  '.flight-move {\n    font-size: 8px;',
+  '.work-details {\n    white-space: normal;\n    overflow-wrap: anywhere;'
 ];
 for (const contract of compactFlightLayout) {
   if (!css.includes(contract)) {
