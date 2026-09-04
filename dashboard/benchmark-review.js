@@ -2,6 +2,7 @@
   'use strict';
 
   const JIRA_BASE_URL = 'https://benjamindrong80.atlassian.net/browse/';
+  const EXPANDED_RESULT_LIMIT = 2;
   const expandedRunKeys = new Set();
 
   function create(tag, className, text) {
@@ -120,9 +121,15 @@
     return run.resultState === 'none' ? 'No comparative results recorded yet.' : 'Result: Unknown / backfill.';
   }
 
+  function expandedResultLines(run) {
+    if (!Array.isArray(run?.resultLines)) return [];
+    return run.resultLines.slice(0, EXPANDED_RESULT_LIMIT).map(line => String(line));
+  }
+
   function appendResults(container, run) {
-    if (Array.isArray(run.resultLines) && run.resultLines.length) {
-      for (const line of run.resultLines) container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, line));
+    const resultLines = expandedResultLines(run);
+    if (resultLines.length) {
+      for (const line of resultLines) container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, line));
       return;
     }
     if (activityTypeLabel(run).startsWith('Application Testing')) {
@@ -338,6 +345,6 @@
   }
 
   if (typeof document !== 'undefined') ensureSurface();
-  if (typeof module !== 'undefined' && module.exports) module.exports = { orderedNextRuns, pointerErrorMessage, resultSummaryText };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { orderedNextRuns, pointerErrorMessage, resultSummaryText, expandedResultLines };
   root.DashboardBenchmarkReview = { render, locked };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
