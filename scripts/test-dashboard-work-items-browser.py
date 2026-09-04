@@ -326,9 +326,16 @@ DISPLAY_PARENT_DRIVER = r'''<script>
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   try {
     const frame = document.getElementById('dashboardFrame');
-    for (let i=0; i<80 && frame.contentDocument?.documentElement.dataset.home29DisplayChild !== 'ready'; i++) await wait(25);
-    const child = frame.contentDocument;
-    if (child?.documentElement.dataset.home29DisplayChild !== 'ready') throw new Error('instrumented Display Mode child did not become ready');
+    let child = null;
+    for (let i=0; i<80; i++) {
+      const candidate = frame.contentDocument;
+      if (candidate?.documentElement?.dataset.home29DisplayChild === 'ready') {
+        child = candidate;
+        break;
+      }
+      await wait(25);
+    }
+    if (!child) throw new Error('instrumented Display Mode child did not become ready');
     document.querySelector('[data-view="1"]').click();
     await wait(20);
     const githubWidget = child.querySelector('.widget--github');
@@ -337,7 +344,9 @@ DISPLAY_PARENT_DRIVER = r'''<script>
     if (!githubRow) throw new Error('Code Review row unavailable under Display Mode');
     githubRow.querySelector('.work-disclosure').click();
     if (githubRow.querySelector('[data-work-details]').hidden) throw new Error('disclosure did not expand under Display Mode overrides');
-    if (child.documentElement.scrollWidth > child.documentElement.clientWidth) throw new Error('Display Mode child has horizontal overflow');
+    const childRoot = child.documentElement;
+    if (!childRoot) throw new Error('Display Mode child document root became unavailable');
+    if (childRoot.scrollWidth > childRoot.clientWidth) throw new Error('Display Mode child has horizontal overflow');
     document.documentElement.dataset.home29DisplayPython = 'pass';
     result.textContent = JSON.stringify({ pass:true, active:'Code Review', expanded:true });
   } catch (error) {
