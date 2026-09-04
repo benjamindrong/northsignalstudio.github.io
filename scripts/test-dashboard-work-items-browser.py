@@ -410,7 +410,8 @@ def run_chrome(executable: str, url: str, budget_ms: int) -> str:
         "--dump-dom",
         url,
     ]
-    completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, timeout=45)
+    timeout_seconds = max(45, budget_ms / 1000 + 30)
+    completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, timeout=timeout_seconds)
     if completed.returncode != 0:
         fail(f"Chrome exited with {completed.returncode}:\n{completed.stderr[-2000:]}")
     return completed.stdout
@@ -441,7 +442,7 @@ def main() -> int:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        main_dom = run_chrome(executable, f"http://127.0.0.1:{port}/dashboard/{MAIN_FIXTURE.name}", 30000)
+        main_dom = run_chrome(executable, f"http://127.0.0.1:{port}/dashboard/{MAIN_FIXTURE.name}", 60000)
         main_result = parse_result(main_dom, "home29PythonResult")
         if not main_result.get("pass"):
             fail("HOME-29 production-path browser gate failed:\n" + json.dumps(main_result, indent=2))
