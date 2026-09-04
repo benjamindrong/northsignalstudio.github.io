@@ -64,8 +64,10 @@
     color: #66727c;
   }
 
-  .flight-action {
+  .flight-action,
+  .work-disclosure {
     border-color: #8f9ba6;
+    color: var(--board-text);
   }
 
   .flight-columns,
@@ -103,6 +105,10 @@
   .flight-move,
   .github-pr-number {
     color: #5c6670;
+  }
+
+  .work-details {
+    color: #20242a;
   }
 
   .unlock-form label {
@@ -163,15 +169,29 @@
   }
 }
 
-/* Keep Jira identity intact on compact Flight Control layouts before spending width on spacing. */
+/* Preserve Jira identity, counterpart, Last Move, disclosure and wrapping detail at compact width. */
 @media (max-width: 470px) {
-  .flight-columns,
-  .flight-row {
+  .flight-columns {
     grid-template-columns: 60px minmax(42px, 1fr) 68px 60px;
+    column-gap: 2px;
+  }
+
+  .flight-row {
+    grid-template-columns: minmax(0, 1fr) auto 68px 60px 24px;
+    column-gap: 2px;
+  }
+
+  .flight-primary-link {
+    grid-template-columns: 60px minmax(0, 1fr);
     column-gap: 2px;
   }
 
   .flight-move {
     font-size: 8px;
+  }
+
+  .work-details {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }
