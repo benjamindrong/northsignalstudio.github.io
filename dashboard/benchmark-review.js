@@ -2,6 +2,7 @@
   'use strict';
 
   const JIRA_BASE_URL = 'https://benjamindrong80.atlassian.net/browse/';
+  const COMPLETED_VISIBLE_LIMIT = 4;
 
   function create(tag, className, text) {
     const element = document.createElement(tag);
@@ -106,9 +107,15 @@
     return legacyType;
   }
 
-  function appendResults(container, run) {
-    if (Array.isArray(run.resultLines) && run.resultLines.length) {
-      for (const line of run.resultLines) container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, line));
+  function resultLinesForDisplay(run, compact = false) {
+    if (!Array.isArray(run.resultLines)) return [];
+    return compact ? run.resultLines.slice(0, 1) : run.resultLines;
+  }
+
+  function appendResults(container, run, compact = false) {
+    const resultLines = resultLinesForDisplay(run, compact);
+    if (resultLines.length) {
+      for (const line of resultLines) container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, line));
       return;
     }
     if (activityTypeLabel(run).startsWith('Application Testing')) {
@@ -119,7 +126,7 @@
     container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, fallback));
   }
 
-  function appendRun(container, run) {
+  function appendRun(container, run, compactResults = false) {
     const row = create('div', 'benchmark-run');
     const titleLine = create('div');
     titleLine.appendChild(runLink(run));
@@ -129,15 +136,16 @@
     const activityType = activityTypeLabel(run);
     const metadata = [run.source && `Source: ${run.source}`, activityType && `Type: ${activityType}`, run.turnsCompleted && `Turns: ${run.turnsCompleted}`].filter(Boolean).join(' · ');
     if (metadata) row.appendChild(create('div', 'benchmark-run-meta', metadata));
-    appendResults(row, run);
+    appendResults(row, run, compactResults);
     container.appendChild(row);
   }
 
-  function appendRunGroup(content, label, runs) {
+  function appendRunGroup(content, label, runs, options = {}) {
+    const { count = runs.length, compactResults = false } = options;
     const group = create('section', 'benchmark-group');
-    group.appendChild(create('h3', '', `${label} · ${runs.length}`));
+    group.appendChild(create('h3', '', `${label} · ${count}`));
     if (!runs.length) group.appendChild(create('div', 'benchmark-run benchmark-result unknown', `No ${label.toLowerCase()} benchmarks recorded.`));
-    else for (const run of runs) appendRun(group, run);
+    else for (const run of runs) appendRun(group, run, compactResults);
     content.appendChild(group);
   }
 
@@ -150,6 +158,17 @@
     if (selectedIndex === 0) return preparing;
     const selected = preparing[selectedIndex];
     return [selected, ...preparing.slice(0, selectedIndex), ...preparing.slice(selectedIndex + 1)];
+  }
+
+  function orderedCompletedRuns(registry) {
+    return registry.runs
+      .filter(run => run.status === 'Completed')
+      .sort((a, b) => String(b.key || '').localeCompare(String(a.key || ''), undefined, { numeric: true }));
+  }
+
+  function completedRunsForDisplay(registry) {
+    const ordered = orderedCompletedRuns(registry);
+    return { total: ordered.length, runs: ordered.slice(0, COMPLETED_VISIBLE_LIMIT) };
   }
 
   function pointerErrorMessage(registry) {
@@ -243,12 +262,10 @@
     }
 
     const nextRuns = orderedNextRuns(registry);
-    const completedRuns = registry.runs
-      .filter(run => run.status === 'Completed')
-      .sort((a, b) => String(b.key || '').localeCompare(String(a.key || ''), undefined, { numeric: true }));
+    const completedRuns = completedRunsForDisplay(registry);
     const columns = create('div', nextRuns.length ? 'benchmark-columns' : 'benchmark-columns completed-only');
     if (nextRuns.length) appendRunGroup(columns, 'Next', nextRuns);
-    appendRunGroup(columns, 'Completed', completedRuns);
+    appendRunGroup(columns, 'Completed', completedRuns.runs, { count: completedRuns.total, compactResults: true });
     content.appendChild(columns);
 
     const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');
@@ -270,6 +287,11 @@
   }
 
   if (typeof document !== 'undefined') ensureSurface();
-  if (typeof module !== 'undefined' && module.exports) module.exports = { orderedNextRuns, pointerErrorMessage };
+  if (typeof module !== 'undefined' && module.exports) module.exports = {
+    orderedNextRuns,
+    pointerErrorMessage,
+    completedRunsForDisplay,
+    resultLinesForDisplay
+  };
   root.DashboardBenchmarkReview = { render, locked };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
