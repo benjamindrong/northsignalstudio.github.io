@@ -24,6 +24,13 @@ for (const filename of docs) {
 }
 
 const css = await readFile(new URL('../dashboard/theme.css', import.meta.url), 'utf8');
+const indexHtml = await readFile(new URL('../dashboard/index.html', import.meta.url), 'utf8');
+const tokenHex = (source, token, context) => {
+  const match = source.match(new RegExp(`--${token}:\\s*(#[0-9a-fA-F]{6});`));
+  if (!match) fail(`${context} is missing a hex --${token} token.`);
+  return match[1];
+};
+
 if (!css.includes(':root {\n  color-scheme: light dark;')) {
   fail('theme.css must advertise both light and dark color schemes.');
 }
@@ -128,8 +135,8 @@ for (const [foreground, background, label] of [
 }
 
 for (const [foreground, background, label] of [
-  ['#8a5a00', '#fbfcfd', 'light active progress accent'],
-  ['#ffd166', '#0e100f', 'dark active progress accent']
+  [tokenHex(css, 'progress', 'Light theme'), tokenHex(css, 'board-bg', 'Light theme'), 'light active progress accent'],
+  [tokenHex(indexHtml, 'progress', 'Dark theme'), tokenHex(indexHtml, 'board-bg', 'Dark theme'), 'dark active progress accent']
 ]) {
   if (contrast(foreground, background) < 4.5) {
     fail(`${label} contrast must remain at least 4.5:1.`);
