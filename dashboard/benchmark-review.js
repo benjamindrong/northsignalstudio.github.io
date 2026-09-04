@@ -19,8 +19,8 @@
       .benchmark-board { margin-top: 16px; min-width: 0; min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--board-line); background: var(--board-bg); color: var(--board-text); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
       .benchmark-meta { min-height: 34px; display: flex; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--board-line); background: var(--board-panel); color: #a8aea8; font-size: 9px; letter-spacing: .055em; text-transform: uppercase; }
       .benchmark-content { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px; display: grid; gap: 10px; }
-      .benchmark-active { border: 1px solid #ffd166; padding: 10px; background: #15140e; }
-      .benchmark-active-label { color: #ffd166; font-size: 8px; font-weight: 950; letter-spacing: .09em; text-transform: uppercase; }
+      .benchmark-active { border: 1px solid var(--progress); padding: 10px; background: var(--board-bg); }
+      .benchmark-active-label { color: var(--progress); font-size: 8px; font-weight: 950; letter-spacing: .09em; text-transform: uppercase; }
       .benchmark-active .benchmark-run { padding-left: 0; padding-right: 0; }
       .benchmark-run-title { margin-top: 4px; color: #fff7d3; font-size: 13px; font-weight: 900; text-decoration: none; }
       .benchmark-run-title:hover { text-decoration: underline; }
