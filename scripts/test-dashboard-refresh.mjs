@@ -95,6 +95,18 @@ assert.equal('sourceKey' in missingBenchmarkFallback, false, 'missing benchmarkR
 assert.equal('sourceLabel' in missingBenchmarkFallback, false, 'missing benchmarkReview must keep source metadata authority-neutral');
 
 const indexSource = fs.readFileSync(new URL('../dashboard/index.html', import.meta.url), 'utf8');
+const workItemsScript = '<script src="./work-items.js"></script>';
+const refreshHealthScript = '<script src="./refresh-health.js"></script>';
+assert.ok(indexSource.includes(workItemsScript), 'dashboard must load the shared work-item renderer');
+assert.ok(indexSource.indexOf(workItemsScript) < indexSource.indexOf(refreshHealthScript), 'work-items.js must load before refresh-health.js');
+assert.match(indexSource, /WorkItems\.renderFlight\(rowsEl, payload\)/, 'Flight Control must delegate to DashboardWorkItems');
+assert.match(indexSource, /WorkItems\.renderGithub\(githubRowsEl, payload\)/, 'Code Review must delegate to DashboardWorkItems');
+assert.match(indexSource, /WorkItems\.renderRecent\(recentRowsEl, jiraPayloadValue, githubPayloadValue\)/, 'Recently Active must delegate to DashboardWorkItems');
+for (const renderer of ['renderJira', 'renderGithub', 'renderRecent']) {
+  const body = indexSource.match(new RegExp(`function ${renderer}\\([^)]*\\) \\{([\\s\\S]*?)\\n      \\}`))?.[1] || '';
+  assert.doesNotMatch(body, /replaceChildren\s*\(|\.innerHTML\s*=/, `${renderer} must not clear its panel during ordinary successful refresh`);
+}
+assert.match(indexSource, /function lockDashboard\(\)[\s\S]*renderUnlock\(\)/, 'explicit lock must retain destructive teardown through the locked renderer');
 assert.match(indexSource, /const AUTO_REFRESH_MS = 15_000;/, 'unlocked visible dashboard should poll published feeds every 15 seconds');
 assert.match(indexSource, /if \(!sessionStorage\.getItem\('flight-control-passphrase'\) \|\| document\.hidden\) return;/, 'auto-refresh must stop while locked or hidden');
 assert.match(indexSource, /if \(refreshPromise\) return refreshPromise;/, 'overlapping browser refresh attempts must coalesce');

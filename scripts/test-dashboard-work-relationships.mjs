@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const relationships = require('../dashboard/work-relationships.js');
+const workItems = require('../dashboard/work-items.js');
 
 const jira = (key, url = `https://example.atlassian.net/browse/${key}`) => ({
   key,
@@ -112,12 +113,13 @@ for (const title of ['No Jira key here', 'HOME-19 and HOME-20 together', 'UNKNOW
 assert.equal(relationships.compactCounterpartLabel('PR #5'), '↔ #5');
 assert.equal(relationships.compactCounterpartLabel('HOME-19'), '↔ HOME-19');
 assert.deepEqual(relationships.distinctTitleKeys('HOME-19 HOME-19 HOME-20'), ['HOME-19', 'HOME-20']);
-assert.equal(relationships.pullIdentity(pull(5, 'HOME-19')), 'benjamindrong/homepagedashboard#5');
+assert.equal(workItems.pullIdentity(pull(5, 'HOME-19')), 'benjamindrong/homepagedashboard#5');
 assert.equal(
-  relationships.pullIdentity(pull(5, 'HOME-19', { repository: '  BENJAMINDRONG/HomepageDashboard  ' })),
+  workItems.pullIdentity(pull(5, 'HOME-19', { repository: '  BENJAMINDRONG/HomepageDashboard  ' })),
   'benjamindrong/homepagedashboard#5',
 );
-assert.equal(relationships.pullIdentity({ repository: 'repo', number: 0 }), '');
+assert.equal(workItems.pullIdentity({ repository: 'repo', number: 0 }), '');
+assert.equal('pullIdentity' in relationships, false, 'DashboardWorkItems must be the sole PR identity implementation');
 
 const healthSource = fs.readFileSync(new URL('../dashboard/refresh-health.js', import.meta.url), 'utf8');
 for (const marker of [
@@ -133,13 +135,15 @@ for (const marker of [
 
 const relationshipSource = fs.readFileSync(new URL('../dashboard/work-relationships.js', import.meta.url), 'utf8');
 for (const marker of [
-  "['.flight-key', '.flight-summary', '.flight-move', '.flight-status']",
-  "['.github-pr-repo', '.github-pr-title', '.github-pr-updated', '.github-pr-state']",
-  "['.recent-identity', '.recent-title', '.recent-updated']",
-  "'work-counterpart-link',",
-  "container.setAttribute('role', 'group')",
+  "const slot = row.querySelector('[data-work-counterpart-slot]')",
+  "slot?.querySelectorAll('.work-counterpart-link').forEach(link => link.remove())",
+  'let counterpart = slot.querySelector(\'.work-counterpart-link\')',
+  'counterpart.remove()',
+  'slot.appendChild(counterpart)',
 ]) {
-  assert.ok(relationshipSource.includes(marker), `linked-row navigation guard missing marker: ${marker}`);
+  assert.ok(relationshipSource.includes(marker), `in-place relationship decoration missing marker: ${marker}`);
 }
+assert.ok(relationshipSource.includes('WorkItems.pullIdentity'), 'relationship resolution must consume DashboardWorkItems identity');
+assert.doesNotMatch(relationshipSource, /function\s+pullIdentity\s*\(|restoreRows\s*\(|convertRow\s*\(/, 'relationships must not duplicate identity or reconstruct row shells');
 
 console.log('dashboard Jira↔PR relationship regressions passed');
