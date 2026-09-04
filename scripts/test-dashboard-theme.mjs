@@ -48,7 +48,6 @@ for (const contract of compactFlightLayout) {
 
 const benchmarkJs = await readFile(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
 for (const darkDeclaration of [
-  'background: #15140e;',
   'background: #101310;',
   'color: #fff7d3;',
   'color: #a8aea8;',
@@ -59,6 +58,17 @@ for (const darkDeclaration of [
   if (!benchmarkJs.includes(darkDeclaration)) {
     fail(`Benchmark Review dark baseline changed; re-audit light-mode overrides for: ${darkDeclaration}`);
   }
+}
+for (const activeThemeContract of [
+  '.benchmark-active { border: 1px solid var(--progress); padding: 10px; background: var(--board-bg); }',
+  '.benchmark-active-label { color: var(--progress);'
+]) {
+  if (!benchmarkJs.includes(activeThemeContract)) {
+    fail(`Benchmark Review active item must inherit the shared system-theme contract: ${activeThemeContract}`);
+  }
+}
+if (benchmarkJs.includes('background: #15140e;')) {
+  fail('Benchmark Review active item must not keep the fixed #15140e background.');
 }
 for (const lightOverride of [
   'color: #66727c !important;',
@@ -114,6 +124,15 @@ for (const [foreground, background, label] of [
 ]) {
   if (contrast(foreground, background) < 4.5) {
     fail(`Light theme ${label} contrast must remain at least 4.5:1.`);
+  }
+}
+
+for (const [foreground, background, label] of [
+  ['#8a5a00', '#fbfcfd', 'light active progress accent'],
+  ['#ffd166', '#0e100f', 'dark active progress accent']
+]) {
+  if (contrast(foreground, background) < 4.5) {
+    fail(`${label} contrast must remain at least 4.5:1.`);
   }
 }
 
