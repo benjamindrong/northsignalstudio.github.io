@@ -441,7 +441,7 @@ def main() -> int:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        main_dom = run_chrome(executable, f"http://127.0.0.1:{port}/dashboard/{MAIN_FIXTURE.name}", 120000)
+        main_dom = run_chrome(executable, f"http://127.0.0.1:{port}/dashboard/{MAIN_FIXTURE.name}", 30000)
         main_result = parse_result(main_dom, "home29PythonResult")
         if not main_result.get("pass"):
             fail("HOME-29 production-path browser gate failed:\n" + json.dumps(main_result, indent=2))
