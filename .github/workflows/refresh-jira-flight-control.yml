@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "dashboard/index.html"
+      - "dashboard/work-items.js"
+      - "dashboard/work-relationships.js"
       - "dashboard/display.html"
       - "dashboard/benchmark-review.js"
       - "dashboard/refresh-health.js"
@@ -12,6 +14,11 @@ on:
       - "scripts/test-benchmark-registry.mjs"
       - "scripts/test-home24-hardening.mjs"
       - "scripts/test-dashboard-refresh.mjs"
+      - "scripts/test-dashboard-theme.mjs"
+      - "scripts/test-dashboard-work-items.mjs"
+      - "scripts/test-dashboard-work-relationships.mjs"
+      - "scripts/test-dashboard-work-items-browser.mjs"
+      - "scripts/test-dashboard-work-items-browser.py"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
   schedule:
@@ -30,6 +37,8 @@ on:
     branches: [main]
     paths:
       - "dashboard/index.html"
+      - "dashboard/work-items.js"
+      - "dashboard/work-relationships.js"
       - "dashboard/display.html"
       - "dashboard/benchmark-review.js"
       - "dashboard/refresh-health.js"
@@ -38,6 +47,11 @@ on:
       - "scripts/test-benchmark-registry.mjs"
       - "scripts/test-home24-hardening.mjs"
       - "scripts/test-dashboard-refresh.mjs"
+      - "scripts/test-dashboard-theme.mjs"
+      - "scripts/test-dashboard-work-items.mjs"
+      - "scripts/test-dashboard-work-relationships.mjs"
+      - "scripts/test-dashboard-work-items-browser.mjs"
+      - "scripts/test-dashboard-work-items-browser.py"
       - "scripts/refresh-jira-flight-control.mjs"
       - ".github/workflows/refresh-jira-flight-control.yml"
 
@@ -61,12 +75,23 @@ jobs:
 
       - name: Verify refresh logic
         run: |
+          node --check dashboard/work-items.js
+          node --check dashboard/work-relationships.js
+          node --check scripts/test-dashboard-work-items.mjs
+          node --check scripts/test-dashboard-work-items-browser.mjs
+          node --check scripts/test-dashboard-theme.mjs
           node --check scripts/benchmark-registry.mjs
           node --check scripts/refresh-jira-flight-control.mjs
           node scripts/test-benchmark-registry.mjs
           node scripts/test-home24-hardening.mjs
+          node scripts/test-dashboard-work-items.mjs
+          node scripts/test-dashboard-work-relationships.mjs
+          node scripts/test-dashboard-theme.mjs
           node scripts/refresh-jira-flight-control.mjs --self-test
           node scripts/test-dashboard-refresh.mjs
+
+      - name: Verify HOME-29 production-path browser behavior
+        run: node scripts/test-dashboard-work-items-browser.mjs
 
       - name: Verify Benchmark Review UI seams
         run: |
