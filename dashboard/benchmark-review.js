@@ -2,7 +2,7 @@
   'use strict';
 
   const JIRA_BASE_URL = 'https://benjamindrong80.atlassian.net/browse/';
-  const COMPLETED_VISIBLE_LIMIT = 4;
+  const COMPLETED_VISIBLE_LIMIT = 6;
 
   function create(tag, className, text) {
     const element = document.createElement(tag);
