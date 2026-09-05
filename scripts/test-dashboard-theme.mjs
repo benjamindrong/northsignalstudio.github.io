@@ -1,3 +1,4 @@
+import './test-benchmark-review-presentation.mjs';
 import { readFile } from 'node:fs/promises';
 
 const fail = message => { throw new Error(message); };
