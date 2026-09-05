@@ -142,18 +142,24 @@
   }
 
   .benchmark-group,
-  .benchmark-ideas {
+  .benchmark-ideas,
+  .benchmark-invalid {
     background: #f7f9fa !important;
   }
 
   .benchmark-group h3,
-  .benchmark-ideas summary {
+  .benchmark-ideas summary,
+  .benchmark-invalid summary {
     color: #39434c !important;
   }
 
   .benchmark-result,
   .benchmark-idea {
     color: #5c6670 !important;
+  }
+
+  .benchmark-invalid .benchmark-idea {
+    color: var(--blocked) !important;
   }
 
   .benchmark-result.none,
