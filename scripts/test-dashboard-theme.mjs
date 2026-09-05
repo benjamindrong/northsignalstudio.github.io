@@ -25,6 +25,13 @@ for (const filename of docs) {
 }
 
 const css = await readFile(new URL('../dashboard/theme.css', import.meta.url), 'utf8');
+const indexHtml = await readFile(new URL('../dashboard/index.html', import.meta.url), 'utf8');
+const tokenHex = (source, token, context) => {
+  const match = source.match(new RegExp(`--${token}:\\s*(#[0-9a-fA-F]{6});`));
+  if (!match) fail(`${context} is missing a hex --${token} token.`);
+  return match[1];
+};
+
 if (!css.includes(':root {\n  color-scheme: light dark;')) {
   fail('theme.css must advertise both light and dark color schemes.');
 }
@@ -49,7 +56,6 @@ for (const contract of compactFlightLayout) {
 
 const benchmarkJs = await readFile(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
 for (const darkDeclaration of [
-  'background: #15140e;',
   'background: #101310;',
   'color: #fff7d3;',
   'color: #a8aea8;',
@@ -60,6 +66,17 @@ for (const darkDeclaration of [
   if (!benchmarkJs.includes(darkDeclaration)) {
     fail(`Benchmark Review dark baseline changed; re-audit light-mode overrides for: ${darkDeclaration}`);
   }
+}
+for (const activeThemeContract of [
+  '.benchmark-active { border: 1px solid var(--progress); padding: 10px; background: var(--board-bg); }',
+  '.benchmark-active-label { color: var(--progress);'
+]) {
+  if (!benchmarkJs.includes(activeThemeContract)) {
+    fail(`Benchmark Review active item must inherit the shared system-theme contract: ${activeThemeContract}`);
+  }
+}
+if (benchmarkJs.includes('background: #15140e;')) {
+  fail('Benchmark Review active item must not keep the fixed #15140e background.');
 }
 for (const lightOverride of [
   'color: #66727c !important;',
@@ -115,6 +132,15 @@ for (const [foreground, background, label] of [
 ]) {
   if (contrast(foreground, background) < 4.5) {
     fail(`Light theme ${label} contrast must remain at least 4.5:1.`);
+  }
+}
+
+for (const [foreground, background, label] of [
+  [tokenHex(css, 'progress', 'Light theme'), tokenHex(css, 'board-bg', 'Light theme'), 'light active progress accent'],
+  [tokenHex(indexHtml, 'progress', 'Dark theme'), tokenHex(indexHtml, 'board-bg', 'Dark theme'), 'dark active progress accent']
+]) {
+  if (contrast(foreground, background) < 4.5) {
+    fail(`${label} contrast must remain at least 4.5:1.`);
   }
 }
 
