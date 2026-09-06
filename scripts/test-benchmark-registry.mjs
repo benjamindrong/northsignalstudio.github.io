@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { parseCanonicalResultSummary, projectBenchmarkRegistry } from './benchmark-registry.mjs';
 
 const require = createRequire(import.meta.url);
-const { orderedNextRuns, pointerErrorMessage } = require('../dashboard/benchmark-review.js');
+const { orderedNextRuns, pointerErrorMessage, activityTypeLabel, resultFallbackText } = require('../dashboard/benchmark-review.js');
 const POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
 
 function issue(key, labels, category, {
@@ -56,6 +56,7 @@ const records = [
   issue('BEN-40', ['candidate-evaluation', 'registry-blocked'], 'indeterminate'),
   issue('BEN-41', ['candidate-evaluation'], 'indeterminate'),
   issue('BEN-14', ['benchmark-testing'], 'done', { summary: 'Crossmark Physical Signal Hunt Field Benchmark', links: [relates('CROS-1')] }),
+  issue('BEN-58', ['failure-evaluation'], 'new', { summary: 'MyRAM Sync Incident Root-Cause and Release Readiness Failure Evaluation', links: [relates('MYR-218')] }),
   issue('BEN-9', ['candidate-evaluation', 'registry-result-summary'], 'done', { description: summaryDescription }),
   issue('BEN-10', ['candidate-evaluation', 'registry-result-unknown'], 'done', { links: [relates('HOME-12')] }),
   issue('BEN-13', ['candidate-evaluation', 'registry-idea'], 'new', { summary: 'Crossmark X Handoff Benchmark', links: [relates('CROS-1')] }),
@@ -80,6 +81,12 @@ assert.equal(registry.runs.find(run => run.key === 'BEN-41')?.status, 'Running')
 assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.activityKind, 'benchmark-testing');
 assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.type, 'Benchmark Testing');
 assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.resultState, 'none');
+const failureRun = registry.runs.find(run => run.key === 'BEN-58');
+assert.equal(failureRun?.status, 'Preparing');
+assert.equal(failureRun?.activityKind, 'failure-evaluation');
+assert.equal(failureRun?.type, 'Failure Evaluation');
+assert.equal(failureRun?.sourceKey, 'MYR-218');
+assert.equal(failureRun?.resultState, 'none');
 assert.deepEqual(registry.runs.find(run => run.key === 'BEN-9')?.resultLines, [
   'Outcome: Response B won.',
   'Scores: RA 8.0 / RB 9.0.',
@@ -92,6 +99,13 @@ assert.equal(registry.previouslyConsidered[0]?.key, 'BEN-22');
 assert.equal(registry.previouslyConsidered[0]?.updatedAt, '2026-08-27T12:00:00.000Z');
 assert.equal(registry.freshBacklog[0]?.ideas[0]?.key, 'BEN-25');
 assert.equal(registry.freshBacklog[0]?.ideas[0]?.updatedAt, '2026-08-27T12:00:00.000Z');
+
+assert.equal(activityTypeLabel({ activityKind: 'failure-evaluation', type: 'Failure Evaluation' }), 'Failure Evaluation');
+assert.equal(resultFallbackText({ activityKind: 'failure-evaluation', type: 'Failure Evaluation', resultState: 'none' }), 'Failure evaluation record.');
+assert.equal(activityTypeLabel({ activityKind: 'candidate-evaluation', type: 'Candidate Evaluation' }), 'Comparative Evaluation');
+assert.equal(resultFallbackText({ activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', resultState: 'none' }), 'No comparative results recorded yet.');
+assert.equal(activityTypeLabel({ activityKind: 'benchmark-testing', type: 'Benchmark Testing' }), 'Application Testing');
+assert.equal(resultFallbackText({ activityKind: 'benchmark-testing', type: 'Benchmark Testing', resultState: 'none' }), 'Application testing record.');
 
 const uiPreparingRuns = [
   { key: 'BEN-42', status: 'Preparing' },
@@ -249,7 +263,7 @@ const missingParentPointer = projectBenchmarkRegistry([records[0]], {
 assert.equal(missingParentPointer.selectedNext, null);
 assert.match(missingParentPointer.pointerError, /Parent is missing/i);
 
-const ideaPointer = projectBenchmarkRegistry([records[0], records[6]], {
+const ideaPointer = projectBenchmarkRegistry([records[0], records[7]], {
   pointerIssue: pointer('BEN-13'),
   pointerMatches: [pointer('BEN-13')]
 });
@@ -275,6 +289,20 @@ const exactSource = projectBenchmarkRegistry([
 ], { pointerIssue: null, pointerMatches: [] });
 assert.equal(exactSource.runs[0]?.sourceKey, 'RUN-5');
 assert.equal(exactSource.runs[0]?.source, 'RUN-5');
+
+const completedFailure = projectBenchmarkRegistry([
+  issue('BEN-72', ['failure-evaluation'], 'done', { links: [relates('MYR-218')] })
+], { pointerIssue: null, pointerMatches: [] });
+assert.equal(completedFailure.invalidRecords.length, 0);
+assert.equal(completedFailure.runs[0]?.status, 'Completed');
+assert.equal(completedFailure.runs[0]?.activityKind, 'failure-evaluation');
+assert.equal(completedFailure.runs[0]?.resultState, 'none');
+
+const failureWithComparativeResult = projectBenchmarkRegistry([
+  issue('BEN-73', ['failure-evaluation', 'registry-result-summary'], 'done', { description: summaryDescription })
+], { pointerIssue: null, pointerMatches: [] });
+assert.equal(failureWithComparativeResult.runs.length, 0);
+assert.match(failureWithComparativeResult.invalidRecords[0]?.reasons.join('\n') || '', /only valid on Completed Candidate Evaluation records/i);
 
 const sameProjectRelates = projectBenchmarkRegistry([
   issue('BEN-71', ['benchmark-testing'], 'done', { links: [relates('BEN-999')] })

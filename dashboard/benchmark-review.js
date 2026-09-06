@@ -101,6 +101,7 @@
         ? legacyType.replace(/^Candidate Evaluation/, 'Comparative Evaluation')
         : 'Comparative Evaluation';
     }
+    if (run && run.activityKind === 'failure-evaluation') return 'Failure Evaluation';
     if (activityKind) return legacyType;
     if (legacyType.startsWith('Benchmark Testing')) return legacyType.replace(/^Benchmark Testing/, 'Application Testing');
     if (legacyType.startsWith('Candidate Evaluation')) return legacyType.replace(/^Candidate Evaluation/, 'Comparative Evaluation');
@@ -112,18 +113,20 @@
     return compact ? run.resultLines.slice(0, 1) : run.resultLines;
   }
 
+  function resultFallbackText(run) {
+    const activityType = activityTypeLabel(run);
+    if (activityType.startsWith('Application Testing')) return 'Application testing record.';
+    if (activityType.startsWith('Failure Evaluation')) return 'Failure evaluation record.';
+    return run.resultState === 'none' ? 'No comparative results recorded yet.' : 'Result: Unknown / backfill.';
+  }
+
   function appendResults(container, run, compact = false) {
     const resultLines = resultLinesForDisplay(run, compact);
     if (resultLines.length) {
       for (const line of resultLines) container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, line));
       return;
     }
-    if (activityTypeLabel(run).startsWith('Application Testing')) {
-      container.appendChild(create('div', 'benchmark-result none', 'Application testing record.'));
-      return;
-    }
-    const fallback = run.resultState === 'none' ? 'No comparative results recorded yet.' : 'Result: Unknown / backfill.';
-    container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, fallback));
+    container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, resultFallbackText(run)));
   }
 
   function appendRun(container, run, compactResults = false) {
@@ -291,7 +294,9 @@
     orderedNextRuns,
     pointerErrorMessage,
     completedRunsForDisplay,
-    resultLinesForDisplay
+    resultLinesForDisplay,
+    activityTypeLabel,
+    resultFallbackText
   };
   root.DashboardBenchmarkReview = { render, locked };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

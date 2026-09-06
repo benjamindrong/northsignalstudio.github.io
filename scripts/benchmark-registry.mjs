@@ -1,6 +1,7 @@
 const ACTIVITY_LABELS = new Map([
   ['candidate-evaluation', 'Candidate Evaluation'],
-  ['benchmark-testing', 'Benchmark Testing']
+  ['benchmark-testing', 'Benchmark Testing'],
+  ['failure-evaluation', 'Failure Evaluation']
 ]);
 
 const IDEA_CATEGORY_LABELS = new Map([
