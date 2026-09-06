@@ -1,3 +1,4 @@
+import './test-benchmark-review-presentation.mjs';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 
@@ -26,6 +27,13 @@ for (const filename of docs) {
 }
 
 const css = await readFile(new URL('../dashboard/theme.css', import.meta.url), 'utf8');
+const indexHtml = await readFile(new URL('../dashboard/index.html', import.meta.url), 'utf8');
+const tokenHex = (source, token, context) => {
+  const match = source.match(new RegExp(`--${token}:\\s*(#[0-9a-fA-F]{6});`));
+  if (!match) fail(`${context} is missing a hex --${token} token.`);
+  return match[1];
+};
+
 if (!css.includes(':root {\n  color-scheme: light dark;')) {
   fail('theme.css must advertise both light and dark color schemes.');
 }
@@ -53,7 +61,6 @@ for (const contract of compactFlightLayout) {
 
 const benchmarkJs = await readFile(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
 for (const darkDeclaration of [
-  'background: #15140e;',
   'background: #101310;',
   'color: #fff7d3;',
   'color: #a8aea8;',
@@ -65,6 +72,17 @@ for (const darkDeclaration of [
     fail(`Benchmark Review dark baseline changed; re-audit light-mode overrides for: ${darkDeclaration}`);
   }
 }
+for (const activeThemeContract of [
+  '.benchmark-active { border: 1px solid var(--progress); padding: 10px; background: var(--board-bg); }',
+  '.benchmark-active-label { color: var(--progress);'
+]) {
+  if (!benchmarkJs.includes(activeThemeContract)) {
+    fail(`Benchmark Review active item must inherit the shared system-theme contract: ${activeThemeContract}`);
+  }
+}
+if (benchmarkJs.includes('background: #15140e;')) {
+  fail('Benchmark Review active item must not keep the fixed #15140e background.');
+}
 for (const lightOverride of [
   'color: #66727c !important;',
   'background: #fff8df !important;',
@@ -72,6 +90,7 @@ for (const lightOverride of [
   'background: #f7f9fa !important;',
   'color: #39434c !important;',
   'color: #5c6670 !important;',
+  'color: var(--blocked) !important;',
   'color: #64707a !important;'
 ]) {
   if (!css.includes(lightOverride)) {
@@ -83,7 +102,10 @@ for (const selector of [
   '.benchmark-next {',
   '.benchmark-run-title {',
   '.benchmark-group,',
+  '.benchmark-invalid {',
   '.benchmark-group h3,',
+  '.benchmark-invalid summary {',
+  '.benchmark-invalid .benchmark-idea {',
   '.benchmark-result,',
   '.benchmark-result.none,'
 ]) {
@@ -121,10 +143,20 @@ for (const [foreground, background, label] of [
   ['#66727c', '#fff8df', 'benchmark metadata'],
   ['#39434c', '#f7f9fa', 'benchmark group heading'],
   ['#5c6670', '#f7f9fa', 'benchmark secondary text'],
+  ['#b42318', '#f7f9fa', 'benchmark invalid-record text'],
   ['#64707a', '#fbfcfd', 'benchmark empty text']
 ]) {
   if (contrast(foreground, background) < 4.5) {
     fail(`Light theme ${label} contrast must remain at least 4.5:1.`);
+  }
+}
+
+for (const [foreground, background, label] of [
+  [tokenHex(css, 'progress', 'Light theme'), tokenHex(css, 'board-bg', 'Light theme'), 'light active progress accent'],
+  [tokenHex(indexHtml, 'progress', 'Dark theme'), tokenHex(indexHtml, 'board-bg', 'Dark theme'), 'dark active progress accent']
+]) {
+  if (contrast(foreground, background) < 4.5) {
+    fail(`${label} contrast must remain at least 4.5:1.`);
   }
 }
 

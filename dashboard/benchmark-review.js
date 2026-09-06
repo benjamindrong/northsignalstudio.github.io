@@ -2,6 +2,7 @@
   'use strict';
 
   const JIRA_BASE_URL = 'https://benjamindrong80.atlassian.net/browse/';
+  const COMPLETED_VISIBLE_LIMIT = 6;
   const EXPANDED_RESULT_LIMIT = 2;
   const expandedRunKeys = new Set();
 
@@ -21,8 +22,8 @@
       .benchmark-board { margin-top: 16px; min-width: 0; min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--board-line); background: var(--board-bg); color: var(--board-text); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
       .benchmark-meta { min-height: 34px; display: flex; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--board-line); background: var(--board-panel); color: #a8aea8; font-size: 9px; letter-spacing: .055em; text-transform: uppercase; }
       .benchmark-content { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px; display: grid; gap: 10px; }
-      .benchmark-active { border: 1px solid #ffd166; padding: 10px; background: #15140e; }
-      .benchmark-active-label { color: #ffd166; font-size: 8px; font-weight: 950; letter-spacing: .09em; text-transform: uppercase; }
+      .benchmark-active { border: 1px solid var(--progress); padding: 10px; background: var(--board-bg); }
+      .benchmark-active-label { color: var(--progress); font-size: 8px; font-weight: 950; letter-spacing: .09em; text-transform: uppercase; }
       .benchmark-active .benchmark-run { padding-left: 0; padding-right: 0; }
       .benchmark-run-header { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: start; gap: 8px; }
       .benchmark-run-identity { min-width: 0; }
@@ -109,21 +110,32 @@
         ? legacyType.replace(/^Candidate Evaluation/, 'Comparative Evaluation')
         : 'Comparative Evaluation';
     }
+    if (run && run.activityKind === 'failure-evaluation') return 'Failure Evaluation';
     if (activityKind) return legacyType;
     if (legacyType.startsWith('Benchmark Testing')) return legacyType.replace(/^Benchmark Testing/, 'Application Testing');
     if (legacyType.startsWith('Candidate Evaluation')) return legacyType.replace(/^Candidate Evaluation/, 'Comparative Evaluation');
     return legacyType;
   }
 
-  function resultSummaryText(run) {
-    if (Array.isArray(run.resultLines) && run.resultLines.length) return String(run.resultLines[0]);
-    if (activityTypeLabel(run).startsWith('Application Testing')) return 'Application testing record.';
+  function resultLinesForDisplay(run, compact = false) {
+    if (!Array.isArray(run?.resultLines)) return [];
+    return compact ? run.resultLines.slice(0, 1) : run.resultLines;
+  }
+
+  function resultFallbackText(run) {
+    const activityType = activityTypeLabel(run);
+    if (activityType.startsWith('Application Testing')) return 'Application testing record.';
+    if (activityType.startsWith('Failure Evaluation')) return 'Failure evaluation record.';
     return run.resultState === 'none' ? 'No comparative results recorded yet.' : 'Result: Unknown / backfill.';
   }
 
+  function resultSummaryText(run) {
+    const resultLines = resultLinesForDisplay(run, true);
+    return resultLines.length ? String(resultLines[0]) : resultFallbackText(run);
+  }
+
   function expandedResultLines(run) {
-    if (!Array.isArray(run?.resultLines)) return [];
-    return run.resultLines.slice(0, EXPANDED_RESULT_LIMIT).map(line => String(line));
+    return resultLinesForDisplay(run).slice(0, EXPANDED_RESULT_LIMIT).map(line => String(line));
   }
 
   function appendResults(container, run) {
@@ -132,12 +144,7 @@
       for (const line of resultLines) container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, line));
       return;
     }
-    if (activityTypeLabel(run).startsWith('Application Testing')) {
-      container.appendChild(create('div', 'benchmark-result none', 'Application testing record.'));
-      return;
-    }
-    const fallback = run.resultState === 'none' ? 'No comparative results recorded yet.' : 'Result: Unknown / backfill.';
-    container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, fallback));
+    container.appendChild(create('div', `benchmark-result ${run.resultState || 'unknown'}`, resultFallbackText(run)));
   }
 
   function appendRun(container, run) {
@@ -190,9 +197,10 @@
     container.appendChild(row);
   }
 
-  function appendRunGroup(content, label, runs) {
+  function appendRunGroup(content, label, runs, options = {}) {
+    const { count = runs.length } = options;
     const group = create('section', 'benchmark-group');
-    group.appendChild(create('h3', '', `${label} · ${runs.length}`));
+    group.appendChild(create('h3', '', `${label} · ${count}`));
     if (!runs.length) group.appendChild(create('div', 'benchmark-run benchmark-result unknown', `No ${label.toLowerCase()} benchmarks recorded.`));
     else for (const run of runs) appendRun(group, run);
     content.appendChild(group);
@@ -207,6 +215,17 @@
     if (selectedIndex === 0) return preparing;
     const selected = preparing[selectedIndex];
     return [selected, ...preparing.slice(0, selectedIndex), ...preparing.slice(selectedIndex + 1)];
+  }
+
+  function orderedCompletedRuns(registry) {
+    return registry.runs
+      .filter(run => run.status === 'Completed')
+      .sort((a, b) => String(b.key || '').localeCompare(String(a.key || ''), undefined, { numeric: true }));
+  }
+
+  function completedRunsForDisplay(registry) {
+    const ordered = orderedCompletedRuns(registry);
+    return { total: ordered.length, runs: ordered.slice(0, COMPLETED_VISIBLE_LIMIT) };
   }
 
   function pointerErrorMessage(registry) {
@@ -316,12 +335,10 @@
     }
 
     const nextRuns = orderedNextRuns(registry);
-    const completedRuns = registry.runs
-      .filter(run => run.status === 'Completed')
-      .sort((a, b) => String(b.key || '').localeCompare(String(a.key || ''), undefined, { numeric: true }));
+    const completedRuns = completedRunsForDisplay(registry);
     const columns = create('div', nextRuns.length ? 'benchmark-columns' : 'benchmark-columns completed-only');
     if (nextRuns.length) appendRunGroup(columns, 'Next', nextRuns);
-    appendRunGroup(columns, 'Completed', completedRuns);
+    appendRunGroup(columns, 'Completed', completedRuns.runs, { count: completedRuns.total });
     content.appendChild(columns);
 
     const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');
@@ -345,6 +362,15 @@
   }
 
   if (typeof document !== 'undefined') ensureSurface();
-  if (typeof module !== 'undefined' && module.exports) module.exports = { orderedNextRuns, pointerErrorMessage, resultSummaryText, expandedResultLines };
+  if (typeof module !== 'undefined' && module.exports) module.exports = {
+    orderedNextRuns,
+    pointerErrorMessage,
+    completedRunsForDisplay,
+    resultLinesForDisplay,
+    activityTypeLabel,
+    resultFallbackText,
+    resultSummaryText,
+    expandedResultLines
+  };
   root.DashboardBenchmarkReview = { render, locked };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
