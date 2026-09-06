@@ -85,6 +85,7 @@ for (const lightOverride of [
   'background: #f7f9fa !important;',
   'color: #39434c !important;',
   'color: #5c6670 !important;',
+  'color: var(--blocked) !important;',
   'color: #64707a !important;'
 ]) {
   if (!css.includes(lightOverride)) {
@@ -96,7 +97,10 @@ for (const selector of [
   '.benchmark-next {',
   '.benchmark-run-title {',
   '.benchmark-group,',
+  '.benchmark-invalid {',
   '.benchmark-group h3,',
+  '.benchmark-invalid summary {',
+  '.benchmark-invalid .benchmark-idea {',
   '.benchmark-result,',
   '.benchmark-result.none,'
 ]) {
@@ -128,6 +132,7 @@ for (const [foreground, background, label] of [
   ['#66727c', '#fff8df', 'benchmark metadata'],
   ['#39434c', '#f7f9fa', 'benchmark group heading'],
   ['#5c6670', '#f7f9fa', 'benchmark secondary text'],
+  ['#b42318', '#f7f9fa', 'benchmark invalid-record text'],
   ['#64707a', '#fbfcfd', 'benchmark empty text']
 ]) {
   if (contrast(foreground, background) < 4.5) {
