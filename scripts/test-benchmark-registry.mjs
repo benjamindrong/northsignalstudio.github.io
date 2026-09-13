@@ -79,7 +79,7 @@ assert.equal(registry.selectedNext?.status, 'Preparing');
 assert.equal(registry.runs.find(run => run.key === 'BEN-40')?.status, 'Blocked');
 assert.equal(registry.runs.find(run => run.key === 'BEN-41')?.status, 'Running');
 assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.activityKind, 'benchmark-testing');
-assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.type, 'Benchmark Testing');
+assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.type, 'Application Benchmark Testing');
 assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.resultState, 'none');
 const failureRun = registry.runs.find(run => run.key === 'BEN-58');
 assert.equal(failureRun?.status, 'Preparing');
@@ -102,10 +102,12 @@ assert.equal(registry.freshBacklog[0]?.ideas[0]?.updatedAt, '2026-08-27T12:00:00
 
 assert.equal(activityTypeLabel({ activityKind: 'failure-evaluation', type: 'Failure Evaluation' }), 'Failure Evaluation');
 assert.equal(resultFallbackText({ activityKind: 'failure-evaluation', type: 'Failure Evaluation', resultState: 'none' }), 'Failure evaluation record.');
-assert.equal(activityTypeLabel({ activityKind: 'candidate-evaluation', type: 'Candidate Evaluation' }), 'Comparative Evaluation');
+assert.equal(activityTypeLabel({ activityKind: 'candidate-evaluation', type: 'Candidate Evaluation' }), 'Candidate Evaluation');
 assert.equal(resultFallbackText({ activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', resultState: 'none' }), 'No comparative results recorded yet.');
-assert.equal(activityTypeLabel({ activityKind: 'benchmark-testing', type: 'Benchmark Testing' }), 'Application Testing');
-assert.equal(resultFallbackText({ activityKind: 'benchmark-testing', type: 'Benchmark Testing', resultState: 'none' }), 'Application testing record.');
+assert.equal(activityTypeLabel({ activityKind: 'benchmark-testing', type: 'Application Benchmark Testing' }), 'Application Benchmark Testing');
+assert.equal(resultFallbackText({ activityKind: 'benchmark-testing', type: 'Application Benchmark Testing', resultState: 'none' }), 'Application benchmark testing record.');
+assert.equal(activityTypeLabel({ activityKind: 'uiux-discovery', type: 'UI/UX Discovery' }), 'UI/UX Discovery');
+assert.equal(resultFallbackText({ activityKind: 'uiux-discovery', type: 'UI/UX Discovery', resultState: 'none' }), 'UI/UX discovery record.');
 
 const uiPreparingRuns = [
   { key: 'BEN-42', status: 'Preparing' },
@@ -120,10 +122,14 @@ assert.deepEqual(orderedNextRuns(missingPointerUi), []);
 assert.match(pointerErrorMessage(missingPointerUi), /Parent is missing/i);
 const missingPointerErrorUi = { runs: uiPreparingRuns, selectedNext: null, pointerError: '' };
 assert.deepEqual(orderedNextRuns(missingPointerErrorUi), []);
-assert.match(pointerErrorMessage(missingPointerErrorUi), /selected Preparing/i);
+assert.match(pointerErrorMessage(missingPointerErrorUi), /Preparing, Blocked, or Running/i);
 assert.deepEqual(
-  orderedNextRuns({ runs: uiPreparingRuns, selectedNext: { key: 'BEN-17', status: 'Running' }, pointerError: '' }),
-  []
+  orderedNextRuns({ runs: [...uiPreparingRuns, { key: 'BEN-41', status: 'Running' }], selectedNext: { key: 'BEN-41', status: 'Running' }, pointerError: '' }).map(run => run.key),
+  ['BEN-42', 'BEN-17']
+);
+assert.deepEqual(
+  orderedNextRuns({ runs: [...uiPreparingRuns, { key: 'BEN-40', status: 'Blocked' }], selectedNext: { key: 'BEN-40', status: 'Blocked' }, pointerError: '' }).map(run => run.key),
+  ['BEN-42', 'BEN-17']
 );
 const missingSelectedRunUi = {
   runs: [{ key: 'BEN-42', status: 'Preparing' }],
@@ -131,7 +137,7 @@ const missingSelectedRunUi = {
   pointerError: ''
 };
 assert.deepEqual(orderedNextRuns(missingSelectedRunUi), []);
-assert.match(pointerErrorMessage(missingSelectedRunUi), /unavailable from the Preparing registry projection/i);
+assert.match(pointerErrorMessage(missingSelectedRunUi), /eligible registry projection/i);
 
 const allProjectedKeys = new Set([
   ...registry.runs.map(record => record.key),
@@ -274,15 +280,17 @@ const blockedPointer = projectBenchmarkRegistry([records[1]], {
   pointerIssue: pointer('BEN-40'),
   pointerMatches: [pointer('BEN-40')]
 });
-assert.equal(blockedPointer.selectedNext, null);
-assert.match(blockedPointer.pointerError, /Preparing/i);
+assert.equal(blockedPointer.pointerError, '');
+assert.equal(blockedPointer.selectedNext?.key, 'BEN-40');
+assert.equal(blockedPointer.selectedNext?.status, 'Blocked');
 
 const runningPointer = projectBenchmarkRegistry([records[2]], {
   pointerIssue: pointer('BEN-41'),
   pointerMatches: [pointer('BEN-41')]
 });
-assert.equal(runningPointer.selectedNext, null);
-assert.match(runningPointer.pointerError, /Preparing/i);
+assert.equal(runningPointer.pointerError, '');
+assert.equal(runningPointer.selectedNext?.key, 'BEN-41');
+assert.equal(runningPointer.selectedNext?.status, 'Running');
 
 const exactSource = projectBenchmarkRegistry([
   issue('BEN-70', ['benchmark-testing'], 'done', { links: [relates('RUN-5')] })
