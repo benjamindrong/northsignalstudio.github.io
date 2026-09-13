@@ -7,13 +7,21 @@ const { completedRunsForDisplay, resultLinesForDisplay } = require('../dashboard
 const presentationSource = readFileSync(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
 
 const nextRenderIndex = presentationSource.indexOf("appendRunGroup(columns, 'Next', nextRuns)");
-const blockedRenderIndex = presentationSource.indexOf("appendRunGroup(columns, 'Blocked', blockedRuns)");
-const completedRenderIndex = presentationSource.indexOf("appendRunGroup(columns, 'Completed', completedRuns.runs");
+const rightColumnIndex = presentationSource.indexOf("const rightColumn = create('div', 'benchmark-column-stack')");
+const blockedRenderIndex = presentationSource.indexOf("appendRunGroup(rightColumn, 'Blocked', blockedRuns)");
+const completedRenderIndex = presentationSource.indexOf("appendRunGroup(rightColumn, 'Completed', completedRuns.runs");
+const rightColumnAppendIndex = presentationSource.indexOf('columns.appendChild(rightColumn)');
+const rightColumnStyleIndex = presentationSource.indexOf('.benchmark-column-stack { min-width: 0; display: grid; gap: 10px; align-content: start; }');
 assert.ok(nextRenderIndex >= 0, 'Benchmark Review must render the Next group when next runs exist.');
+assert.ok(rightColumnIndex >= 0, 'Benchmark Review must create a dedicated right-column stack.');
 assert.ok(blockedRenderIndex >= 0, 'Benchmark Review must render a Blocked group when blocked runs exist.');
 assert.ok(completedRenderIndex >= 0, 'Benchmark Review must render the Completed group.');
-assert.ok(nextRenderIndex < blockedRenderIndex, 'Next benchmarks must remain before Blocked benchmarks.');
-assert.ok(blockedRenderIndex < completedRenderIndex, 'Blocked benchmarks must render before Completed benchmarks.');
+assert.ok(rightColumnAppendIndex >= 0, 'Benchmark Review must append the right-column stack to the two-column layout.');
+assert.ok(rightColumnStyleIndex >= 0, 'Benchmark Review right-column stack must use a vertical grid layout.');
+assert.ok(nextRenderIndex < rightColumnIndex, 'Next benchmarks must remain in the left column before the right-column stack.');
+assert.ok(rightColumnIndex < blockedRenderIndex, 'Blocked benchmarks must render inside the right-column stack.');
+assert.ok(blockedRenderIndex < completedRenderIndex, 'Blocked benchmarks must render before Completed benchmarks in the right column.');
+assert.ok(completedRenderIndex < rightColumnAppendIndex, 'The completed right-column stack must be assembled before it is appended to the layout.');
 
 const registry = {
   runs: [
