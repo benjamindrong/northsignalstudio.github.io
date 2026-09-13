@@ -34,6 +34,7 @@
       .benchmark-run-meta { margin-top: 4px; color: #a8aea8; font-size: 9px; line-height: 1.35; overflow-wrap: anywhere; }
       .benchmark-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
       .benchmark-columns.completed-only { grid-template-columns: minmax(0, 1fr); }
+      .benchmark-column-stack { min-width: 0; display: grid; gap: 10px; align-content: start; }
       .benchmark-group { min-width: 0; border: 1px solid var(--board-line-soft); background: #101310; }
       .benchmark-group h3 { margin: 0; padding: 7px 8px; border-bottom: 1px solid var(--board-line-soft); color: #c8cec8; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
       .benchmark-run { min-width: 0; padding: 8px; border-bottom: 1px solid var(--board-line-soft); }
@@ -339,8 +340,10 @@
     const completedRuns = completedRunsForDisplay(registry);
     const columns = create('div', nextRuns.length ? 'benchmark-columns' : 'benchmark-columns completed-only');
     if (nextRuns.length) appendRunGroup(columns, 'Next', nextRuns);
-    if (blockedRuns.length) appendRunGroup(columns, 'Blocked', blockedRuns);
-    appendRunGroup(columns, 'Completed', completedRuns.runs, { count: completedRuns.total });
+    const rightColumn = create('div', 'benchmark-column-stack');
+    if (blockedRuns.length) appendRunGroup(rightColumn, 'Blocked', blockedRuns);
+    appendRunGroup(rightColumn, 'Completed', completedRuns.runs, { count: completedRuns.total });
+    columns.appendChild(rightColumn);
     content.appendChild(columns);
 
     appendIdeas(content, registry);
