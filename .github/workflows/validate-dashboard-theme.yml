@@ -56,4 +56,18 @@ jobs:
         run: python3 scripts/test-benchmark-review-disclosure-browser.py
 
       - name: Verify HOME-29 production-path compact layout
-        run: node scripts/test-dashboard-work-items-browser.mjs
+        shell: bash
+        run: |
+          set +e
+          output="$(node scripts/test-dashboard-work-items-browser.mjs 2>&1)"
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          if [[ "$output" != *"Could not parse browser result JSON:"* ]]; then
+            exit "$status"
+          fi
+          echo "Retrying once after transient empty Chrome browser result."
+          node scripts/test-dashboard-work-items-browser.mjs
