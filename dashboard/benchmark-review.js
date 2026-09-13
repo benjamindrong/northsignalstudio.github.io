@@ -334,13 +334,12 @@
       content.appendChild(active);
     }
 
-    const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');
-    if (blockedRuns.length) appendRunGroup(content, 'Blocked', blockedRuns);
-
     const nextRuns = orderedNextRuns(registry);
+    const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');
     const completedRuns = completedRunsForDisplay(registry);
     const columns = create('div', nextRuns.length ? 'benchmark-columns' : 'benchmark-columns completed-only');
     if (nextRuns.length) appendRunGroup(columns, 'Next', nextRuns);
+    if (blockedRuns.length) appendRunGroup(columns, 'Blocked', blockedRuns);
     appendRunGroup(columns, 'Completed', completedRuns.runs, { count: completedRuns.total });
     content.appendChild(columns);
 
