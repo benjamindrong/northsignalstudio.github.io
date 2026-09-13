@@ -76,10 +76,12 @@ assert.equal(registry.pointerUpdatedAt, '2026-08-27T12:01:00.000Z');
 assert.deepEqual(registry.invalidRecords, []);
 assert.equal(registry.selectedNext?.key, 'BEN-17');
 assert.equal(registry.selectedNext?.status, 'Preparing');
+assert.equal(registry.selectedNext?.activityTaxonomyVersion, 2);
 assert.equal(registry.runs.find(run => run.key === 'BEN-40')?.status, 'Blocked');
 assert.equal(registry.runs.find(run => run.key === 'BEN-41')?.status, 'Running');
 assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.activityKind, 'benchmark-testing');
 assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.type, 'Application Benchmark Testing');
+assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.activityTaxonomyVersion, 2);
 assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.resultState, 'none');
 const failureRun = registry.runs.find(run => run.key === 'BEN-58');
 assert.equal(failureRun?.status, 'Preparing');
@@ -100,14 +102,17 @@ assert.equal(registry.previouslyConsidered[0]?.updatedAt, '2026-08-27T12:00:00.0
 assert.equal(registry.freshBacklog[0]?.ideas[0]?.key, 'BEN-25');
 assert.equal(registry.freshBacklog[0]?.ideas[0]?.updatedAt, '2026-08-27T12:00:00.000Z');
 
-assert.equal(activityTypeLabel({ activityKind: 'failure-evaluation', type: 'Failure Evaluation' }), 'Failure Evaluation');
-assert.equal(resultFallbackText({ activityKind: 'failure-evaluation', type: 'Failure Evaluation', resultState: 'none' }), 'Failure evaluation record.');
-assert.equal(activityTypeLabel({ activityKind: 'candidate-evaluation', type: 'Candidate Evaluation' }), 'Candidate Evaluation');
-assert.equal(resultFallbackText({ activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', resultState: 'none' }), 'No comparative results recorded yet.');
-assert.equal(activityTypeLabel({ activityKind: 'benchmark-testing', type: 'Application Benchmark Testing' }), 'Application Benchmark Testing');
-assert.equal(resultFallbackText({ activityKind: 'benchmark-testing', type: 'Application Benchmark Testing', resultState: 'none' }), 'Application benchmark testing record.');
-assert.equal(activityTypeLabel({ activityKind: 'uiux-discovery', type: 'UI/UX Discovery' }), 'UI/UX Discovery');
-assert.equal(resultFallbackText({ activityKind: 'uiux-discovery', type: 'UI/UX Discovery', resultState: 'none' }), 'UI/UX discovery record.');
+const taxonomyV2 = { activityTaxonomyVersion: 2 };
+assert.equal(activityTypeLabel({ ...taxonomyV2, activityKind: 'failure-evaluation', type: 'Failure Evaluation' }), 'Failure Evaluation');
+assert.equal(resultFallbackText({ ...taxonomyV2, activityKind: 'failure-evaluation', type: 'Failure Evaluation', resultState: 'none' }), 'Failure evaluation record.');
+assert.equal(activityTypeLabel({ ...taxonomyV2, activityKind: 'candidate-evaluation', type: 'Candidate Evaluation' }), 'Candidate Evaluation');
+assert.equal(resultFallbackText({ ...taxonomyV2, activityKind: 'candidate-evaluation', type: 'Candidate Evaluation', resultState: 'none' }), 'No comparative results recorded yet.');
+assert.equal(activityTypeLabel({ ...taxonomyV2, activityKind: 'benchmark-testing', type: 'Application Benchmark Testing' }), 'Application Benchmark Testing');
+assert.equal(resultFallbackText({ ...taxonomyV2, activityKind: 'benchmark-testing', type: 'Application Benchmark Testing', resultState: 'none' }), 'Application benchmark testing record.');
+assert.equal(activityTypeLabel({ ...taxonomyV2, activityKind: 'uiux-discovery', type: 'UI/UX Discovery' }), 'UI/UX Discovery');
+assert.equal(resultFallbackText({ ...taxonomyV2, activityKind: 'uiux-discovery', type: 'UI/UX Discovery', resultState: 'none' }), 'UI/UX discovery record.');
+assert.equal(activityTypeLabel({ activityKind: 'candidate-evaluation', type: 'Candidate Evaluation' }), 'Comparative Evaluation');
+assert.equal(activityTypeLabel({ activityKind: 'benchmark-testing', type: 'Benchmark Testing' }), 'Application Testing');
 
 const uiPreparingRuns = [
   { key: 'BEN-42', status: 'Preparing' },
