@@ -51,22 +51,30 @@ DRIVER = r'''<script>
     await tick();
     ideas = document.querySelector('.benchmark-ideas');
     if (!ideas) fail('Idea backlog disappeared after dashboardRefresh().');
-    if (ideas === firstIdeas) fail('Benchmark Review did not reconstruct the Idea Backlog during refresh as expected by this regression seam.');
+    if (ideas !== firstIdeas) fail('Unchanged Benchmark Review data must not reconstruct the Idea Backlog during refresh.');
     if (!ideas.open) fail('Idea backlog closed after dashboardRefresh().');
 
     ideas.querySelector('summary')?.click();
     await tick();
     if (ideas.open) fail('Idea backlog did not close from the native disclosure control.');
+    const closedIdeas = ideas;
 
     window.__home29Fixture.revision = 2;
     await window.dashboardRefresh();
     await tick();
     ideas = document.querySelector('.benchmark-ideas');
     if (!ideas) fail('Idea backlog disappeared after the second dashboardRefresh().');
+    if (ideas !== closedIdeas) fail('Unchanged Benchmark Review data must preserve the existing Idea Backlog DOM node.');
     if (ideas.open) fail('Closed Idea Backlog state was not preserved after dashboardRefresh().');
 
     document.documentElement.dataset.benchmarkDisclosure = 'pass';
-    result.textContent = JSON.stringify({ pass:true, productionRefresh:true, openStatePreserved:true, closedStatePreserved:true });
+    result.textContent = JSON.stringify({
+      pass:true,
+      productionRefresh:true,
+      unchangedRegistryNodePreserved:true,
+      openStatePreserved:true,
+      closedStatePreserved:true
+    });
   } catch (error) {
     document.documentElement.dataset.benchmarkDisclosure = 'fail';
     result.textContent = JSON.stringify({
