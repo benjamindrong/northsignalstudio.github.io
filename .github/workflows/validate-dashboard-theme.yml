@@ -9,6 +9,7 @@ on:
       - dashboard/work-items.js
       - dashboard/benchmark-review.js
       - dashboard/work-relationships.js
+      - scripts/test-benchmark-review-presentation.mjs
       - scripts/test-dashboard-theme.mjs
       - scripts/test-dashboard-refresh.mjs
       - scripts/test-dashboard-work-items.mjs
@@ -26,6 +27,7 @@ on:
       - dashboard/work-items.js
       - dashboard/benchmark-review.js
       - dashboard/work-relationships.js
+      - scripts/test-benchmark-review-presentation.mjs
       - scripts/test-dashboard-theme.mjs
       - scripts/test-dashboard-refresh.mjs
       - scripts/test-dashboard-work-items.mjs
@@ -45,6 +47,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: node scripts/test-benchmark-review-presentation.mjs
       - run: node scripts/test-dashboard-theme.mjs
       - run: node scripts/test-dashboard-work-items.mjs
       - run: node scripts/test-dashboard-work-relationships.mjs
