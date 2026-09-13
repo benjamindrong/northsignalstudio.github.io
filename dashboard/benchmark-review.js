@@ -5,12 +5,25 @@
   const COMPLETED_VISIBLE_LIMIT = 6;
   const EXPANDED_RESULT_LIMIT = 2;
   const expandedRunKeys = new Set();
+  const expandedSectionKeys = new Set();
 
   function create(tag, className, text) {
     const element = document.createElement(tag);
     if (className) element.className = className;
     if (text != null) element.textContent = text;
     return element;
+  }
+
+  function setExpandedSection(key, expanded) {
+    if (expanded) expandedSectionKeys.add(key);
+    else expandedSectionKeys.delete(key);
+  }
+
+  function createPersistedDetails(className, stateKey) {
+    const details = create('details', className);
+    details.open = expandedSectionKeys.has(stateKey);
+    details.addEventListener('toggle', () => setExpandedSection(stateKey, details.open));
+    return details;
   }
 
   function ensureStyles() {
@@ -248,7 +261,7 @@
     const previous = Array.isArray(registry.previouslyConsidered) ? registry.previouslyConsidered : [];
     const freshGroups = Array.isArray(registry.freshBacklog) ? registry.freshBacklog : [];
     const freshCount = freshGroups.reduce((total, group) => total + (group.ideas?.length || 0), 0);
-    const details = create('details', 'benchmark-ideas');
+    const details = createPersistedDetails('benchmark-ideas', 'ideas');
     details.appendChild(create('summary', '', `Idea backlog · ${definedUnused.length + previous.length + freshCount}`));
     const body = create('div', 'benchmark-idea-body');
 
@@ -281,7 +294,7 @@
   function appendInvalidRecords(content, registry) {
     const invalid = Array.isArray(registry.invalidRecords) ? registry.invalidRecords : [];
     if (!invalid.length) return;
-    const details = create('details', 'benchmark-invalid');
+    const details = createPersistedDetails('benchmark-invalid', 'invalid-records');
     details.appendChild(create('summary', '', `Invalid registry records · ${invalid.length}`));
     const body = create('div', 'benchmark-idea-body');
     for (const record of invalid) {
@@ -352,6 +365,7 @@
   function locked(message = 'Unlock the dashboard to load Benchmark Review.') {
     ensureSurface();
     expandedRunKeys.clear();
+    expandedSectionKeys.clear();
     const content = document.getElementById('benchmarkContent');
     const source = document.getElementById('benchmarkSource');
     if (source) source.textContent = 'Encrypted BEN registry';
@@ -370,7 +384,8 @@
     activityTypeLabel,
     resultFallbackText,
     resultSummaryText,
-    expandedResultLines
+    expandedResultLines,
+    createPersistedDetails
   };
   root.DashboardBenchmarkReview = { render, locked };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
