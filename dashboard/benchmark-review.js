@@ -133,14 +133,14 @@
   }
 
   function activityTypeLabel(run) {
-    const activityKind = String(run?.activityKind || '').trim();
     const legacyType = String(run?.type || '').trim();
-    if (activityKind === 'benchmark-testing') return 'Application Benchmark Testing';
-    if (activityKind === 'candidate-evaluation') return 'Candidate Evaluation';
-    if (activityKind === 'failure-evaluation') return 'Failure Evaluation';
-    if (activityKind === 'uiux-discovery') return 'UI/UX Discovery';
-    if (legacyType.startsWith('Benchmark Testing') || legacyType.startsWith('Application Testing')) return 'Application Benchmark Testing';
-    if (legacyType.startsWith('Comparative Evaluation')) return 'Candidate Evaluation';
+    const currentTaxonomy = Number(run?.activityTaxonomyVersion || 0) >= 2;
+    if (run && run.activityKind === 'benchmark-testing') return currentTaxonomy ? 'Application Benchmark Testing' : 'Application Testing';
+    if (run && run.activityKind === 'candidate-evaluation') return currentTaxonomy ? 'Candidate Evaluation' : 'Comparative Evaluation';
+    if (run && run.activityKind === 'failure-evaluation') return 'Failure Evaluation';
+    if (run && run.activityKind === 'uiux-discovery') return 'UI/UX Discovery';
+    if (legacyType.startsWith('Benchmark Testing')) return legacyType.replace(/^Benchmark Testing/, 'Application Testing');
+    if (legacyType.startsWith('Candidate Evaluation')) return legacyType.replace(/^Candidate Evaluation/, 'Comparative Evaluation');
     return legacyType;
   }
 
@@ -151,10 +151,13 @@
 
   function resultFallbackText(run) {
     const activityType = activityTypeLabel(run);
-    if (activityType === 'Application Benchmark Testing') return 'Application benchmark testing record.';
-    if (activityType === 'Failure Evaluation') return 'Failure evaluation record.';
-    if (activityType === 'UI/UX Discovery') return 'UI/UX discovery record.';
-    if (activityType === 'Candidate Evaluation') return run.resultState === 'none' ? 'No comparative results recorded yet.' : 'Result: Unknown / backfill.';
+    if (activityType.startsWith('Application Benchmark Testing')) return 'Application benchmark testing record.';
+    if (activityType.startsWith('Application Testing')) return 'Application testing record.';
+    if (activityType.startsWith('Failure Evaluation')) return 'Failure evaluation record.';
+    if (activityType.startsWith('UI/UX Discovery')) return 'UI/UX discovery record.';
+    if (activityType.startsWith('Candidate Evaluation') || activityType.startsWith('Comparative Evaluation')) {
+      return run.resultState === 'none' ? 'No comparative results recorded yet.' : 'Result: Unknown / backfill.';
+    }
     return run.resultState === 'none' ? 'No results recorded yet.' : 'Result: Unknown / backfill.';
   }
 
