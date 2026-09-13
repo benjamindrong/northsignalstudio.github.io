@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { completedRunsForDisplay, resultLinesForDisplay } = require('../dashboard/benchmark-review.js');
+const { completedRunsForDisplay, resultLinesForDisplay, createPersistedDetails } = require('../dashboard/benchmark-review.js');
 const presentationSource = readFileSync(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
 
 const nextRenderIndex = presentationSource.indexOf("appendRunGroup(columns, 'Next', nextRuns)");
@@ -65,5 +65,37 @@ assert.deepEqual(resultLines, [
   'Scores: RA 8 / RB 9.',
   'Signal: Better grounding.'
 ], 'Presentation projection must not mutate registry result data.');
+
+const originalDocument = globalThis.document;
+try {
+  globalThis.document = {
+    createElement(tagName) {
+      const listeners = new Map();
+      return {
+        tagName,
+        className: '',
+        open: false,
+        addEventListener(type, listener) { listeners.set(type, listener); },
+        dispatch(type) { listeners.get(type)?.(); }
+      };
+    }
+  };
+
+  const firstIdeaBacklog = createPersistedDetails('benchmark-ideas', 'ideas');
+  assert.equal(firstIdeaBacklog.open, false, 'Idea backlog starts collapsed.');
+  firstIdeaBacklog.open = true;
+  firstIdeaBacklog.dispatch('toggle');
+
+  const refreshedIdeaBacklog = createPersistedDetails('benchmark-ideas', 'ideas');
+  assert.equal(refreshedIdeaBacklog.open, true, 'Idea backlog stays open when the Benchmark Review DOM is recreated during refresh.');
+  refreshedIdeaBacklog.open = false;
+  refreshedIdeaBacklog.dispatch('toggle');
+
+  const nextIdeaBacklog = createPersistedDetails('benchmark-ideas', 'ideas');
+  assert.equal(nextIdeaBacklog.open, false, 'Closing the idea backlog is also preserved across refresh.');
+} finally {
+  if (originalDocument === undefined) delete globalThis.document;
+  else globalThis.document = originalDocument;
+}
 
 console.log('Benchmark Review completed presentation tests passed.');
