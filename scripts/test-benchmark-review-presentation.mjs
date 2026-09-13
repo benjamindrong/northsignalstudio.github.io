@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { completedRunsForDisplay, resultLinesForDisplay } = require('../dashboard/benchmark-review.js');
+const presentationSource = readFileSync(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
+
+const blockedRenderIndex = presentationSource.indexOf("appendRunGroup(content, 'Blocked', blockedRuns)");
+const completedRenderIndex = presentationSource.indexOf("appendRunGroup(columns, 'Completed', completedRuns.runs");
+assert.ok(blockedRenderIndex >= 0, 'Benchmark Review must render a Blocked group when blocked runs exist.');
+assert.ok(completedRenderIndex >= 0, 'Benchmark Review must render the Completed group.');
+assert.ok(blockedRenderIndex < completedRenderIndex, 'Blocked benchmarks must render above Completed benchmarks.');
 
 const registry = {
   runs: [
