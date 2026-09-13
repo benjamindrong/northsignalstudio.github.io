@@ -12,8 +12,8 @@ const completedRenderIndex = presentationSource.indexOf("appendRunGroup(columns,
 assert.ok(nextRenderIndex >= 0, 'Benchmark Review must render the Next group when next runs exist.');
 assert.ok(blockedRenderIndex >= 0, 'Benchmark Review must render a Blocked group when blocked runs exist.');
 assert.ok(completedRenderIndex >= 0, 'Benchmark Review must render the Completed group.');
-assert.ok(nextRenderIndex < blockedRenderIndex, 'Next benchmarks must remain above Blocked benchmarks.');
-assert.ok(blockedRenderIndex < completedRenderIndex, 'Blocked benchmarks must render above Completed benchmarks.');
+assert.ok(nextRenderIndex < blockedRenderIndex, 'Next benchmarks must remain before Blocked benchmarks.');
+assert.ok(blockedRenderIndex < completedRenderIndex, 'Blocked benchmarks must render before Completed benchmarks.');
 
 const registry = {
   runs: [
