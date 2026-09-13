@@ -334,15 +334,15 @@
       content.appendChild(active);
     }
 
+    const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');
+    if (blockedRuns.length) appendRunGroup(content, 'Blocked', blockedRuns);
+
     const nextRuns = orderedNextRuns(registry);
     const completedRuns = completedRunsForDisplay(registry);
     const columns = create('div', nextRuns.length ? 'benchmark-columns' : 'benchmark-columns completed-only');
     if (nextRuns.length) appendRunGroup(columns, 'Next', nextRuns);
     appendRunGroup(columns, 'Completed', completedRuns.runs, { count: completedRuns.total });
     content.appendChild(columns);
-
-    const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');
-    if (blockedRuns.length) appendRunGroup(content, 'Blocked', blockedRuns);
 
     appendIdeas(content, registry);
     appendInvalidRecords(content, registry);
