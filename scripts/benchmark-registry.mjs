@@ -5,6 +5,8 @@ const ACTIVITY_LABELS = new Map([
   ['uiux-discovery', 'UI/UX Discovery']
 ]);
 
+const ACTIVITY_TAXONOMY_VERSION = 2;
+
 const IDEA_CATEGORY_LABELS = new Map([
   ['registry-idea-considered', 'considered'],
   ['registry-idea-fresh', 'fresh']
@@ -288,6 +290,7 @@ function classifyIssue(issue) {
     status: lifecycle || 'Invalid',
     statusRaw: lifecycle || 'Invalid',
     activityKind,
+    activityTaxonomyVersion: ACTIVITY_TAXONOMY_VERSION,
     type: activityName,
     ideaCategory,
     source: source.source,
