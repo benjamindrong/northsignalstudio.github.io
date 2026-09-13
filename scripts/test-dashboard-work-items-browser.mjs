@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const index = fs.readFileSync(new URL('../dashboard/index.html', import.meta.url), 'utf8');
-const runner = new URL('./test-dashboard-work-items-browser.py', import.meta.url);
+const runner = new URL('./test-dashboard-work-items-browser-ci.py', import.meta.url);
 
 assert.ok(index.includes('<script src="./work-items.js"></script>'), 'production page must load DashboardWorkItems');
 assert.ok(
