@@ -1,0 +1,18 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "5FF5MBB334.com.lifeline.sandbox.nonproduction",
+        "paths": [
+          "/lifeline/oauth/callback*"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "5FF5MBB334.com.lifeline.sandbox.nonproduction"
+    ]
+  }
+}
