@@ -15,6 +15,7 @@ on:
       - scripts/test-dashboard-work-relationships.mjs
       - scripts/test-dashboard-work-items-browser.mjs
       - scripts/test-dashboard-work-items-browser.py
+      - scripts/test-benchmark-review-disclosure-browser.py
       - .github/workflows/validate-dashboard-theme.yml
   push:
     branches:
@@ -32,6 +33,7 @@ on:
       - scripts/test-dashboard-work-relationships.mjs
       - scripts/test-dashboard-work-items-browser.mjs
       - scripts/test-dashboard-work-items-browser.py
+      - scripts/test-benchmark-review-disclosure-browser.py
       - .github/workflows/validate-dashboard-theme.yml
 
 permissions:
@@ -49,6 +51,9 @@ jobs:
       - run: node scripts/test-dashboard-work-items.mjs
       - run: node scripts/test-dashboard-work-relationships.mjs
       - run: node scripts/test-dashboard-refresh.mjs
+
+      - name: Verify Benchmark Review disclosure persistence
+        run: python3 scripts/test-benchmark-review-disclosure-browser.py
 
       - name: Verify HOME-29 production-path compact layout
         run: node scripts/test-dashboard-work-items-browser.mjs
