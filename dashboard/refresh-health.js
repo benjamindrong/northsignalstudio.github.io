@@ -7,20 +7,26 @@
 
   const STALE_AFTER_MS = 30 * 60 * 1000;
   let pendingBenchmarkRegistry = null;
+  let renderedBenchmarkSignature = '';
   let pendingWorkSources = { jira: null, github: null };
   let workRelationshipRenderQueued = false;
+
+  function benchmarkSignature(registry) {
+    try { return JSON.stringify(registry); }
+    catch { return ''; }
+  }
 
   function loadBenchmarkReview() {
     if (!root || typeof document === 'undefined') return;
     if (root.DashboardBenchmarkReview) return;
     if (document.getElementById('benchmark-review-script')) return;
-
     const script = document.createElement('script');
     script.id = 'benchmark-review-script';
     script.src = './benchmark-review.js';
     script.addEventListener('load', () => {
       if (pendingBenchmarkRegistry) {
         root.DashboardBenchmarkReview?.render(pendingBenchmarkRegistry);
+        renderedBenchmarkSignature = benchmarkSignature(pendingBenchmarkRegistry);
         pendingBenchmarkRegistry = null;
       }
     });
@@ -29,17 +35,22 @@
 
   function renderBenchmarkReview(registry) {
     if (!root || typeof document === 'undefined') return;
+    const signature = benchmarkSignature(registry);
     if (root.DashboardBenchmarkReview?.render) {
+      if (signature && signature === renderedBenchmarkSignature) return;
       root.DashboardBenchmarkReview.render(registry);
+      renderedBenchmarkSignature = signature;
       return;
     }
+    if (pendingBenchmarkRegistry && signature && signature === benchmarkSignature(pendingBenchmarkRegistry)) return;
     pendingBenchmarkRegistry = registry;
     loadBenchmarkReview();
   }
 
   function lockBenchmarkReview() {
-    if (!root || typeof document === 'undefined') return;
+    renderedBenchmarkSignature = '';
     pendingBenchmarkRegistry = null;
+    if (!root || typeof document === 'undefined') return;
     if (root.DashboardBenchmarkReview?.locked) root.DashboardBenchmarkReview.locked();
     else loadBenchmarkReview();
   }
@@ -48,7 +59,6 @@
     if (!root || typeof document === 'undefined') return;
     if (root.DashboardWorkRelationships) return;
     if (document.getElementById('work-relationships-script')) return;
-
     const script = document.createElement('script');
     script.id = 'work-relationships-script';
     script.src = './work-relationships.js';
