@@ -5,12 +5,46 @@
   const COMPLETED_VISIBLE_LIMIT = 6;
   const EXPANDED_RESULT_LIMIT = 2;
   const expandedRunKeys = new Set();
+  const EXPANDED_SECTION_STORAGE_KEY = 'dashboard-benchmark-expanded-sections';
+
+  function loadExpandedSectionKeys() {
+    try {
+      const values = JSON.parse(root.sessionStorage?.getItem(EXPANDED_SECTION_STORAGE_KEY) || '[]');
+      return new Set(Array.isArray(values) ? values : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  function persistExpandedSectionKeys() {
+    try {
+      root.sessionStorage?.setItem(
+        EXPANDED_SECTION_STORAGE_KEY,
+        JSON.stringify([...expandedSectionKeys])
+      );
+    } catch {}
+  }
+
+  const expandedSectionKeys = loadExpandedSectionKeys();
 
   function create(tag, className, text) {
     const element = document.createElement(tag);
     if (className) element.className = className;
     if (text != null) element.textContent = text;
     return element;
+  }
+
+  function setExpandedSection(key, expanded) {
+    if (expanded) expandedSectionKeys.add(key);
+    else expandedSectionKeys.delete(key);
+    persistExpandedSectionKeys();
+  }
+
+  function createPersistedDetails(className, stateKey) {
+    const details = create('details', className);
+    details.open = expandedSectionKeys.has(stateKey);
+    details.addEventListener('toggle', () => setExpandedSection(stateKey, details.open));
+    return details;
   }
 
   function ensureStyles() {
@@ -248,7 +282,7 @@
     const previous = Array.isArray(registry.previouslyConsidered) ? registry.previouslyConsidered : [];
     const freshGroups = Array.isArray(registry.freshBacklog) ? registry.freshBacklog : [];
     const freshCount = freshGroups.reduce((total, group) => total + (group.ideas?.length || 0), 0);
-    const details = create('details', 'benchmark-ideas');
+    const details = createPersistedDetails('benchmark-ideas', 'ideas');
     details.appendChild(create('summary', '', `Idea backlog · ${definedUnused.length + previous.length + freshCount}`));
     const body = create('div', 'benchmark-idea-body');
 
@@ -281,7 +315,7 @@
   function appendInvalidRecords(content, registry) {
     const invalid = Array.isArray(registry.invalidRecords) ? registry.invalidRecords : [];
     if (!invalid.length) return;
-    const details = create('details', 'benchmark-invalid');
+    const details = createPersistedDetails('benchmark-invalid', 'invalid-records');
     details.appendChild(create('summary', '', `Invalid registry records · ${invalid.length}`));
     const body = create('div', 'benchmark-idea-body');
     for (const record of invalid) {
@@ -370,7 +404,8 @@
     activityTypeLabel,
     resultFallbackText,
     resultSummaryText,
-    expandedResultLines
+    expandedResultLines,
+    createPersistedDetails
   };
   root.DashboardBenchmarkReview = { render, locked };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
