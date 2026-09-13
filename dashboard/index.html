@@ -221,6 +221,20 @@
       let refreshPromise = null;
       let lastRefreshAttemptAt = 0;
       let sessionVersion = 0;
+      let jiraRenderSignature = '';
+      let githubRenderSignature = '';
+      let recentRenderSignature = '';
+
+      function renderSignature(value) {
+        try { return JSON.stringify(value); }
+        catch { return ''; }
+      }
+
+      function resetRenderSignatures() {
+        jiraRenderSignature = '';
+        githubRenderSignature = '';
+        recentRenderSignature = '';
+      }
 
       const bytesFromBase64 = value => Uint8Array.from(atob(value), char => char.charCodeAt(0));
       async function decryptEnvelope(envelope, passphrase) {
@@ -249,22 +263,41 @@
       function formatGenerated(value, label) { const date = new Date(value); return Number.isNaN(date.getTime()) ? `${label} · live feed` : `${label} · data updated ${formatDateTime(value)}`; }
 
       function renderJira(payload) {
-        WorkItems.renderFlight(rowsEl, payload);
+        const signature = renderSignature({
+          projects: payload?.projects || [],
+          issues: payload?.issues || []
+        });
+        if (!signature || signature !== jiraRenderSignature) {
+          WorkItems.renderFlight(rowsEl, payload);
+          jiraRenderSignature = signature;
+        }
         sourceEl.textContent = formatGenerated(payload.generatedAt, 'Jira');
         lockEl.hidden = false;
       }
       function renderGithub(payload) {
-        WorkItems.renderGithub(githubRowsEl, payload);
+        const signature = renderSignature(payload?.pullRequests || []);
+        if (!signature || signature !== githubRenderSignature) {
+          WorkItems.renderGithub(githubRowsEl, payload);
+          githubRenderSignature = signature;
+        }
         githubSourceEl.textContent = formatGenerated(payload.generatedAt, 'GitHub');
       }
       function renderRecent(jiraPayloadValue, githubPayloadValue) {
-        WorkItems.renderRecent(recentRowsEl, jiraPayloadValue, githubPayloadValue);
+        const signature = renderSignature({
+          issues: jiraPayloadValue?.issues || [],
+          pullRequests: githubPayloadValue?.pullRequests || []
+        });
+        if (!signature || signature !== recentRenderSignature) {
+          WorkItems.renderRecent(recentRowsEl, jiraPayloadValue, githubPayloadValue);
+          recentRenderSignature = signature;
+        }
         recentSourceEl.textContent = githubPayloadValue ? 'Jira + GitHub · most recently updated' : 'Jira · GitHub feed unavailable';
       }
 
       function renderRecentLocked() { recentRowsEl.innerHTML = '<div class="recent-empty">Unlock the dashboard to load recent activity.</div>'; recentSourceEl.textContent = 'Encrypted Jira + GitHub feeds'; }
       function renderGithubLocked(message = 'Unlock the dashboard to load pull requests.') { githubRowsEl.innerHTML = `<div class="github-empty">${message}</div>`; githubSourceEl.textContent = 'Encrypted GitHub feed'; }
       function renderUnlock(message = '') {
+        resetRenderSignatures();
         rowsEl.innerHTML = '<div class="flight-empty"><form id="unlockForm" class="unlock-form"><label for="unlockPassphrase">Unlock Dashboard</label><div class="unlock-row"><input id="unlockPassphrase" type="password" autocomplete="current-password" aria-describedby="unlockError"><button type="submit">Unlock</button></div><div id="unlockError" class="unlock-error" role="alert"></div></form></div>';
         document.getElementById('unlockError').textContent = message;
         document.getElementById('unlockForm').addEventListener('submit', onUnlock);
