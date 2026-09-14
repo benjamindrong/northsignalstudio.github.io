@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { parseCanonicalResultSummary, projectBenchmarkRegistry } from './benchmark-registry.mjs';
 
 const require = createRequire(import.meta.url);
 const { orderedNextRuns, orderedOnDeckRuns, pointerErrorMessage, activityTypeLabel, resultFallbackText } = require('../dashboard/benchmark-review.js');
 const POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
+const presentationSource = readFileSync(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
 
 function issue(key, labels, category, {
   summary = `${key} summary`,
@@ -147,6 +149,14 @@ assert.deepEqual(
   orderedOnDeckRuns(blockedSelectedUi).map(run => run.key),
   ['BEN-42', 'BEN-17']
 );
+assert.ok(
+  presentationSource.includes("const activeRuns = registry.runs.filter(run => run.status === 'Running');"),
+  'Running BEN-21 targets must remain in the Active lifecycle group.'
+);
+assert.ok(
+  presentationSource.includes("const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');"),
+  'Blocked BEN-21 targets must remain in the Blocked lifecycle group.'
+);
 const missingSelectedRunUi = {
   runs: [{ key: 'BEN-42', status: 'Preparing' }],
   selectedNext: { key: 'BEN-17', status: 'Preparing' },
@@ -169,21 +179,9 @@ assert.equal(parsedSummary.ok, true);
 assert.equal(parsedSummary.values.outcome, 'Response B won.');
 
 for (const bad of [
-  `### Completion Artifact
-#### Registry Result Summary
-- Outcome: B
-- Scores: 9/8
-- Signal: X
-### Completion Artifact`,
-  `### Completion Artifact
-#### Registry Result Summary
-- Scores: 9/8
-- Outcome: B
-- Signal: X`,
-  `### Completion Artifact
-#### Registry Result Summary
-- Outcome: B
-- Scores: 9/8`
+  `### Completion Artifact\n#### Registry Result Summary\n- Outcome: B\n- Scores: 9/8\n- Signal: X\n### Completion Artifact`,
+  `### Completion Artifact\n#### Registry Result Summary\n- Scores: 9/8\n- Outcome: B\n- Signal: X`,
+  `### Completion Artifact\n#### Registry Result Summary\n- Outcome: B\n- Scores: 9/8`
 ]) assert.equal(parseCanonicalResultSummary(bad).ok, false);
 
 const nestedSummaryAdf = {
