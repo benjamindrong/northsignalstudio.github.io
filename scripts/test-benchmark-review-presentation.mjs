@@ -48,7 +48,7 @@ const queueRegistry = {
 assert.deepEqual(
   orderedNextRuns(queueRegistry).map(run => run.key),
   ['BEN-64'],
-  'Next must contain only the BEN-21 selected target.'
+  'Next must contain only the Preparing BEN-21 selected target.'
 );
 assert.deepEqual(
   orderedOnDeckRuns(queueRegistry).map(run => run.key),
@@ -63,13 +63,37 @@ const runningPointerRegistry = {
 };
 assert.deepEqual(
   orderedNextRuns(runningPointerRegistry).map(run => run.key),
-  ['BEN-62'],
-  'The BEN-21 target remains the single Next item even when its lifecycle is Running.'
+  [],
+  'A Running BEN-21 target must stay Active instead of being relabeled Next.'
 );
 assert.deepEqual(
   orderedOnDeckRuns(runningPointerRegistry).map(run => run.key),
   ['BEN-52', 'BEN-53', 'BEN-64'],
-  'All non-selected Preparing items remain On Deck when BEN-21 points to Running work.'
+  'All Preparing items remain On Deck when BEN-21 points to Running work.'
+);
+
+const blockedPointerRegistry = {
+  selectedNext: { key: 'BEN-40', status: 'Blocked' },
+  pointerError: '',
+  runs: [...queueRegistry.runs, { key: 'BEN-40', status: 'Blocked' }]
+};
+assert.deepEqual(
+  orderedNextRuns(blockedPointerRegistry).map(run => run.key),
+  [],
+  'A Blocked BEN-21 target must stay Blocked instead of being relabeled Next.'
+);
+assert.deepEqual(
+  orderedOnDeckRuns(blockedPointerRegistry).map(run => run.key),
+  ['BEN-52', 'BEN-53', 'BEN-64'],
+  'All Preparing items remain On Deck when BEN-21 points to Blocked work.'
+);
+assert.ok(
+  presentationSource.includes("const activeRuns = registry.runs.filter(run => run.status === 'Running');"),
+  'Running BEN-21 targets must remain in the Active lifecycle group.'
+);
+assert.ok(
+  presentationSource.includes("const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');"),
+  'Blocked BEN-21 targets must remain in the Blocked lifecycle group.'
 );
 
 const registry = {

@@ -136,19 +136,13 @@ assert.deepEqual(orderedNextRuns(missingPointerErrorUi), []);
 assert.deepEqual(orderedOnDeckRuns(missingPointerErrorUi).map(run => run.key), ['BEN-42', 'BEN-17']);
 assert.match(pointerErrorMessage(missingPointerErrorUi), /Preparing, Blocked, or Running/i);
 const runningSelectedUi = { runs: [...uiPreparingRuns, { key: 'BEN-41', status: 'Running' }], selectedNext: { key: 'BEN-41', status: 'Running' }, pointerError: '' };
-assert.deepEqual(
-  orderedNextRuns(runningSelectedUi).map(run => run.key),
-  ['BEN-41']
-);
+assert.deepEqual(orderedNextRuns(runningSelectedUi), []);
 assert.deepEqual(
   orderedOnDeckRuns(runningSelectedUi).map(run => run.key),
   ['BEN-42', 'BEN-17']
 );
 const blockedSelectedUi = { runs: [...uiPreparingRuns, { key: 'BEN-40', status: 'Blocked' }], selectedNext: { key: 'BEN-40', status: 'Blocked' }, pointerError: '' };
-assert.deepEqual(
-  orderedNextRuns(blockedSelectedUi).map(run => run.key),
-  ['BEN-40']
-);
+assert.deepEqual(orderedNextRuns(blockedSelectedUi), []);
 assert.deepEqual(
   orderedOnDeckRuns(blockedSelectedUi).map(run => run.key),
   ['BEN-42', 'BEN-17']
@@ -175,9 +169,21 @@ assert.equal(parsedSummary.ok, true);
 assert.equal(parsedSummary.values.outcome, 'Response B won.');
 
 for (const bad of [
-  `### Completion Artifact\n#### Registry Result Summary\n- Outcome: B\n- Scores: 9/8\n- Signal: X\n### Completion Artifact`,
-  `### Completion Artifact\n#### Registry Result Summary\n- Scores: 9/8\n- Outcome: B\n- Signal: X`,
-  `### Completion Artifact\n#### Registry Result Summary\n- Outcome: B\n- Scores: 9/8`
+  `### Completion Artifact
+#### Registry Result Summary
+- Outcome: B
+- Scores: 9/8
+- Signal: X
+### Completion Artifact`,
+  `### Completion Artifact
+#### Registry Result Summary
+- Scores: 9/8
+- Outcome: B
+- Signal: X`,
+  `### Completion Artifact
+#### Registry Result Summary
+- Outcome: B
+- Scores: 9/8`
 ]) assert.equal(parseCanonicalResultSummary(bad).ok, false);
 
 const nestedSummaryAdf = {

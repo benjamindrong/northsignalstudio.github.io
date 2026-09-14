@@ -239,12 +239,14 @@
   }
 
   function orderedNextRuns(registry) {
-    if (pointerErrorMessage(registry)) return [];
-    return registry.selectedNext ? [registry.selectedNext] : [];
+    if (pointerErrorMessage(registry) || registry.selectedNext?.status !== 'Preparing') return [];
+    return [registry.selectedNext];
   }
 
   function orderedOnDeckRuns(registry) {
-    const selectedKey = pointerErrorMessage(registry) ? '' : registry.selectedNext?.key;
+    const selectedKey = !pointerErrorMessage(registry) && registry.selectedNext?.status === 'Preparing'
+      ? registry.selectedNext.key
+      : '';
     return registry.runs.filter(run => run.status === 'Preparing' && run.key !== selectedKey);
   }
 
@@ -358,8 +360,7 @@
     if (pointerError) content.appendChild(create('div', 'benchmark-result backfill', `Next pointer unavailable: ${pointerError}`));
 
     const nextRuns = orderedNextRuns(registry);
-    const selectedNextKey = nextRuns[0]?.key || '';
-    const activeRuns = registry.runs.filter(run => run.status === 'Running' && run.key !== selectedNextKey);
+    const activeRuns = registry.runs.filter(run => run.status === 'Running');
     if (activeRuns.length) {
       const active = create('section', 'benchmark-active');
       active.appendChild(create('div', 'benchmark-active-label', `Active · ${activeRuns.length}`));
@@ -368,7 +369,7 @@
     }
 
     const onDeckRuns = orderedOnDeckRuns(registry);
-    const blockedRuns = registry.runs.filter(run => run.status === 'Blocked' && run.key !== selectedNextKey);
+    const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');
     const completedRuns = completedRunsForDisplay(registry);
     const hasLeftColumn = nextRuns.length || onDeckRuns.length;
     const columns = create('div', hasLeftColumn ? 'benchmark-columns' : 'benchmark-columns completed-only');
