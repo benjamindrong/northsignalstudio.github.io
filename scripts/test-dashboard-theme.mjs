@@ -28,6 +28,7 @@ for (const filename of docs) {
 
 const css = await readFile(new URL('../dashboard/theme.css', import.meta.url), 'utf8');
 const indexHtml = await readFile(new URL('../dashboard/index.html', import.meta.url), 'utf8');
+const displayHtml = await readFile(new URL('../dashboard/display.html', import.meta.url), 'utf8');
 const tokenHex = (source, token, context) => {
   const match = source.match(new RegExp(`--${token}:\\s*(#[0-9a-fA-F]{6});`));
   if (!match) fail(`${context} is missing a hex --${token} token.`);
@@ -42,6 +43,20 @@ if (!css.includes('@media (prefers-color-scheme: light)')) {
 }
 for (const token of ['--bg: #f4f6f8;', '--panel: #ffffff;', '--text: #15191e;', '--board-bg: #fbfcfd;', '--board-text: #20242a;']) {
   if (!css.includes(token)) fail(`theme.css is missing required light token: ${token}`);
+}
+
+for (const contract of [
+  'grid-template-areas:\n        "brand health"\n        "actions actions";',
+  '.display-actions { grid-area: actions;',
+  '.display-health { grid-area: health; justify-self: end;',
+  '<div class="display-actions">'
+]) {
+  if (!displayHtml.includes(contract)) {
+    fail(`Display toolbar must keep refresh health isolated from the control-row layout: ${contract}`);
+  }
+}
+if (!/<span id="displayHealth"[\s\S]*?<div class="display-actions">[\s\S]*?<div class="display-views"[\s\S]*?<div class="display-controls">/.test(displayHtml)) {
+  fail('Display toolbar must keep the health status ahead of one stable action row containing both view and refresh controls.');
 }
 
 const compactFlightLayout = [
