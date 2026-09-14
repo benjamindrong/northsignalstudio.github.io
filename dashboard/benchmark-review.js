@@ -240,14 +240,12 @@
 
   function orderedNextRuns(registry) {
     if (pointerErrorMessage(registry)) return [];
-    const preparing = registry.runs.filter(run => run.status === 'Preparing');
-    if (registry.selectedNext.status !== 'Preparing') return preparing;
-    const selectedKey = registry.selectedNext.key;
-    const selectedIndex = preparing.findIndex(run => run.key === selectedKey);
-    if (selectedIndex < 0) return preparing;
-    if (selectedIndex === 0) return preparing;
-    const selected = preparing[selectedIndex];
-    return [selected, ...preparing.slice(0, selectedIndex), ...preparing.slice(selectedIndex + 1)];
+    return registry.selectedNext ? [registry.selectedNext] : [];
+  }
+
+  function orderedOnDeckRuns(registry) {
+    const selectedKey = pointerErrorMessage(registry) ? '' : registry.selectedNext?.key;
+    return registry.runs.filter(run => run.status === 'Preparing' && run.key !== selectedKey);
   }
 
   function orderedCompletedRuns(registry) {
@@ -359,7 +357,9 @@
     const pointerError = pointerErrorMessage(registry);
     if (pointerError) content.appendChild(create('div', 'benchmark-result backfill', `Next pointer unavailable: ${pointerError}`));
 
-    const activeRuns = registry.runs.filter(run => run.status === 'Running');
+    const nextRuns = orderedNextRuns(registry);
+    const selectedNextKey = nextRuns[0]?.key || '';
+    const activeRuns = registry.runs.filter(run => run.status === 'Running' && run.key !== selectedNextKey);
     if (activeRuns.length) {
       const active = create('section', 'benchmark-active');
       active.appendChild(create('div', 'benchmark-active-label', `Active · ${activeRuns.length}`));
@@ -367,11 +367,17 @@
       content.appendChild(active);
     }
 
-    const nextRuns = orderedNextRuns(registry);
-    const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');
+    const onDeckRuns = orderedOnDeckRuns(registry);
+    const blockedRuns = registry.runs.filter(run => run.status === 'Blocked' && run.key !== selectedNextKey);
     const completedRuns = completedRunsForDisplay(registry);
-    const columns = create('div', nextRuns.length ? 'benchmark-columns' : 'benchmark-columns completed-only');
-    if (nextRuns.length) appendRunGroup(columns, 'Next', nextRuns);
+    const hasLeftColumn = nextRuns.length || onDeckRuns.length;
+    const columns = create('div', hasLeftColumn ? 'benchmark-columns' : 'benchmark-columns completed-only');
+    if (hasLeftColumn) {
+      const leftColumn = create('div', 'benchmark-column-stack');
+      if (nextRuns.length) appendRunGroup(leftColumn, 'Next', nextRuns);
+      if (onDeckRuns.length) appendRunGroup(leftColumn, 'On Deck', onDeckRuns);
+      columns.appendChild(leftColumn);
+    }
     const rightColumn = create('div', 'benchmark-column-stack');
     if (blockedRuns.length) appendRunGroup(rightColumn, 'Blocked', blockedRuns);
     appendRunGroup(rightColumn, 'Completed', completedRuns.runs, { count: completedRuns.total });
@@ -398,6 +404,7 @@
   if (typeof document !== 'undefined') ensureSurface();
   if (typeof module !== 'undefined' && module.exports) module.exports = {
     orderedNextRuns,
+    orderedOnDeckRuns,
     pointerErrorMessage,
     completedRunsForDisplay,
     resultLinesForDisplay,
