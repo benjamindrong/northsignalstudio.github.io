@@ -133,20 +133,12 @@
   }
 
   function activityTypeLabel(run) {
-    const activityKind = String(run?.activityKind || '').trim();
     const legacyType = String(run?.type || '').trim();
-    if (run && run.activityKind === 'benchmark-testing') {
-      return legacyType.startsWith('Benchmark Testing')
-        ? legacyType.replace(/^Benchmark Testing/, 'Application Testing')
-        : 'Application Testing';
-    }
-    if (run && run.activityKind === 'candidate-evaluation') {
-      return legacyType.startsWith('Candidate Evaluation')
-        ? legacyType.replace(/^Candidate Evaluation/, 'Comparative Evaluation')
-        : 'Comparative Evaluation';
-    }
+    const currentTaxonomy = Number(run?.activityTaxonomyVersion || 0) >= 2;
+    if (run && run.activityKind === 'benchmark-testing') return currentTaxonomy ? 'Application Benchmark Testing' : 'Application Testing';
+    if (run && run.activityKind === 'candidate-evaluation') return currentTaxonomy ? 'Candidate Evaluation' : 'Comparative Evaluation';
     if (run && run.activityKind === 'failure-evaluation') return 'Failure Evaluation';
-    if (activityKind) return legacyType;
+    if (run && run.activityKind === 'uiux-discovery') return 'UI/UX Discovery';
     if (legacyType.startsWith('Benchmark Testing')) return legacyType.replace(/^Benchmark Testing/, 'Application Testing');
     if (legacyType.startsWith('Candidate Evaluation')) return legacyType.replace(/^Candidate Evaluation/, 'Comparative Evaluation');
     return legacyType;
@@ -159,9 +151,14 @@
 
   function resultFallbackText(run) {
     const activityType = activityTypeLabel(run);
+    if (activityType.startsWith('Application Benchmark Testing')) return 'Application benchmark testing record.';
     if (activityType.startsWith('Application Testing')) return 'Application testing record.';
     if (activityType.startsWith('Failure Evaluation')) return 'Failure evaluation record.';
-    return run.resultState === 'none' ? 'No comparative results recorded yet.' : 'Result: Unknown / backfill.';
+    if (activityType.startsWith('UI/UX Discovery')) return 'UI/UX discovery record.';
+    if (activityType.startsWith('Candidate Evaluation') || activityType.startsWith('Comparative Evaluation')) {
+      return run.resultState === 'none' ? 'No comparative results recorded yet.' : 'Result: Unknown / backfill.';
+    }
+    return run.resultState === 'none' ? 'No results recorded yet.' : 'Result: Unknown / backfill.';
   }
 
   function resultSummaryText(run) {
@@ -244,9 +241,10 @@
   function orderedNextRuns(registry) {
     if (pointerErrorMessage(registry)) return [];
     const preparing = registry.runs.filter(run => run.status === 'Preparing');
+    if (registry.selectedNext.status !== 'Preparing') return preparing;
     const selectedKey = registry.selectedNext.key;
     const selectedIndex = preparing.findIndex(run => run.key === selectedKey);
-    if (selectedIndex < 0) return [];
+    if (selectedIndex < 0) return preparing;
     if (selectedIndex === 0) return preparing;
     const selected = preparing[selectedIndex];
     return [selected, ...preparing.slice(0, selectedIndex), ...preparing.slice(selectedIndex + 1)];
@@ -266,14 +264,14 @@
   function pointerErrorMessage(registry) {
     if (registry?.pointerError) return registry.pointerError;
     if (!registry?.selectedNext) {
-      return 'BEN-21 does not identify a selected Preparing registry item.';
+      return 'BEN-21 does not identify a selected Preparing, Blocked, or Running registry item.';
     }
-    if (registry.selectedNext.status !== 'Preparing') {
-      return 'BEN-21 Parent does not identify an eligible Preparing registry item.';
+    if (!['Preparing', 'Blocked', 'Running'].includes(registry.selectedNext.status)) {
+      return 'BEN-21 Parent does not identify an eligible Preparing, Blocked, or Running registry item.';
     }
     const selectedKey = registry.selectedNext.key;
-    if (!Array.isArray(registry.runs) || !registry.runs.some(run => run.status === 'Preparing' && run.key === selectedKey)) {
-      return 'BEN-21 Parent is unavailable from the Preparing registry projection.';
+    if (!Array.isArray(registry.runs) || !registry.runs.some(run => ['Preparing', 'Blocked', 'Running'].includes(run.status) && run.key === selectedKey)) {
+      return 'BEN-21 Parent is unavailable from the eligible registry projection.';
     }
     return '';
   }
