@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { parseCanonicalResultSummary, projectBenchmarkRegistry } from './benchmark-registry.mjs';
 
 const require = createRequire(import.meta.url);
-const { orderedNextRuns, pointerErrorMessage, activityTypeLabel, resultFallbackText } = require('../dashboard/benchmark-review.js');
+const { orderedNextRuns, orderedOnDeckRuns, pointerErrorMessage, activityTypeLabel, resultFallbackText } = require('../dashboard/benchmark-review.js');
 const POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
+const presentationSource = readFileSync(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
 
 function issue(key, labels, category, {
   summary = `${key} summary`,
@@ -118,23 +120,42 @@ const uiPreparingRuns = [
   { key: 'BEN-42', status: 'Preparing' },
   { key: 'BEN-17', status: 'Preparing' }
 ];
+const selectedPreparingUi = { runs: uiPreparingRuns, selectedNext: { key: 'BEN-17', status: 'Preparing' }, pointerError: '' };
 assert.deepEqual(
-  orderedNextRuns({ runs: uiPreparingRuns, selectedNext: { key: 'BEN-17', status: 'Preparing' }, pointerError: '' }).map(run => run.key),
-  ['BEN-17', 'BEN-42']
+  orderedNextRuns(selectedPreparingUi).map(run => run.key),
+  ['BEN-17']
+);
+assert.deepEqual(
+  orderedOnDeckRuns(selectedPreparingUi).map(run => run.key),
+  ['BEN-42']
 );
 const missingPointerUi = { runs: uiPreparingRuns, selectedNext: null, pointerError: 'BEN-21 Parent is missing.' };
 assert.deepEqual(orderedNextRuns(missingPointerUi), []);
+assert.deepEqual(orderedOnDeckRuns(missingPointerUi).map(run => run.key), ['BEN-42', 'BEN-17']);
 assert.match(pointerErrorMessage(missingPointerUi), /Parent is missing/i);
 const missingPointerErrorUi = { runs: uiPreparingRuns, selectedNext: null, pointerError: '' };
 assert.deepEqual(orderedNextRuns(missingPointerErrorUi), []);
+assert.deepEqual(orderedOnDeckRuns(missingPointerErrorUi).map(run => run.key), ['BEN-42', 'BEN-17']);
 assert.match(pointerErrorMessage(missingPointerErrorUi), /Preparing, Blocked, or Running/i);
+const runningSelectedUi = { runs: [...uiPreparingRuns, { key: 'BEN-41', status: 'Running' }], selectedNext: { key: 'BEN-41', status: 'Running' }, pointerError: '' };
+assert.deepEqual(orderedNextRuns(runningSelectedUi), []);
 assert.deepEqual(
-  orderedNextRuns({ runs: [...uiPreparingRuns, { key: 'BEN-41', status: 'Running' }], selectedNext: { key: 'BEN-41', status: 'Running' }, pointerError: '' }).map(run => run.key),
+  orderedOnDeckRuns(runningSelectedUi).map(run => run.key),
   ['BEN-42', 'BEN-17']
 );
+const blockedSelectedUi = { runs: [...uiPreparingRuns, { key: 'BEN-40', status: 'Blocked' }], selectedNext: { key: 'BEN-40', status: 'Blocked' }, pointerError: '' };
+assert.deepEqual(orderedNextRuns(blockedSelectedUi), []);
 assert.deepEqual(
-  orderedNextRuns({ runs: [...uiPreparingRuns, { key: 'BEN-40', status: 'Blocked' }], selectedNext: { key: 'BEN-40', status: 'Blocked' }, pointerError: '' }).map(run => run.key),
+  orderedOnDeckRuns(blockedSelectedUi).map(run => run.key),
   ['BEN-42', 'BEN-17']
+);
+assert.ok(
+  presentationSource.includes("const activeRuns = registry.runs.filter(run => run.status === 'Running');"),
+  'Running BEN-21 targets must remain in the Active lifecycle group.'
+);
+assert.ok(
+  presentationSource.includes("const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');"),
+  'Blocked BEN-21 targets must remain in the Blocked lifecycle group.'
 );
 const missingSelectedRunUi = {
   runs: [{ key: 'BEN-42', status: 'Preparing' }],
@@ -142,6 +163,7 @@ const missingSelectedRunUi = {
   pointerError: ''
 };
 assert.deepEqual(orderedNextRuns(missingSelectedRunUi), []);
+assert.deepEqual(orderedOnDeckRuns(missingSelectedRunUi).map(run => run.key), ['BEN-42']);
 assert.match(pointerErrorMessage(missingSelectedRunUi), /eligible registry projection/i);
 
 const allProjectedKeys = new Set([

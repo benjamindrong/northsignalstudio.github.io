@@ -110,9 +110,10 @@ jobs:
             [health, "script.src = './benchmark-review.js'", 'Benchmark Review loader'],
             [health, 'payload.benchmarkReview', 'Jira snapshot Benchmark Review bridge'],
             [benchmark, "run.status === 'Running'", 'running-only active benchmark grouping'],
-            [benchmark, "run.status === 'Preparing'", 'preparing benchmark next grouping'],
+            [benchmark, "run.status === 'Preparing'", 'preparing benchmark On Deck grouping'],
             [benchmark, "run.status === 'Blocked'", 'blocked benchmark grouping'],
-            [benchmark, 'orderedNextRuns', 'BEN-21-first next ordering'],
+            [benchmark, 'orderedNextRuns', 'BEN-21-only next projection'],
+            [benchmark, 'orderedOnDeckRuns', 'non-selected Preparing On Deck projection'],
             [benchmark, 'Next pointer unavailable:', 'visible BEN-21 pointer failure'],
             [benchmark, 'benchmark-columns completed-only', 'completed-only full-width layout'],
             [benchmark, 'registry.sourceLabel', 'registry source metadata'],
@@ -211,7 +212,8 @@ jobs:
 
           "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/benchmark-review-active.html > /tmp/benchmark-active-dom.html
           grep -F 'Active · 1' /tmp/benchmark-active-dom.html
-          grep -F 'Next · 2' /tmp/benchmark-active-dom.html
+          grep -F 'Next · 1' /tmp/benchmark-active-dom.html
+          grep -F 'On Deck · 1' /tmp/benchmark-active-dom.html
           grep -F 'Blocked · 1' /tmp/benchmark-active-dom.html
           grep -F 'BEN-17 · Runline Event Board PRD Candidate Evaluation' /tmp/benchmark-active-dom.html
           grep -F 'BEN-42 · Later prepared candidate' /tmp/benchmark-active-dom.html
@@ -229,7 +231,7 @@ jobs:
           const dom = fs.readFileSync('/tmp/benchmark-active-dom.html', 'utf8');
           const selected = dom.indexOf('BEN-17 · Runline Event Board PRD Candidate Evaluation');
           const later = dom.indexOf('BEN-42 · Later prepared candidate');
-          if (selected < 0 || later < 0 || selected >= later) throw new Error('BEN-21 selected Next benchmark was not rendered first.');
+          if (selected < 0 || later < 0 || selected >= later) throw new Error('BEN-21 selected Next benchmark was not rendered before On Deck work.');
           const newestCompleted = dom.indexOf('BEN-11 · Crossmark Signal Hunt Benchmark');
           const olderCompleted = dom.indexOf('BEN-10 · PR Health');
           if (newestCompleted < 0 || olderCompleted < 0 || newestCompleted >= olderCompleted) throw new Error('Completed benchmarks were not rendered newest-first.');
