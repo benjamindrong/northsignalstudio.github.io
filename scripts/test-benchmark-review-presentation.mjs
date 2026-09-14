@@ -3,25 +3,74 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { completedRunsForDisplay, resultLinesForDisplay, createPersistedDetails } = require('../dashboard/benchmark-review.js');
+const {
+  orderedNextRuns,
+  orderedOnDeckRuns,
+  completedRunsForDisplay,
+  resultLinesForDisplay,
+  createPersistedDetails
+} = require('../dashboard/benchmark-review.js');
 const presentationSource = readFileSync(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
 
-const nextRenderIndex = presentationSource.indexOf("appendRunGroup(columns, 'Next', nextRuns)");
+const leftColumnIndex = presentationSource.indexOf("const leftColumn = create('div', 'benchmark-column-stack')");
+const nextRenderIndex = presentationSource.indexOf("appendRunGroup(leftColumn, 'Next', nextRuns)");
+const onDeckRenderIndex = presentationSource.indexOf("appendRunGroup(leftColumn, 'On Deck', onDeckRuns)");
 const rightColumnIndex = presentationSource.indexOf("const rightColumn = create('div', 'benchmark-column-stack')");
 const blockedRenderIndex = presentationSource.indexOf("appendRunGroup(rightColumn, 'Blocked', blockedRuns)");
 const completedRenderIndex = presentationSource.indexOf("appendRunGroup(rightColumn, 'Completed', completedRuns.runs");
 const rightColumnAppendIndex = presentationSource.indexOf('columns.appendChild(rightColumn)');
 const rightColumnStyleIndex = presentationSource.indexOf('.benchmark-column-stack { min-width: 0; display: grid; gap: 10px; align-content: start; }');
-assert.ok(nextRenderIndex >= 0, 'Benchmark Review must render the Next group when next runs exist.');
+assert.ok(leftColumnIndex >= 0, 'Benchmark Review must create a dedicated left-column stack.');
+assert.ok(nextRenderIndex >= 0, 'Benchmark Review must render the selected Next item in the left column.');
+assert.ok(onDeckRenderIndex >= 0, 'Benchmark Review must render remaining Preparing items as On Deck.');
 assert.ok(rightColumnIndex >= 0, 'Benchmark Review must create a dedicated right-column stack.');
 assert.ok(blockedRenderIndex >= 0, 'Benchmark Review must render a Blocked group when blocked runs exist.');
 assert.ok(completedRenderIndex >= 0, 'Benchmark Review must render the Completed group.');
 assert.ok(rightColumnAppendIndex >= 0, 'Benchmark Review must append the right-column stack to the two-column layout.');
-assert.ok(rightColumnStyleIndex >= 0, 'Benchmark Review right-column stack must use a vertical grid layout.');
-assert.ok(nextRenderIndex < rightColumnIndex, 'Next benchmarks must remain in the left column before the right-column stack.');
+assert.ok(rightColumnStyleIndex >= 0, 'Benchmark Review column stacks must use a vertical grid layout.');
+assert.ok(leftColumnIndex < nextRenderIndex, 'The left column must exist before the Next group is rendered.');
+assert.ok(nextRenderIndex < onDeckRenderIndex, 'Next must render before On Deck in the left column.');
+assert.ok(onDeckRenderIndex < rightColumnIndex, 'On Deck must remain in the left column before the right-column stack.');
 assert.ok(rightColumnIndex < blockedRenderIndex, 'Blocked benchmarks must render inside the right-column stack.');
 assert.ok(blockedRenderIndex < completedRenderIndex, 'Blocked benchmarks must render before Completed benchmarks in the right column.');
 assert.ok(completedRenderIndex < rightColumnAppendIndex, 'The completed right-column stack must be assembled before it is appended to the layout.');
+
+const queueRegistry = {
+  selectedNext: { key: 'BEN-64', status: 'Preparing' },
+  pointerError: '',
+  runs: [
+    { key: 'BEN-52', status: 'Preparing' },
+    { key: 'BEN-53', status: 'Preparing' },
+    { key: 'BEN-62', status: 'Running' },
+    { key: 'BEN-64', status: 'Preparing' }
+  ]
+};
+assert.deepEqual(
+  orderedNextRuns(queueRegistry).map(run => run.key),
+  ['BEN-64'],
+  'Next must contain only the BEN-21 selected target.'
+);
+assert.deepEqual(
+  orderedOnDeckRuns(queueRegistry).map(run => run.key),
+  ['BEN-52', 'BEN-53'],
+  'Preparing items that are not selected by BEN-21 must be On Deck.'
+);
+
+const runningPointerRegistry = {
+  selectedNext: { key: 'BEN-62', status: 'Running' },
+  pointerError: '',
+  runs: queueRegistry.runs
+};
+assert.deepEqual(
+  orderedNextRuns(runningPointerRegistry).map(run => run.key),
+  ['BEN-62'],
+  'The BEN-21 target remains the single Next item even when its lifecycle is Running.'
+);
+assert.deepEqual(
+  orderedOnDeckRuns(runningPointerRegistry).map(run => run.key),
+  ['BEN-52', 'BEN-53', 'BEN-64'],
+  'All non-selected Preparing items remain On Deck when BEN-21 points to Running work.'
+);
 
 const registry = {
   runs: [
