@@ -27,22 +27,6 @@ function resolve(jiraIssues, pullRequests) {
 }
 
 {
-  const result = resolve([jira('HOME-19')], [pull(5, 'HOME-19 Guarantee GitHub PR visibility')]);
-  assert.deepEqual(result.jiraRelations, [{
-    primaryUrl: 'https://example.atlassian.net/browse/HOME-19',
-    primaryIdentity: 'HOME-19',
-    counterpartUrl: 'https://github.com/benjamindrong/HomepageDashboard/pull/5',
-    counterpartIdentity: 'PR #5',
-  }]);
-  assert.deepEqual(result.githubRelations, [{
-    primaryUrl: 'https://github.com/benjamindrong/HomepageDashboard/pull/5',
-    primaryIdentity: 'HomepageDashboard #5',
-    counterpartUrl: 'https://example.atlassian.net/browse/HOME-19',
-    counterpartIdentity: 'HOME-19',
-  }]);
-}
-
-{
   const result = resolve(
     [jira('MYR-220')],
     [pull(155, 'Expose multiple pins in note lists and improve widget pinned-text readability', {
@@ -51,87 +35,98 @@ function resolve(jiraIssues, pullRequests) {
       url: 'https://github.com/benjamindrong/MyRAM-iOS/pull/155',
     })],
   );
-  assert.equal(result.jiraRelations.length, 1, 'source branch key must link a human-readable PR title');
-  assert.equal(result.githubRelations.length, 1);
-  assert.equal(result.githubRelations[0].counterpartIdentity, 'MYR-220');
-}
-
-{
-  const result = resolve([jira('HOME-19')], [pull(5, 'HOME-19 follows HOME-19')]);
-  assert.equal(result.jiraRelations.length, 1, 'repeated copies of the same key remain one distinct key');
-  assert.equal(result.githubRelations.length, 1);
+  assert.deepEqual(result.jiraRelations, [{
+    primaryUrl: 'https://example.atlassian.net/browse/MYR-220',
+    primaryIdentity: 'MYR-220',
+    counterpartUrl: 'https://github.com/benjamindrong/MyRAM-iOS/pull/155',
+    counterpartIdentity: 'PR #155',
+  }]);
+  assert.deepEqual(result.githubRelations, [{
+    primaryUrl: 'https://github.com/benjamindrong/MyRAM-iOS/pull/155',
+    primaryIdentity: 'MyRAM-iOS #155',
+    counterpartUrl: 'https://example.atlassian.net/browse/MYR-220',
+    counterpartIdentity: 'MYR-220',
+  }]);
 }
 
 {
   const result = resolve(
     [jira('HOME-19')],
-    [pull(5, 'HOME-19 matching title', { sourceBranch: 'HOME-19-matching-branch' })],
+    [pull(5, 'HOME-19 appears in the title but this PR has no ticket branch', {
+      sourceBranch: 'Fix-dashboard-Dock-icon',
+    })],
   );
-  assert.equal(result.jiraRelations.length, 1, 'matching branch and title keys remain unambiguous');
-  assert.equal(result.githubRelations.length, 1);
-}
-
-for (const title of ['No Jira key here', 'HOME-19 and HOME-20 together', 'UNKNOWN-8 not in Jira feed']) {
-  const result = resolve([jira('HOME-19'), jira('HOME-20')], [pull(5, title)]);
-  assert.deepEqual(result, { jiraRelations: [], githubRelations: [] }, `must fail closed for: ${title}`);
+  assert.deepEqual(
+    result,
+    { jiraRelations: [], githubRelations: [] },
+    'a title key alone must not invent a Jira relationship when the PR branch is unticketed',
+  );
 }
 
 {
-  const ambiguousBranch = resolve(
-    [jira('HOME-19'), jira('HOME-20')],
-    [pull(5, 'No Jira key here', { sourceBranch: 'HOME-19-and-HOME-20' })],
-  );
-  assert.deepEqual(ambiguousBranch, { jiraRelations: [], githubRelations: [] }, 'multiple branch keys must fail closed');
-}
-
-{
-  const conflictingSignals = resolve(
-    [jira('HOME-19'), jira('HOME-20')],
-    [pull(5, 'HOME-20 conflicting title', { sourceBranch: 'HOME-19-source-branch' })],
-  );
-  assert.deepEqual(conflictingSignals, { jiraRelations: [], githubRelations: [] }, 'conflicting branch and title keys must fail closed');
-}
-
-{
-  const unknownBranch = resolve(
+  const result = resolve(
     [jira('HOME-19')],
-    [pull(5, 'HOME-19 valid title', { sourceBranch: 'UNKNOWN-8-source-branch' })],
+    [pull(5, 'Human-readable title', { sourceBranch: 'HOME-19-work-UNKNOWN-8' })],
   );
-  assert.deepEqual(unknownBranch, { jiraRelations: [], githubRelations: [] }, 'an explicit unknown branch key must not fall back to a conflicting title');
+  assert.equal(result.jiraRelations.length, 1, 'only Jira tickets actually present on the dashboard participate in branch matching');
+  assert.equal(result.githubRelations.length, 1);
+  assert.equal(result.githubRelations[0].counterpartIdentity, 'HOME-19');
 }
 
 {
-  const duplicateJira = resolve([jira('HOME-19'), jira('HOME-19', 'https://example.atlassian.net/browse/HOME-19-copy')], [pull(5, 'HOME-19 work')]);
+  const result = resolve(
+    [jira('HOME-19'), jira('HOME-20')],
+    [pull(5, 'Human-readable title', { sourceBranch: 'HOME-19-and-HOME-20' })],
+  );
+  assert.deepEqual(
+    result,
+    { jiraRelations: [], githubRelations: [] },
+    'a branch matching multiple displayed Jira tickets must fail closed',
+  );
+}
+
+for (const sourceBranch of ['', 'Fix-dashboard-Dock-icon', 'UNKNOWN-8-work']) {
+  const result = resolve(
+    [jira('HOME-19'), jira('HOME-20')],
+    [pull(5, 'No relationship required', { sourceBranch })],
+  );
+  assert.deepEqual(
+    result,
+    { jiraRelations: [], githubRelations: [] },
+    `PRs without a displayed Jira ticket match remain standalone: ${sourceBranch || '<empty>'}`,
+  );
+}
+
+{
+  const duplicateJira = resolve(
+    [jira('HOME-19'), jira('HOME-19', 'https://example.atlassian.net/browse/HOME-19-copy')],
+    [pull(5, 'Human-readable title', { sourceBranch: 'HOME-19-work' })],
+  );
   assert.deepEqual(duplicateJira, { jiraRelations: [], githubRelations: [] }, 'duplicate Jira identity must fail closed');
 }
 
 {
   const duplicatePrIdentity = resolve(
     [jira('HOME-19')],
-    [pull(5, 'HOME-19 first'), pull(5, 'HOME-19 duplicate identity', { url: 'https://github.com/benjamindrong/HomepageDashboard/pull/5?duplicate=1' })],
+    [
+      pull(5, 'First copy', { sourceBranch: 'HOME-19-first' }),
+      pull(5, 'Duplicate identity', {
+        sourceBranch: 'HOME-19-second',
+        url: 'https://github.com/benjamindrong/HomepageDashboard/pull/5?duplicate=1',
+      }),
+    ],
   );
   assert.deepEqual(duplicatePrIdentity, { jiraRelations: [], githubRelations: [] }, 'duplicate PR identity must fail closed');
-}
-
-{
-  const mixedDuplicatePrIdentity = resolve(
-    [jira('HOME-19')],
-    [pull(5, 'HOME-19 matching record'), pull(5, 'No Jira key in duplicate record', { url: 'https://github.com/benjamindrong/HomepageDashboard/pull/5?duplicate=1' })],
-  );
-  assert.deepEqual(
-    mixedDuplicatePrIdentity,
-    { jiraRelations: [], githubRelations: [] },
-    'duplicate PR identity must fail closed before Jira-key matching',
-  );
 }
 
 {
   const caseVariantDuplicatePrIdentity = resolve(
     [jira('HOME-19')],
     [
-      pull(5, 'HOME-19 canonical casing'),
-      pull(5, 'HOME-19 alternate repository casing', {
+      pull(5, 'Canonical casing', { sourceBranch: 'HOME-19-first' }),
+      pull(5, 'Alternate repository casing', {
         repository: 'BENJAMINDRONG/homepagedashboard',
+        sourceBranch: 'HOME-19-second',
         url: 'https://github.com/benjamindrong/HomepageDashboard/pull/5?case-duplicate=1',
       }),
     ],
@@ -144,7 +139,13 @@ for (const title of ['No Jira key here', 'HOME-19 and HOME-20 together', 'UNKNOW
 }
 
 {
-  const result = resolve([jira('HOME-19')], [pull(5, 'HOME-19 first'), pull(6, 'HOME-19 second')]);
+  const result = resolve(
+    [jira('HOME-19')],
+    [
+      pull(5, 'First PR', { sourceBranch: 'HOME-19-first' }),
+      pull(6, 'Second PR', { sourceBranch: 'HOME-19-second' }),
+    ],
+  );
   assert.equal(result.jiraRelations.length, 0, 'Jira row must not choose arbitrarily among multiple PRs');
   assert.equal(result.githubRelations.length, 2, 'each uniquely identified PR may still point back to Jira');
   assert.deepEqual(result.githubRelations.map(item => item.primaryIdentity), ['HomepageDashboard #5', 'HomepageDashboard #6']);
@@ -152,7 +153,12 @@ for (const title of ['No Jira key here', 'HOME-19 and HOME-20 together', 'UNKNOW
 
 {
   const jiraPayload = { issues: [jira('HOME-19'), jira('HOME-20')] };
-  const githubPayload = { pullRequests: [pull(5, 'HOME-19 work'), pull(6, 'No key')] };
+  const githubPayload = {
+    pullRequests: [
+      pull(5, 'Ticketed work', { sourceBranch: 'HOME-19-work' }),
+      pull(6, 'Unticketed work', { sourceBranch: 'Fix-dashboard-Dock-icon' }),
+    ],
+  };
   const before = JSON.stringify({ jiraPayload, githubPayload });
   relationships.resolve(jiraPayload, githubPayload);
   assert.equal(JSON.stringify({ jiraPayload, githubPayload }), before, 'relationship resolution must not mutate or reorder source payloads');
@@ -161,9 +167,20 @@ for (const title of ['No Jira key here', 'HOME-19 and HOME-20 together', 'UNKNOW
 assert.equal(relationships.compactCounterpartLabel('PR #5'), '↔ #5');
 assert.equal(relationships.compactCounterpartLabel('HOME-19'), '↔ HOME-19');
 assert.deepEqual(relationships.distinctKeys('HOME-19 HOME-19 HOME-20'), ['HOME-19', 'HOME-20']);
-assert.deepEqual(relationships.distinctTitleKeys('HOME-19 HOME-19 HOME-20'), ['HOME-19', 'HOME-20']);
-assert.equal(relationships.jiraKeyForPull(pull(5, 'No key', { sourceBranch: 'HOME-19-work' })), 'HOME-19');
-assert.equal(relationships.jiraKeyForPull(pull(5, 'HOME-19 fallback')), 'HOME-19');
+assert.equal(
+  relationships.jiraKeyForPull(
+    pull(5, 'No key in title', { sourceBranch: 'HOME-19-work' }),
+    new Set(['HOME-19']),
+  ),
+  'HOME-19',
+);
+assert.equal(
+  relationships.jiraKeyForPull(
+    pull(5, 'HOME-19 only in title', { sourceBranch: 'Fix-dashboard-Dock-icon' }),
+    new Set(['HOME-19']),
+  ),
+  '',
+);
 assert.equal(workItems.pullIdentity(pull(5, 'HOME-19')), 'benjamindrong/homepagedashboard#5');
 assert.equal(
   workItems.pullIdentity(pull(5, 'HOME-19', { repository: '  BENJAMINDRONG/HomepageDashboard  ' })),
