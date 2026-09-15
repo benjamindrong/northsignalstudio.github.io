@@ -14,10 +14,17 @@
     return [...new Set(String(value || '').match(JIRA_KEY_PATTERN) || [])];
   }
 
-  function jiraKeyForPull(pull, jiraKeys) {
-    const eligibleKeys = jiraKeys instanceof Set ? jiraKeys : new Set(jiraKeys || []);
-    const matches = distinctKeys(pull?.sourceBranch).filter(key => eligibleKeys.has(key));
-    return matches.length === 1 ? matches[0] : '';
+  function jiraKeyForPull(pull) {
+    const branchKeys = distinctKeys(pull?.sourceBranch);
+    const titleKeys = distinctKeys(pull?.title);
+
+    if (branchKeys.length > 1) return '';
+    if (branchKeys.length === 1) {
+      if (titleKeys.length === 0) return branchKeys[0];
+      if (titleKeys.length === 1 && titleKeys[0] === branchKeys[0]) return branchKeys[0];
+      return '';
+    }
+    return titleKeys.length === 1 ? titleKeys[0] : '';
   }
 
   function groupBy(items, keyForItem) {
@@ -40,7 +47,6 @@
     for (const [key, matches] of groupBy(jiraIssues, issue => String(issue?.key || '')).entries()) {
       if (matches.length === 1 && matches[0]?.url) uniqueJiraByKey.set(key, matches[0]);
     }
-    const eligibleJiraKeys = new Set(uniqueJiraByKey.keys());
 
     const uniquePulls = [];
     for (const [identity, matches] of groupBy(pullRequests, WorkItems.pullIdentity).entries()) {
@@ -49,7 +55,7 @@
 
     const uniqueMatches = [];
     for (const { pull, identity } of uniquePulls) {
-      const key = jiraKeyForPull(pull, eligibleJiraKeys);
+      const key = jiraKeyForPull(pull);
       if (!key) continue;
       const jira = uniqueJiraByKey.get(key);
       if (!jira || !pull?.url) continue;
@@ -167,6 +173,7 @@
   return {
     JIRA_KEY_PATTERN,
     distinctKeys,
+    distinctTitleKeys: distinctKeys,
     jiraKeyForPull,
     resolve,
     compactCounterpartLabel,

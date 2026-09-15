@@ -134,13 +134,13 @@ FETCH_STUB = r'''<script>
 
   function githubPayload(revision) {
     const linkNumber = revision >= 2 ? 8 : 7;
-    const linkedSourceBranch = revision >= 3 ? 'relationship-removed' : 'HOME-23-browser-fixture';
+    const linkedTitle = revision >= 3 ? 'Relationship removed from this pull request title' : longPr;
     const pulls = [
-      { repository:'benjamindrong/northsignalstudio.github.io', number:linkNumber, title:longPr, sourceBranch:linkedSourceBranch, url:prUrl(linkNumber), state:'OPEN', stateClass:'review', attentionRank:1, updatedAt:iso(12 + revision) },
-      { repository:'benjamindrong/HomepageDashboard', number:40, title:'Independent PR row retained during refresh', sourceBranch:'independent-pr-row', url:'https://github.com/benjamindrong/HomepageDashboard/pull/40', state:'OPEN', stateClass:'progress', attentionRank:2, updatedAt:iso(11 + revision) },
+      { repository:'benjamindrong/northsignalstudio.github.io', number:linkNumber, title:linkedTitle, url:prUrl(linkNumber), state:'OPEN', stateClass:'review', attentionRank:1, updatedAt:iso(12 + revision) },
+      { repository:'benjamindrong/HomepageDashboard', number:40, title:'Independent PR row retained during refresh', url:'https://github.com/benjamindrong/HomepageDashboard/pull/40', state:'OPEN', stateClass:'progress', attentionRank:2, updatedAt:iso(11 + revision) },
     ];
-    if (revision >= 1) pulls.push({ repository:'benjamindrong/northsignalstudio.github.io', number:29, title:'Relationship appears after refresh', sourceBranch:'HOME-29-browser-fixture', url:prUrl(29), state:'OPEN', stateClass:'review', attentionRank:0, updatedAt:iso(28 + revision) });
-    if (revision >= 4) pulls.push({ repository:'benjamindrong/HomepageDashboard', number:99, title:'Automatic refresh inserted PR', sourceBranch:'automatic-refresh-inserted-pr', url:'https://github.com/benjamindrong/HomepageDashboard/pull/99', state:'OPEN', stateClass:'todo', attentionRank:0, updatedAt:iso(39) });
+    if (revision >= 1) pulls.push({ repository:'benjamindrong/northsignalstudio.github.io', number:29, title:'HOME-29 relationship appears after refresh', url:prUrl(29), state:'OPEN', stateClass:'review', attentionRank:0, updatedAt:iso(28 + revision) });
+    if (revision >= 4) pulls.push({ repository:'benjamindrong/HomepageDashboard', number:99, title:'Automatic refresh inserted PR', url:'https://github.com/benjamindrong/HomepageDashboard/pull/99', state:'OPEN', stateClass:'todo', attentionRank:0, updatedAt:iso(39) });
     return { generatedAt: iso(31 + revision), pullRequests: pulls };
   }
 
