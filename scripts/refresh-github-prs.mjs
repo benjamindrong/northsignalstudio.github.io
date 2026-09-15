@@ -112,6 +112,7 @@ async function fetchPullRequestsForRepository(repository, token, maxPullRequests
       repository,
       number: pull.number,
       title: pull.title || '',
+      sourceBranch: pull.head?.ref || '',
       updatedAt: pull.updated_at || '',
       url: pull.html_url || '',
       state: attention.state,
@@ -207,7 +208,7 @@ async function runSelfTest() {
     version: 1,
     generatedAt: '2026-08-12T12:00:00.000Z',
     repositories: ['benjamindrong/MyRAM-iOS'],
-    pullRequests: [{ repository: 'benjamindrong/MyRAM-iOS', number: 1, title: 'Test', updatedAt: '2026-08-12T12:00:00Z', url: 'https://github.com/benjamindrong/MyRAM-iOS/pull/1', state: 'OPEN', stateClass: 'todo', attentionRank: 6 }]
+    pullRequests: [{ repository: 'benjamindrong/MyRAM-iOS', number: 1, title: 'Test', sourceBranch: 'MYR-220-test', updatedAt: '2026-08-12T12:00:00Z', url: 'https://github.com/benjamindrong/MyRAM-iOS/pull/1', state: 'OPEN', stateClass: 'todo', attentionRank: 6 }]
   };
   const passphrase = 'correct horse battery staple';
   const envelope = encryptPayload(payload, passphrase);
@@ -235,7 +236,7 @@ async function verifyOutput(filePath) {
   if (!Array.isArray(payload.pullRequests)) throw new Error('Encrypted snapshot pullRequests must be an array.');
   const observedRepositories = new Set();
   for (const pull of payload.pullRequests) {
-    for (const field of ['repository', 'title', 'updatedAt', 'url', 'state', 'stateClass']) {
+    for (const field of ['repository', 'title', 'sourceBranch', 'updatedAt', 'url', 'state', 'stateClass']) {
       if (typeof pull[field] !== 'string') throw new Error(`Encrypted snapshot PR field ${field} must be a string.`);
     }
     if (!Number.isInteger(pull.number) || pull.number <= 0) throw new Error('Encrypted snapshot PR number must be a positive integer.');
