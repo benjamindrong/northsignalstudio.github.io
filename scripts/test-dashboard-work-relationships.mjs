@@ -16,6 +16,7 @@ const pull = (number, title, overrides = {}) => ({
   repository: 'benjamindrong/HomepageDashboard',
   number,
   title,
+  sourceBranch: '',
   url: `https://github.com/benjamindrong/HomepageDashboard/pull/${number}`,
   state: 'OPEN',
   ...overrides,
@@ -42,14 +43,61 @@ function resolve(jiraIssues, pullRequests) {
 }
 
 {
+  const result = resolve(
+    [jira('MYR-220')],
+    [pull(155, 'Expose multiple pins in note lists and improve widget pinned-text readability', {
+      repository: 'benjamindrong/MyRAM-iOS',
+      sourceBranch: 'MYR-220-Expose-multiple-pins-in-note-lists-and-improve-widget-pinned-text-readability',
+      url: 'https://github.com/benjamindrong/MyRAM-iOS/pull/155',
+    })],
+  );
+  assert.equal(result.jiraRelations.length, 1, 'source branch key must link a human-readable PR title');
+  assert.equal(result.githubRelations.length, 1);
+  assert.equal(result.githubRelations[0].counterpartIdentity, 'MYR-220');
+}
+
+{
   const result = resolve([jira('HOME-19')], [pull(5, 'HOME-19 follows HOME-19')]);
   assert.equal(result.jiraRelations.length, 1, 'repeated copies of the same key remain one distinct key');
+  assert.equal(result.githubRelations.length, 1);
+}
+
+{
+  const result = resolve(
+    [jira('HOME-19')],
+    [pull(5, 'HOME-19 matching title', { sourceBranch: 'HOME-19-matching-branch' })],
+  );
+  assert.equal(result.jiraRelations.length, 1, 'matching branch and title keys remain unambiguous');
   assert.equal(result.githubRelations.length, 1);
 }
 
 for (const title of ['No Jira key here', 'HOME-19 and HOME-20 together', 'UNKNOWN-8 not in Jira feed']) {
   const result = resolve([jira('HOME-19'), jira('HOME-20')], [pull(5, title)]);
   assert.deepEqual(result, { jiraRelations: [], githubRelations: [] }, `must fail closed for: ${title}`);
+}
+
+{
+  const ambiguousBranch = resolve(
+    [jira('HOME-19'), jira('HOME-20')],
+    [pull(5, 'No Jira key here', { sourceBranch: 'HOME-19-and-HOME-20' })],
+  );
+  assert.deepEqual(ambiguousBranch, { jiraRelations: [], githubRelations: [] }, 'multiple branch keys must fail closed');
+}
+
+{
+  const conflictingSignals = resolve(
+    [jira('HOME-19'), jira('HOME-20')],
+    [pull(5, 'HOME-20 conflicting title', { sourceBranch: 'HOME-19-source-branch' })],
+  );
+  assert.deepEqual(conflictingSignals, { jiraRelations: [], githubRelations: [] }, 'conflicting branch and title keys must fail closed');
+}
+
+{
+  const unknownBranch = resolve(
+    [jira('HOME-19')],
+    [pull(5, 'HOME-19 valid title', { sourceBranch: 'UNKNOWN-8-source-branch' })],
+  );
+  assert.deepEqual(unknownBranch, { jiraRelations: [], githubRelations: [] }, 'an explicit unknown branch key must not fall back to a conflicting title');
 }
 
 {
@@ -73,7 +121,7 @@ for (const title of ['No Jira key here', 'HOME-19 and HOME-20 together', 'UNKNOW
   assert.deepEqual(
     mixedDuplicatePrIdentity,
     { jiraRelations: [], githubRelations: [] },
-    'duplicate PR identity must fail closed before title or Jira-key matching',
+    'duplicate PR identity must fail closed before Jira-key matching',
   );
 }
 
@@ -112,7 +160,10 @@ for (const title of ['No Jira key here', 'HOME-19 and HOME-20 together', 'UNKNOW
 
 assert.equal(relationships.compactCounterpartLabel('PR #5'), '↔ #5');
 assert.equal(relationships.compactCounterpartLabel('HOME-19'), '↔ HOME-19');
+assert.deepEqual(relationships.distinctKeys('HOME-19 HOME-19 HOME-20'), ['HOME-19', 'HOME-20']);
 assert.deepEqual(relationships.distinctTitleKeys('HOME-19 HOME-19 HOME-20'), ['HOME-19', 'HOME-20']);
+assert.equal(relationships.jiraKeyForPull(pull(5, 'No key', { sourceBranch: 'HOME-19-work' })), 'HOME-19');
+assert.equal(relationships.jiraKeyForPull(pull(5, 'HOME-19 fallback')), 'HOME-19');
 assert.equal(workItems.pullIdentity(pull(5, 'HOME-19')), 'benjamindrong/homepagedashboard#5');
 assert.equal(
   workItems.pullIdentity(pull(5, 'HOME-19', { repository: '  BENJAMINDRONG/HomepageDashboard  ' })),
