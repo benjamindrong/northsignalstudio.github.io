@@ -60,6 +60,8 @@ function outwardIssueFromRelates(link) {
 
 function sourceIdentity(issue, errors) {
   const owningProject = issueProjectKey(issue);
+  // BEN-18 source identity is directional: only BEN -> source Relates links are canonical.
+  // Inbound Relates links are related/dependent work and cannot mutate registry source identity.
   const linked = (issue?.fields?.issuelinks || [])
     .map(outwardIssueFromRelates)
     .filter(Boolean)
