@@ -53,24 +53,20 @@ function issueProjectKey(issue) {
   return clean(issue?.key).split('-')[0] || '';
 }
 
-function linkedIssueFromRelates(link, owningKey) {
+function outwardIssueFromRelates(link) {
   if (clean(link?.type?.name).toLowerCase() !== 'relates') return null;
-  const outward = link?.outwardIssue;
-  const inward = link?.inwardIssue;
-  if (outward && clean(outward.key) !== owningKey) return outward;
-  if (inward && clean(inward.key) !== owningKey) return inward;
-  return null;
+  return link?.outwardIssue || null;
 }
 
 function sourceIdentity(issue, errors) {
   const owningProject = issueProjectKey(issue);
   const linked = (issue?.fields?.issuelinks || [])
-    .map(link => linkedIssueFromRelates(link, clean(issue?.key)))
+    .map(outwardIssueFromRelates)
     .filter(Boolean)
     .filter(candidate => issueProjectKey(candidate) && issueProjectKey(candidate) !== owningProject);
 
   if (linked.length > 1) {
-    errors.push('More than one cross-project Relates link is present.');
+    errors.push('More than one outward cross-project Relates source link is present.');
     return { source: 'Unknown', sourceKey: '' };
   }
   if (!linked.length) return { source: 'Unknown', sourceKey: '' };
