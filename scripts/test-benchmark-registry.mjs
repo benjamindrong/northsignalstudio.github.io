@@ -35,6 +35,13 @@ function relates(key, summary = `${key} source`) {
   };
 }
 
+function inboundRelates(key, summary = `${key} related work`) {
+  return {
+    type: { name: 'Relates' },
+    inwardIssue: { key, fields: { summary, project: { key: key.split('-')[0] } } }
+  };
+}
+
 function pointer(parentKey = 'BEN-17', updated = '2026-08-27T12:01:00.000Z', labels = [], issuetype = { name: 'Subtask', subtask: true }) {
   return {
     key: 'BEN-21',
@@ -324,6 +331,30 @@ const exactSource = projectBenchmarkRegistry([
 ], { pointerIssue: null, pointerMatches: [] });
 assert.equal(exactSource.runs[0]?.sourceKey, 'RUN-5');
 assert.equal(exactSource.runs[0]?.source, 'RUN-5');
+
+const sourceWithInboundRelatedWork = projectBenchmarkRegistry([
+  issue('BEN-63', ['failure-evaluation'], 'done', { links: [relates('MYR-221'), inboundRelates('LAN-38')] })
+], { pointerIssue: null, pointerMatches: [] });
+assert.equal(sourceWithInboundRelatedWork.invalidRecords.length, 0);
+assert.equal(sourceWithInboundRelatedWork.runs[0]?.sourceKey, 'MYR-221');
+assert.equal(sourceWithInboundRelatedWork.runs[0]?.source, 'MYR-221');
+
+const inboundRelatedWorkOnly = projectBenchmarkRegistry([
+  issue('BEN-64', ['failure-evaluation'], 'done', { links: [inboundRelates('LAN-38')] })
+], { pointerIssue: null, pointerMatches: [] });
+assert.equal(inboundRelatedWorkOnly.invalidRecords.length, 0);
+assert.equal(inboundRelatedWorkOnly.runs[0]?.sourceKey, '');
+assert.equal(inboundRelatedWorkOnly.runs[0]?.source, 'Unknown');
+
+const ambiguousOutwardSources = projectBenchmarkRegistry([
+  issue('BEN-65', ['failure-evaluation'], 'done', { links: [relates('MYR-221'), relates('HOME-23')] })
+], { pointerIssue: null, pointerMatches: [] });
+assert.equal(ambiguousOutwardSources.runs.length, 0);
+assert.equal(ambiguousOutwardSources.invalidRecords.length, 1);
+assert.match(
+  ambiguousOutwardSources.invalidRecords[0]?.reasons.join('\n') || '',
+  /More than one outward cross-project Relates source link is present\./
+);
 
 const completedFailure = projectBenchmarkRegistry([
   issue('BEN-72', ['failure-evaluation'], 'done', { links: [relates('MYR-218')] })
