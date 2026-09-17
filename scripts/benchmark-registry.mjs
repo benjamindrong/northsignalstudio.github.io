@@ -306,7 +306,6 @@ function maxUpdatedAt(records) {
   let bestTime = NaN;
   for (const value of records.map(record => clean(record)).filter(Boolean)) {
     const time = Date.parse(value);
-    if (Number.isNaN(time)) continue;
     if (Number.isNaN(bestTime) || time > bestTime) {
       best = value;
       bestTime = time;
