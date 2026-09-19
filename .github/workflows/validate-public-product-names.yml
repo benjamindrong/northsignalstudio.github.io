@@ -1,0 +1,40 @@
+name: Validate public product names
+
+on:
+  pull_request:
+    paths:
+      - index.html
+      - privacy.html
+      - terms.html
+      - support.html
+      - myhealth.html
+      - lifeline.html
+      - lifeline/oauth/callback/index.html
+      - scripts/test-public-product-names.mjs
+      - .github/workflows/validate-public-product-names.yml
+  push:
+    branches:
+      - main
+    paths:
+      - index.html
+      - privacy.html
+      - terms.html
+      - support.html
+      - myhealth.html
+      - lifeline.html
+      - lifeline/oauth/callback/index.html
+      - scripts/test-public-product-names.mjs
+      - .github/workflows/validate-public-product-names.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/test-public-product-names.mjs
