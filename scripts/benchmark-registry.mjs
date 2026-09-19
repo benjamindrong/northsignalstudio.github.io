@@ -221,6 +221,83 @@ function hasResultSummary(description) {
   return headingIndexes(descriptionBlocks(description), 4, 'Registry Result Summary').length > 0;
 }
 
+function completionArtifactBounds(blocks) {
+  const artifactIndexes = headingIndexes(blocks, 3, 'Completion Artifact');
+  if (artifactIndexes.length !== 1) return null;
+  const start = artifactIndexes[0];
+  if (blocks[start].containerDepth !== 0) return null;
+  const endOffset = blocks.slice(start + 1).findIndex(block => block.kind === 'heading' && block.level <= 3);
+  const end = endOffset < 0 ? blocks.length : start + 1 + endOffset;
+  return { start, end };
+}
+
+function stripFindingPrefix(text, pattern) {
+  return clean(String(text || '').replace(pattern, ''));
+}
+
+export function extractNotableFinding(description, fallbackSignal = '') {
+  const blocks = descriptionBlocks(description);
+  const artifact = completionArtifactBounds(blocks);
+  if (!artifact) return clean(fallbackSignal);
+
+  const findingHeadings = blocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ block, index }) =>
+      index > artifact.start
+      && index < artifact.end
+      && block.kind === 'heading'
+      && block.level === 4
+      && block.containerDepth === 0
+      && clean(block.text).toLowerCase() === 'notable finding'
+    );
+
+  if (findingHeadings.length === 1) {
+    const sectionStart = findingHeadings[0].index;
+    const sectionEndOffset = blocks.slice(sectionStart + 1, artifact.end)
+      .findIndex(block => block.kind === 'heading' && block.level <= 4);
+    const sectionEnd = sectionEndOffset < 0 ? artifact.end : sectionStart + 1 + sectionEndOffset;
+    const bullets = blocks.slice(sectionStart + 1, sectionEnd)
+      .filter(block => block.kind === 'bullet' && block.depth === 0 && block.containerDepth === 0);
+    if (bullets.length === 1 && /^Finding:\s*/i.test(bullets[0].text)) {
+      const explicit = stripFindingPrefix(bullets[0].text, /^Finding:\s*/i);
+      if (explicit) return explicit;
+    }
+  }
+
+  const topLevelBullets = blocks.slice(artifact.start + 1, artifact.end)
+    .filter(block => block.kind === 'bullet' && block.depth === 0 && block.containerDepth === 0);
+
+  const directFindingPatterns = [
+    /^(?:Notable finding|Major issue|Most significant finding|Key finding|Finding):\s*/i
+  ];
+  for (const pattern of directFindingPatterns) {
+    const match = topLevelBullets.find(block => pattern.test(block.text));
+    if (match) {
+      const finding = stripFindingPrefix(match.text, pattern);
+      if (finding) return finding;
+    }
+  }
+
+  const signal = clean(fallbackSignal);
+  if (signal) return signal;
+
+  const historicalFallbackPatterns = [
+    /^Final validation result:\s*/i,
+    /^Repeated failure mode:\s*/i,
+    /^Supported solution:\s*/i,
+    /^Final determination:\s*/i
+  ];
+  for (const pattern of historicalFallbackPatterns) {
+    const match = topLevelBullets.find(block => pattern.test(block.text));
+    if (match) {
+      const finding = stripFindingPrefix(match.text, pattern);
+      if (finding) return finding;
+    }
+  }
+
+  return '';
+}
+
 function classifyIssue(issue) {
   const labels = lowerLabels(issue);
   const errors = [];
@@ -261,6 +338,7 @@ function classifyIssue(issue) {
   const activityName = activityKind ? ACTIVITY_LABELS.get(activityKind) : '';
   let resultState = 'none';
   let resultLines = [];
+  let resultSignal = '';
 
   if (activityKind === 'candidate-evaluation' && lifecycle === 'Completed') {
     if (resultLabels.length !== 1) {
@@ -275,6 +353,7 @@ function classifyIssue(issue) {
       else {
         resultState = 'recorded';
         resultLines = parsed.lines;
+        resultSignal = parsed.values.signal;
       }
     }
   } else if (resultLabels.length) {
@@ -282,6 +361,9 @@ function classifyIssue(issue) {
   }
 
   const source = sourceIdentity(issue, errors);
+  const notableFinding = lifecycle === 'Completed'
+    ? extractNotableFinding(issue?.fields?.description, resultSignal)
+    : '';
   return {
     key,
     title,
@@ -296,6 +378,7 @@ function classifyIssue(issue) {
     turnsCompleted: null,
     resultState,
     resultLines,
+    notableFinding,
     updatedAt: clean(issue?.fields?.updated),
     errors
   };

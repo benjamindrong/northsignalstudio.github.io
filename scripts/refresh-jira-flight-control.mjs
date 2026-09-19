@@ -12,7 +12,6 @@ const RECENT_DONE_PER_PROJECT = 3;
 const BENCHMARK_PROJECT = 'BEN';
 const BENCHMARK_POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
 const BENCHMARK_PARTICIPANT_FIELDS = ['summary', 'status', 'project', 'labels', 'updated', 'issuelinks'];
-const BENCHMARK_RESULT_LABELS = new Set(['registry-result-summary', 'registry-result-unknown']);
 const HEARTBEAT_AFTER_MS = 15 * 60 * 1000;
 const STABILIZATION_WINDOW_MS = 20_000;
 const STABILIZATION_RETRY_MS = 2_000;
@@ -65,8 +64,8 @@ export function buildBenchmarkPointerIdentityJql(projectKey) {
   return `project = ${quoteJqlValue(projectKey)} AND summary ~ ${quoteJqlValue(`"${BENCHMARK_POINTER_SUMMARY}"`)} ORDER BY key ASC`;
 }
 
-function buildBenchmarkResultDescriptionJql(keys) {
-  if (!Array.isArray(keys) || !keys.length) throw new Error('Result Description query requires at least one BEN key.');
+function buildBenchmarkCompletionDescriptionJql(keys) {
+  if (!Array.isArray(keys) || !keys.length) throw new Error('Completion Description query requires at least one BEN key.');
   return `key in (${keys.map(quoteJqlValue).join(', ')}) ORDER BY key ASC`;
 }
 
@@ -76,7 +75,8 @@ function benchmarkIssueLabels(issue) {
 
 function needsBenchmarkDescription(issue) {
   const labels = benchmarkIssueLabels(issue);
-  return [...BENCHMARK_RESULT_LABELS].some(label => labels.has(label));
+  const category = String(issue?.fields?.status?.statusCategory?.key || '').trim().toLowerCase();
+  return category === 'done' && !labels.has('registry-retired');
 }
 
 function historyTimestamp(created) {
@@ -163,7 +163,7 @@ async function searchIssues(baseUrl, authHeader, projects, maxIssues) {
   return [...active, ...recentDone];
 }
 
-async function hydrateBenchmarkResultDescriptions(baseUrl, authHeader, issues) {
+async function hydrateBenchmarkCompletionDescriptions(baseUrl, authHeader, issues) {
   const required = (issues || []).filter(needsBenchmarkDescription);
   if (!required.length) return issues;
   const expectedKeys = required.map(issue => String(issue?.key || '').trim()).filter(Boolean);
@@ -173,7 +173,7 @@ async function hydrateBenchmarkResultDescriptions(baseUrl, authHeader, issues) {
   const details = await searchJqlIssues(
     baseUrl,
     authHeader,
-    buildBenchmarkResultDescriptionJql(expectedKeys),
+    buildBenchmarkCompletionDescriptionJql(expectedKeys),
     expectedKeys.length,
     ['description'],
     { requireComplete: true, context: 'BEN registry result Description query' }
@@ -208,7 +208,7 @@ async function fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config) {
       BENCHMARK_PARTICIPANT_FIELDS,
       { requireComplete: true, context: 'BEN registry participant query' }
     );
-    const issues = await hydrateBenchmarkResultDescriptions(baseUrl, authHeader, participants);
+    const issues = await hydrateBenchmarkCompletionDescriptions(baseUrl, authHeader, participants);
 
     let pointerIssue = null;
     try {
@@ -475,11 +475,18 @@ async function runSelfTest() {
   const selectedIssue = benchmarkFixtureIssue('BEN-17', ['candidate-evaluation'], 'new');
   const summaryIssue = benchmarkFixtureIssue('BEN-9', ['candidate-evaluation', 'registry-result-summary'], 'done');
   const unknownIssue = benchmarkFixtureIssue('BEN-10', ['candidate-evaluation', 'registry-result-unknown'], 'done');
+  const failureIssue = benchmarkFixtureIssue('BEN-63', ['failure-evaluation'], 'done');
+  const retiredIssue = benchmarkFixtureIssue('BEN-75', ['candidate-evaluation', 'registry-retired'], 'done');
   if (BENCHMARK_PARTICIPANT_FIELDS.includes('description')) throw new Error('Benchmark participant query must not fetch Description eagerly');
-  if (needsBenchmarkDescription(selectedIssue)) throw new Error('Non-result benchmark must not fetch Description');
-  if (!needsBenchmarkDescription(summaryIssue) || !needsBenchmarkDescription(unknownIssue)) throw new Error('Result-mode benchmarks must fetch their owning Description');
-  const resultDescriptionJql = buildBenchmarkResultDescriptionJql(['BEN-9', 'BEN-10']);
-  if (!resultDescriptionJql.includes('"BEN-9"') || !resultDescriptionJql.includes('"BEN-10"')) throw new Error('Result Description JQL must target exact result-mode keys');
+  if (needsBenchmarkDescription(selectedIssue)) throw new Error('Non-completed benchmark must not fetch Description');
+  if (!needsBenchmarkDescription(summaryIssue) || !needsBenchmarkDescription(unknownIssue) || !needsBenchmarkDescription(failureIssue)) {
+    throw new Error('Completed benchmark records must fetch their owning Description for result and finding projection');
+  }
+  if (needsBenchmarkDescription(retiredIssue)) throw new Error('Retired benchmark records must not fetch Description for Completed display');
+  const completionDescriptionJql = buildBenchmarkCompletionDescriptionJql(['BEN-9', 'BEN-10', 'BEN-63']);
+  if (!completionDescriptionJql.includes('"BEN-9"') || !completionDescriptionJql.includes('"BEN-10"') || !completionDescriptionJql.includes('"BEN-63"')) {
+    throw new Error('Completion Description JQL must target exact completed benchmark keys');
+  }
 
   benchmarkProjectKey({ benchmarkRegistryProject: 'BEN' });
   let wrongProjectFailed = false;

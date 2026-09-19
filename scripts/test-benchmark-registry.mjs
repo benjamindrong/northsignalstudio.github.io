@@ -60,6 +60,21 @@ const summaryDescription = `
 - Signal: Response B preserved the required state boundary.
 `;
 
+const explicitFindingDescription = `
+### Completion Artifact
+
+#### Notable Finding
+- Finding: Both candidates missed the same state-transition boundary under recovery pressure.
+`;
+
+const failureFindingDescription = `
+### Completion Artifact
+
+- Final determination: Validated Failure Evaluation.
+- Final validation result: 3/3 qualifying substantive failures; candidates optimized the same unsafe verification strategy instead of removing the dependency.
+- Supported solution: Isolate verification state from normal live activity.
+`;
+
 const records = [
   issue('BEN-17', ['candidate-evaluation'], 'new', { summary: 'Runline Event Board PRD Candidate Evaluation', links: [relates('RUN-5')] }),
   issue('BEN-40', ['candidate-evaluation', 'registry-blocked'], 'indeterminate'),
@@ -184,6 +199,27 @@ for (const excluded of ['BEN-6', 'BEN-21', 'BEN-33']) assert.equal(allProjectedK
 const parsedSummary = parseCanonicalResultSummary(summaryDescription);
 assert.equal(parsedSummary.ok, true);
 assert.equal(parsedSummary.values.outcome, 'Response B won.');
+
+const summaryFindingProjection = projectBenchmarkRegistry([
+  issue('BEN-90', ['candidate-evaluation', 'registry-result-summary'], 'done', { description: summaryDescription })
+], { pointerIssue: null, pointerMatches: [] });
+assert.equal(summaryFindingProjection.runs[0]?.notableFinding, 'Response B preserved the required state boundary.');
+
+const explicitFindingProjection = projectBenchmarkRegistry([
+  issue('BEN-91', ['failure-evaluation'], 'done', { description: explicitFindingDescription })
+], { pointerIssue: null, pointerMatches: [] });
+assert.equal(
+  explicitFindingProjection.runs[0]?.notableFinding,
+  'Both candidates missed the same state-transition boundary under recovery pressure.'
+);
+
+const failureFindingProjection = projectBenchmarkRegistry([
+  issue('BEN-92', ['failure-evaluation'], 'done', { description: failureFindingDescription })
+], { pointerIssue: null, pointerMatches: [] });
+assert.equal(
+  failureFindingProjection.runs[0]?.notableFinding,
+  '3/3 qualifying substantive failures; candidates optimized the same unsafe verification strategy instead of removing the dependency.'
+);
 
 for (const bad of [
   `### Completion Artifact\n#### Registry Result Summary\n- Outcome: B\n- Scores: 9/8\n- Signal: X\n### Completion Artifact`,

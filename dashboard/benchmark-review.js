@@ -77,6 +77,7 @@
       .benchmark-result-summary { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
       .benchmark-result-summary[hidden], .benchmark-run-details[hidden] { display: none; }
       .benchmark-run-details { min-width: 0; margin-top: 7px; padding-top: 2px; border-top: 1px solid var(--board-line-soft); }
+      .benchmark-finding { margin-top: 7px; border-left: 2px solid var(--progress); padding-left: 7px; color: #fff7d3; font-size: 9px; line-height: 1.4; overflow-wrap: anywhere; }
       .benchmark-result.backfill { color: #ffd166; }
       .benchmark-result.none, .benchmark-result.unknown { color: #9da59d; }
       .benchmark-status { display: inline-block; margin-left: 6px; border: 1px solid currentColor; padding: 2px 4px 1px; font-size: 7px; font-weight: 950; letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px; }
@@ -170,6 +171,10 @@
     return resultLinesForDisplay(run).slice(0, EXPANDED_RESULT_LIMIT).map(line => String(line));
   }
 
+  function notableFindingText(run) {
+    return String(run?.notableFinding || '').replace(/\s+/g, ' ').trim();
+  }
+
   function appendResults(container, run) {
     const resultLines = expandedResultLines(run);
     if (resultLines.length) {
@@ -213,6 +218,10 @@
     details.dataset.benchmarkDetails = '';
     details.hidden = !expanded;
     appendResults(details, run);
+    if (run.status === 'Completed') {
+      const finding = notableFindingText(run);
+      details.appendChild(create('div', 'benchmark-finding', finding ? `Notable finding: ${finding}` : 'Notable finding: Not recorded.'));
+    }
     row.appendChild(details);
 
     disclosure.addEventListener('click', () => {
@@ -413,6 +422,7 @@
     resultFallbackText,
     resultSummaryText,
     expandedResultLines,
+    notableFindingText,
     createPersistedDetails
   };
   root.DashboardBenchmarkReview = { render, locked };
