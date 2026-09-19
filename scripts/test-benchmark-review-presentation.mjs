@@ -8,6 +8,7 @@ const {
   orderedOnDeckRuns,
   completedRunsForDisplay,
   resultLinesForDisplay,
+  notableFindingText,
   createPersistedDetails
 } = require('../dashboard/benchmark-review.js');
 const presentationSource = readFileSync(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
@@ -133,6 +134,20 @@ assert.deepEqual(
   'Non-compact presentation must retain all existing result lines.'
 );
 assert.deepEqual(resultLinesForDisplay({ resultLines: null }, true), [], 'Missing result lines must remain missing.');
+assert.equal(
+  notableFindingText({ notableFinding: '  Repeated   causal-model miss.  ' }),
+  'Repeated causal-model miss.',
+  'Notable findings must be normalized for compact dashboard presentation.'
+);
+assert.equal(notableFindingText({}), '', 'Missing notable findings must remain empty for the explicit Not recorded fallback.');
+assert.ok(
+  presentationSource.includes("if (run.status === 'Completed')"),
+  'Notable findings must be limited to Completed benchmark details.'
+);
+assert.ok(
+  presentationSource.includes("Notable finding: Not recorded."),
+  'Completed records without a supported finding must fail transparently instead of inventing one.'
+);
 assert.deepEqual(resultLines, [
   'Outcome: Response B won.',
   'Scores: RA 8 / RB 9.',
