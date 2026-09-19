@@ -8,6 +8,7 @@ const {
   orderedOnDeckRuns,
   completedRunsForDisplay,
   resultLinesForDisplay,
+  resultSummaryText,
   notableFindingText,
   createPersistedDetails
 } = require('../dashboard/benchmark-review.js');
@@ -140,6 +141,26 @@ assert.equal(
   'Notable findings must be normalized for compact dashboard presentation.'
 );
 assert.equal(notableFindingText({}), '', 'Missing notable findings must remain empty for the explicit Not recorded fallback.');
+assert.equal(
+  resultSummaryText({ status: 'Completed', notableFinding: '  Better   causal reasoning.  ', resultLines }),
+  'Notable finding: Better causal reasoning.',
+  'Collapsed Completed cards must preview the notable finding instead of Outcome.'
+);
+assert.equal(
+  resultSummaryText({ status: 'Completed', resultLines }),
+  'Notable finding: Not recorded.',
+  'Collapsed Completed cards must expose the explicit missing-finding fallback.'
+);
+assert.equal(
+  resultSummaryText({ status: 'Running', resultLines }),
+  'Outcome: Response B won.',
+  'Non-completed cards must preserve their existing compact result summary.'
+);
+const findingStyleIndex = presentationSource.indexOf('.benchmark-finding { margin-top: 7px; border-left: 2px solid var(--progress); padding-left: 7px; color: var(--progress);');
+assert.ok(findingStyleIndex >= 0, 'Notable finding text must use the theme-aware progress color in light and dark modes.');
+const expandedFindingIndex = presentationSource.indexOf("details.appendChild(create('div', 'benchmark-finding'");
+const expandedResultsIndex = presentationSource.indexOf('appendResults(details, run);');
+assert.ok(expandedFindingIndex >= 0 && expandedFindingIndex < expandedResultsIndex, 'Expanded Completed cards must render the notable finding before Outcome and Scores.');
 assert.ok(
   presentationSource.includes("if (run.status === 'Completed')"),
   'Notable findings must be limited to Completed benchmark details.'
