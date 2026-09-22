@@ -379,6 +379,7 @@ function classifyIssue(issue) {
     resultState,
     resultLines,
     notableFinding,
+    completedAt: lifecycle === 'Completed' ? clean(issue?.fields?.statuscategorychangedate) : '',
     updatedAt: clean(issue?.fields?.updated),
     errors
   };

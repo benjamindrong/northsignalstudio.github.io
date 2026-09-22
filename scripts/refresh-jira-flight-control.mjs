@@ -11,7 +11,7 @@ const PBKDF2_ITERATIONS = 250_000;
 const RECENT_DONE_PER_PROJECT = 3;
 const BENCHMARK_PROJECT = 'BEN';
 const BENCHMARK_POINTER_SUMMARY = 'Benchmark Registry Next Pointer';
-const BENCHMARK_PARTICIPANT_FIELDS = ['summary', 'status', 'project', 'labels', 'updated', 'issuelinks'];
+const BENCHMARK_PARTICIPANT_FIELDS = ['summary', 'status', 'project', 'labels', 'updated', 'statuscategorychangedate', 'issuelinks'];
 const HEARTBEAT_AFTER_MS = 15 * 60 * 1000;
 const STABILIZATION_WINDOW_MS = 20_000;
 const STABILIZATION_RETRY_MS = 2_000;
@@ -478,6 +478,7 @@ async function runSelfTest() {
   const failureIssue = benchmarkFixtureIssue('BEN-63', ['failure-evaluation'], 'done');
   const retiredIssue = benchmarkFixtureIssue('BEN-75', ['candidate-evaluation', 'registry-retired'], 'done');
   if (BENCHMARK_PARTICIPANT_FIELDS.includes('description')) throw new Error('Benchmark participant query must not fetch Description eagerly');
+  if (!BENCHMARK_PARTICIPANT_FIELDS.includes('statuscategorychangedate')) throw new Error('Benchmark participant query must fetch the Jira status-category completion timestamp');
   if (needsBenchmarkDescription(selectedIssue)) throw new Error('Non-completed benchmark must not fetch Description');
   if (!needsBenchmarkDescription(summaryIssue) || !needsBenchmarkDescription(unknownIssue) || !needsBenchmarkDescription(failureIssue)) {
     throw new Error('Completed benchmark records must fetch their owning Description for result and finding projection');

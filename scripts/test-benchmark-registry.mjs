@@ -12,7 +12,8 @@ function issue(key, labels, category, {
   summary = `${key} summary`,
   description = '',
   links = [],
-  updated = '2026-08-27T12:00:00.000Z'
+  updated = '2026-08-27T12:00:00.000Z',
+  statusCategoryChangedDate = ''
 } = {}) {
   return {
     key,
@@ -22,6 +23,7 @@ function issue(key, labels, category, {
       status: { statusCategory: { key: category } },
       project: { key: 'BEN' },
       updated,
+      statuscategorychangedate: statusCategoryChangedDate,
       description,
       issuelinks: links
     }
@@ -79,7 +81,7 @@ const records = [
   issue('BEN-17', ['candidate-evaluation'], 'new', { summary: 'Runline Event Board PRD Candidate Evaluation', links: [relates('RUN-5')] }),
   issue('BEN-40', ['candidate-evaluation', 'registry-blocked'], 'indeterminate'),
   issue('BEN-41', ['candidate-evaluation'], 'indeterminate'),
-  issue('BEN-14', ['benchmark-testing'], 'done', { summary: 'Crossmark Physical Signal Hunt Field Benchmark', links: [relates('CROS-1')] }),
+  issue('BEN-14', ['benchmark-testing'], 'done', { summary: 'Crossmark Physical Signal Hunt Field Benchmark', links: [relates('CROS-1')], statusCategoryChangedDate: '2026-08-26T18:00:00.000Z' }),
   issue('BEN-58', ['failure-evaluation'], 'new', { summary: 'MyRAM Sync Incident Root-Cause and Release Readiness Failure Evaluation', links: [relates('MYR-218')] }),
   issue('BEN-9', ['candidate-evaluation', 'registry-result-summary'], 'done', { description: summaryDescription }),
   issue('BEN-10', ['candidate-evaluation', 'registry-result-unknown'], 'done', { links: [relates('HOME-12')] }),
@@ -107,6 +109,8 @@ assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.activityKind, 'ben
 assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.type, 'Application Benchmark Testing');
 assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.activityTaxonomyVersion, 2);
 assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.resultState, 'none');
+assert.equal(registry.runs.find(run => run.key === 'BEN-14')?.completedAt, '2026-08-26T18:00:00.000Z');
+assert.equal(registry.runs.find(run => run.key === 'BEN-17')?.completedAt, '');
 const failureRun = registry.runs.find(run => run.key === 'BEN-58');
 assert.equal(failureRun?.status, 'Preparing');
 assert.equal(failureRun?.activityKind, 'failure-evaluation');
