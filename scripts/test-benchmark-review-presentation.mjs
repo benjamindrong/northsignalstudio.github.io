@@ -100,13 +100,13 @@ assert.ok(
 
 const registry = {
   runs: [
-    { key: 'BEN-5', status: 'Completed' },
-    { key: 'BEN-50', status: 'Completed' },
-    { key: 'BEN-11', status: 'Completed' },
-    { key: 'BEN-39', status: 'Completed' },
-    { key: 'BEN-20', status: 'Completed' },
-    { key: 'BEN-14', status: 'Completed' },
-    { key: 'BEN-7', status: 'Completed' },
+    { key: 'BEN-69', status: 'Completed', completedAt: '2026-09-20T12:00:00.000Z' },
+    { key: 'BEN-65', status: 'Completed', completedAt: '2026-09-19T12:00:00.000Z' },
+    { key: 'BEN-63', status: 'Completed', completedAt: '2026-09-18T12:00:00.000Z' },
+    { key: 'BEN-62', status: 'Completed', completedAt: '2026-09-17T12:00:00.000Z' },
+    { key: 'BEN-61', status: 'Completed', completedAt: '2026-09-16T12:00:00.000Z' },
+    { key: 'BEN-50', status: 'Completed', completedAt: '2026-09-15T12:00:00.000Z' },
+    { key: 'BEN-44', status: 'Completed', completedAt: '2026-09-21T23:23:09.609-0500' },
     { key: 'BEN-99', status: 'Running' }
   ]
 };
@@ -115,8 +115,22 @@ const completed = completedRunsForDisplay(registry);
 assert.equal(completed.total, 7, 'Completed heading count must retain the full completed total.');
 assert.deepEqual(
   completed.runs.map(run => run.key),
-  ['BEN-50', 'BEN-39', 'BEN-20', 'BEN-14', 'BEN-11', 'BEN-7'],
-  'Completed display must preserve existing newest-BEN-key-first ordering before applying the six-item limit.'
+  ['BEN-44', 'BEN-69', 'BEN-65', 'BEN-63', 'BEN-62', 'BEN-61'],
+  'Completed display must order by Jira completion time before applying the six-item limit.'
+);
+
+const fallbackCompleted = completedRunsForDisplay({
+  runs: [
+    { key: 'BEN-7', status: 'Completed', completedAt: '' },
+    { key: 'BEN-11', status: 'Completed', completedAt: 'not-a-date' },
+    { key: 'BEN-5', status: 'Completed', completedAt: '2026-09-01T00:00:00.000Z' },
+    { key: 'BEN-20', status: 'Completed', completedAt: '2026-09-01T00:00:00.000Z' }
+  ]
+});
+assert.deepEqual(
+  fallbackCompleted.runs.map(run => run.key),
+  ['BEN-20', 'BEN-5', 'BEN-11', 'BEN-7'],
+  'Equal or unavailable completion timestamps must use deterministic BEN-key ordering, with unavailable timestamps last.'
 );
 
 const resultLines = [

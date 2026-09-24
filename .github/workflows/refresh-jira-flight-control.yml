@@ -12,6 +12,7 @@ on:
       - "dashboard/jira-flight-control.config.json"
       - "scripts/benchmark-registry.mjs"
       - "scripts/test-benchmark-registry.mjs"
+      - "scripts/test-benchmark-review-presentation.mjs"
       - "scripts/test-home24-hardening.mjs"
       - "scripts/test-dashboard-refresh.mjs"
       - "scripts/test-dashboard-theme.mjs"
@@ -45,6 +46,7 @@ on:
       - "dashboard/jira-flight-control.config.json"
       - "scripts/benchmark-registry.mjs"
       - "scripts/test-benchmark-registry.mjs"
+      - "scripts/test-benchmark-review-presentation.mjs"
       - "scripts/test-home24-hardening.mjs"
       - "scripts/test-dashboard-refresh.mjs"
       - "scripts/test-dashboard-theme.mjs"
@@ -83,6 +85,7 @@ jobs:
           node --check scripts/benchmark-registry.mjs
           node --check scripts/refresh-jira-flight-control.mjs
           node scripts/test-benchmark-registry.mjs
+          node scripts/test-benchmark-review-presentation.mjs
           node scripts/test-home24-hardening.mjs
           node scripts/test-dashboard-work-items.mjs
           node scripts/test-dashboard-work-relationships.mjs

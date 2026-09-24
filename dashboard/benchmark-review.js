@@ -263,10 +263,16 @@
     return registry.runs.filter(run => run.status === 'Preparing' && run.key !== selectedKey);
   }
 
+  function completionTimestamp(run) {
+    const timestamp = Date.parse(String(run?.completedAt || ''));
+    return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+  }
+
   function orderedCompletedRuns(registry) {
     return registry.runs
       .filter(run => run.status === 'Completed')
-      .sort((a, b) => String(b.key || '').localeCompare(String(a.key || ''), undefined, { numeric: true }));
+      .sort((a, b) => completionTimestamp(b) - completionTimestamp(a)
+        || String(b.key || '').localeCompare(String(a.key || ''), undefined, { numeric: true }));
   }
 
   function completedRunsForDisplay(registry) {
