@@ -912,6 +912,7 @@ async function main() {
         console.log('Reused unchanged Jira Flight Control envelope after Jira-trigger stabilization.');
         return;
       }
+      validatePublishedBenchmarkReview(stable.benchmarkReview, projectKey);
       const payload = { ...stable, generatedAt: new Date().toISOString() };
       const envelope = encryptPayload(payload, passphrase);
       await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -935,6 +936,7 @@ async function main() {
     return;
   }
 
+  validatePublishedBenchmarkReview(stable.benchmarkReview, projectKey);
   const payload = {
     ...stable,
     generatedAt: new Date().toISOString()
