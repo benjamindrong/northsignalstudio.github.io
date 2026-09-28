@@ -301,6 +301,18 @@ assert.equal(invalidProjection.runs.length, 0);
 assert.equal(invalidProjection.selectedNext, null);
 assert.match(invalidProjection.pointerError, /eligible/i);
 
+const ben91LifecycleRegression = projectBenchmarkRegistry([
+  issue('BEN-91', ['failure-evaluation', 'registry-idea', 'registry-idea-fresh'], 'indeterminate')
+]);
+assert.equal(ben91LifecycleRegression.state, 'ready');
+assert.equal(ben91LifecycleRegression.invalidRecords.length, 1, 'BEN-91 mixed idea/running state must remain invalid under BEN-18.');
+assert.equal(ben91LifecycleRegression.invalidRecords[0]?.key, 'BEN-91');
+assert.match(
+  ben91LifecycleRegression.invalidRecords[0]?.reasons.join('\n') || '',
+  /Status category and lifecycle labels do not match the BEN-18 lifecycle mapping/,
+  'BEN-91 regression must preserve the exact lifecycle-contract failure rather than inventing precedence.'
+);
+
 const duplicatePointer = projectBenchmarkRegistry([records[0]], {
   pointerIssue: pointer(),
   pointerMatches: [pointer(), { key: 'BEN-99', fields: { summary: POINTER_SUMMARY } }]

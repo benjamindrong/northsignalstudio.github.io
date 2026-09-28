@@ -16,6 +16,21 @@ const HEARTBEAT_AFTER_MS = 15 * 60 * 1000;
 const STABILIZATION_WINDOW_MS = 20_000;
 const STABILIZATION_RETRY_MS = 2_000;
 const TRIGGER_KINDS = new Set(['jira', 'manual', 'schedule', 'push']);
+const RETAINED_BENCHMARK_MESSAGE = 'Current BEN registry validation failed; showing last-known-good Benchmark Review data.';
+const UNAVAILABLE_INVALID_BENCHMARK_MESSAGE = 'Current BEN registry validation failed and no last-known-good Benchmark Review data is available.';
+const RETAINED_REGISTRY_FIELDS = [
+  'authority',
+  'sourceKey',
+  'sourceLabel',
+  'updatedAt',
+  'pointerUpdatedAt',
+  'selectedNext',
+  'pointerError',
+  'invalidRecords',
+  'runs',
+  'previouslyConsidered',
+  'freshBacklog'
+];
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -307,6 +322,124 @@ export function semanticHash(payload) {
   return crypto.createHash('sha256').update(JSON.stringify(canonicalizeSemantic(semanticView(payload)))).digest('hex');
 }
 
+function canonicalJcs(value) {
+  return JSON.stringify(canonicalizeSemantic(value));
+}
+
+function retainedRegistryContent(registry) {
+  return Object.fromEntries(RETAINED_REGISTRY_FIELDS.map(field => [field, registry?.[field]]));
+}
+
+function retainedRegistryHash(registry) {
+  return crypto.createHash('sha256').update(canonicalJcs(retainedRegistryContent(registry))).digest('hex');
+}
+
+function registryIdentityIsJiraNative(registry, projectKey = BENCHMARK_PROJECT) {
+  return registry?.authority === 'jira-native'
+    && registry?.sourceKey === projectKey
+    && registry?.sourceLabel === 'Jira-native BEN registry';
+}
+
+function readyRegistryIsEligible(registry, projectKey = BENCHMARK_PROJECT) {
+  return registry?.state === 'ready'
+    && registryIdentityIsJiraNative(registry, projectKey)
+    && Array.isArray(registry.invalidRecords)
+    && registry.invalidRecords.length === 0
+    && Array.isArray(registry.runs)
+    && Array.isArray(registry.previouslyConsidered)
+    && Array.isArray(registry.freshBacklog);
+}
+
+function retainedRegistryIsEligible(registry, projectKey = BENCHMARK_PROJECT) {
+  return registry?.state === 'retained'
+    && registryIdentityIsJiraNative(registry, projectKey)
+    && Array.isArray(registry.invalidRecords)
+    && registry.invalidRecords.length === 0
+    && Array.isArray(registry.runs)
+    && Array.isArray(registry.previouslyConsidered)
+    && Array.isArray(registry.freshBacklog)
+    && typeof registry.retainedFromUpdatedAt === 'string'
+    && registry.retainedFromUpdatedAt === registry.updatedAt
+    && typeof registry.retainedRegistrySha256 === 'string'
+    && /^[0-9a-f]{64}$/.test(registry.retainedRegistrySha256)
+    && registry.retainedRegistrySha256 === retainedRegistryHash(registry)
+    && registry.message === RETAINED_BENCHMARK_MESSAGE;
+}
+
+export function eligibleLastKnownGoodRegistry(registry, projectKey = BENCHMARK_PROJECT) {
+  if (readyRegistryIsEligible(registry, projectKey)) return registry;
+  if (retainedRegistryIsEligible(registry, projectKey)) return registry;
+  return null;
+}
+
+export function benchmarkReviewNeedsFinalization(registry) {
+  return registry?.state === 'ready'
+    && Array.isArray(registry.invalidRecords)
+    && registry.invalidRecords.length > 0;
+}
+
+function retainedRegistryFrom(registry) {
+  const sourceWasRetained = registry.state === 'retained';
+  return {
+    ...retainedRegistryContent(registry),
+    state: 'retained',
+    message: RETAINED_BENCHMARK_MESSAGE,
+    retainedFromUpdatedAt: sourceWasRetained ? registry.retainedFromUpdatedAt : String(registry.updatedAt || ''),
+    retainedRegistrySha256: sourceWasRetained ? registry.retainedRegistrySha256 : retainedRegistryHash(registry)
+  };
+}
+
+function unavailableInvalidRegistry(registry, projectKey = BENCHMARK_PROJECT) {
+  return {
+    state: 'unavailable',
+    authority: 'jira-native',
+    sourceKey: projectKey,
+    sourceLabel: 'Jira-native BEN registry',
+    updatedAt: String(registry?.updatedAt || ''),
+    message: UNAVAILABLE_INVALID_BENCHMARK_MESSAGE
+  };
+}
+
+export function finalizeProjectionForPublication(projection, previousPayload, projectKey = BENCHMARK_PROJECT) {
+  const currentRegistry = projection?.benchmarkReview;
+  if (!benchmarkReviewNeedsFinalization(currentRegistry)) return projection;
+
+  const retainedSource = eligibleLastKnownGoodRegistry(previousPayload?.benchmarkReview, projectKey);
+  return {
+    ...projection,
+    benchmarkReview: retainedSource
+      ? retainedRegistryFrom(retainedSource)
+      : unavailableInvalidRegistry(currentRegistry, projectKey)
+  };
+}
+
+export function validatePublishedBenchmarkReview(registry, projectKey = BENCHMARK_PROJECT) {
+  if (!registryIdentityIsJiraNative(registry, projectKey)) {
+    throw new Error('Encrypted snapshot benchmark registry Jira-native source identity is invalid.');
+  }
+  if (registry.state === 'ready') {
+    if (!readyRegistryIsEligible(registry, projectKey)) {
+      throw new Error('Encrypted snapshot ready benchmark registry must contain zero invalid records.');
+    }
+    return;
+  }
+  if (registry.state === 'retained') {
+    if (!retainedRegistryIsEligible(registry, projectKey)) {
+      throw new Error('Encrypted snapshot retained benchmark registry provenance is invalid.');
+    }
+    return;
+  }
+  if (registry.state === 'unavailable') {
+    for (const field of ['runs', 'previouslyConsidered', 'freshBacklog', 'selectedNext', 'invalidRecords', 'retainedFromUpdatedAt', 'retainedRegistrySha256']) {
+      if (Object.prototype.hasOwnProperty.call(registry, field)) {
+        throw new Error('Encrypted snapshot unavailable benchmark registry must not expose retained registry records.');
+      }
+    }
+    return;
+  }
+  throw new Error('Encrypted snapshot benchmarkReview state is invalid.');
+}
+
 export function encryptPayload(payload, passphrase) {
   const plaintext = Buffer.from(JSON.stringify(payload));
   const salt = crypto.randomBytes(16);
@@ -376,6 +509,7 @@ async function readPreviousState(filePath, passphrase, nowMs = Date.now()) {
     if (!validEnvelopeMetadata(envelope)) return null;
     const payload = decryptPayload(envelope, passphrase);
     if (!validPayloadShape(payload) || !issuesInDeterministicOrder(payload.issues)) return null;
+    validatePublishedBenchmarkReview(payload.benchmarkReview, BENCHMARK_PROJECT);
     if (contentHash(payload) !== envelope.contentSha256) return null;
     if (payload.generatedAt !== envelope.generatedAt) return null;
     const generatedAtMs = Date.parse(payload.generatedAt || '');
@@ -517,6 +651,56 @@ async function runSelfTest() {
     issues: [{ key: 'MYR-1', projectKey: 'MYR' }],
     benchmarkReview
   };
+  const ben91InvalidReview = projectBenchmarkRegistry([
+    benchmarkFixtureIssue('BEN-91', ['failure-evaluation', 'registry-idea', 'registry-idea-fresh'], 'indeterminate')
+  ]);
+  if (ben91InvalidReview.invalidRecords.length !== 1 || !/lifecycle mapping/.test(ben91InvalidReview.invalidRecords[0]?.reasons.join(' ') || '')) {
+    throw new Error('BEN-91 lifecycle regression fixture must reproduce the invalid registry state');
+  }
+  if (!benchmarkReviewNeedsFinalization(ben91InvalidReview)) throw new Error('invalid ready registry must require publication finalization');
+
+  const invalidProjection = { ...payload, benchmarkReview: ben91InvalidReview };
+  const retainedProjection = finalizeProjectionForPublication(invalidProjection, payload, 'BEN');
+  if (retainedProjection.benchmarkReview.state !== 'retained') throw new Error('invalid current BEN registry must retain an eligible prior ready registry');
+  if (retainedProjection.benchmarkReview.runs[0]?.key !== benchmarkReview.runs[0]?.key) throw new Error('retained registry must preserve last-known-good records');
+  if (retainedProjection.issues !== invalidProjection.issues) throw new Error('retention must preserve newly acquired unrelated Jira issue data');
+  if (retainedProjection.benchmarkReview.retainedFromUpdatedAt !== benchmarkReview.updatedAt) throw new Error('retained provenance must preserve original ready updatedAt');
+  if (retainedProjection.benchmarkReview.retainedRegistrySha256 !== retainedRegistryHash(benchmarkReview)) throw new Error('retained provenance hash must bind original ready registry content');
+
+  const changedInvalidReview = {
+    ...ben91InvalidReview,
+    invalidRecords: ben91InvalidReview.invalidRecords.map(record => ({ ...record, reasons: [...record.reasons, 'Current invalid source changed again.'] }))
+  };
+  const repeatedRetained = finalizeProjectionForPublication(
+    { ...invalidProjection, benchmarkReview: changedInvalidReview },
+    { ...payload, benchmarkReview: retainedProjection.benchmarkReview },
+    'BEN'
+  );
+  if (semanticHash(repeatedRetained) !== semanticHash({ ...payload, benchmarkReview: retainedProjection.benchmarkReview })) {
+    throw new Error('raw invalid-source churn must collapse to the same retained publication projection');
+  }
+  if (repeatedRetained.benchmarkReview.retainedRegistrySha256 !== retainedProjection.benchmarkReview.retainedRegistrySha256) {
+    throw new Error('repeated invalid refresh must preserve original retained provenance');
+  }
+
+  const unavailableProjection = finalizeProjectionForPublication(invalidProjection, { ...payload, benchmarkReview: ben91InvalidReview }, 'BEN');
+  if (unavailableProjection.benchmarkReview.state !== 'unavailable') throw new Error('invalid prior ready registry must not qualify as last-known-good');
+  if ('runs' in unavailableProjection.benchmarkReview) throw new Error('unavailable registry must not expose invalid or retained records');
+
+  validatePublishedBenchmarkReview(benchmarkReview, 'BEN');
+  validatePublishedBenchmarkReview(retainedProjection.benchmarkReview, 'BEN');
+  validatePublishedBenchmarkReview(unavailableProjection.benchmarkReview, 'BEN');
+  let invalidReadyRejected = false;
+  try { validatePublishedBenchmarkReview(ben91InvalidReview, 'BEN'); } catch { invalidReadyRejected = true; }
+  if (!invalidReadyRejected) throw new Error('published ready registry with invalid records must fail verification');
+  let tamperedRetainedRejected = false;
+  try {
+    validatePublishedBenchmarkReview({ ...retainedProjection.benchmarkReview, retainedRegistrySha256: '0'.repeat(64) }, 'BEN');
+  } catch {
+    tamperedRetainedRejected = true;
+  }
+  if (!tamperedRetainedRejected) throw new Error('tampered retained registry provenance must fail verification');
+
   const passphrase = 'correct horse battery staple';
   const envelope = encryptPayload(payload, passphrase);
   if (JSON.stringify(decryptPayload(envelope, passphrase)) !== JSON.stringify(payload)) throw new Error('encryption self-test failed');
@@ -584,6 +768,11 @@ async function runSelfTest() {
     await fs.writeFile(previousPath, rawEnvelope, 'utf8');
     const validPrevious = await readPreviousState(previousPath, passphrase, nowMs);
     if (!validPrevious) throw new Error('valid prior envelope self-test failed');
+
+    const invalidReadyPayload = { ...payload, benchmarkReview: ben91InvalidReview };
+    await fs.writeFile(previousPath, `${JSON.stringify(encryptPayload(invalidReadyPayload, passphrase), null, 2)}\n`, 'utf8');
+    if (await readPreviousState(previousPath, passphrase, nowMs)) throw new Error('prior ready registry with invalid records must not qualify for reuse');
+    await fs.writeFile(previousPath, rawEnvelope, 'utf8');
     if (await readPreviousState(previousPath, 'rotated dashboard passphrase', nowMs)) throw new Error('passphrase rotation must invalidate prior-envelope reuse');
     await writePreviousBytes(reusedPath, validPrevious);
     if (await fs.readFile(reusedPath, 'utf8') !== rawEnvelope) throw new Error('unchanged envelope reuse must preserve bytes exactly');
@@ -661,10 +850,7 @@ async function verifyOutput(filePath) {
   if (JSON.stringify(payload.projects) !== JSON.stringify(config.projects)) throw new Error('Encrypted snapshot project configuration does not match the dashboard config.');
   if (!Array.isArray(payload.issues)) throw new Error('Encrypted snapshot issues must be an array.');
   if (!payload.benchmarkReview || typeof payload.benchmarkReview !== 'object') throw new Error('Encrypted snapshot benchmarkReview must be an object.');
-  if (payload.benchmarkReview.authority !== 'jira-native') throw new Error('Encrypted snapshot benchmark registry authority must be jira-native.');
-  if (payload.benchmarkReview.sourceKey !== projectKey) throw new Error('Encrypted snapshot benchmark registry source key must be BEN.');
-  if (payload.benchmarkReview.sourceLabel !== 'Jira-native BEN registry') throw new Error('Encrypted snapshot benchmark registry source label must be Jira-native BEN registry.');
-  if (!['ready', 'unavailable'].includes(payload.benchmarkReview.state)) throw new Error('Encrypted snapshot benchmarkReview state is invalid.');
+  validatePublishedBenchmarkReview(payload.benchmarkReview, projectKey);
 
   const observedProjects = new Set();
   const doneCountByProject = new Map();
@@ -700,7 +886,7 @@ async function main() {
 
   const configPath = process.env.CONFIG_PATH || DEFAULT_CONFIG;
   const config = await readJson(configPath);
-  benchmarkProjectKey(config);
+  const projectKey = benchmarkProjectKey(config);
   const baseUrl = normalizeBaseUrl(config.jiraBaseUrl);
   const email = requiredEnv('JIRA_EMAIL');
   const apiToken = requiredEnv('JIRA_API_TOKEN');
@@ -715,10 +901,12 @@ async function main() {
   const acquire = () => acquireProjection(baseUrl, authHeader, config, maxIssues);
   const first = await acquire();
   const firstHash = semanticHash(first);
+  const firstNeedsFinalization = benchmarkReviewNeedsFinalization(first.benchmarkReview);
 
-  if (previous && firstHash === previous.semanticHash) {
+  if (previous && !firstNeedsFinalization && firstHash === previous.semanticHash) {
     if (trigger === 'jira') {
-      const stable = await stabilizeProjection(first, acquire);
+      const stableRaw = await stabilizeProjection(first, acquire);
+      const stable = finalizeProjectionForPublication(stableRaw, previous.payload, projectKey);
       if (semanticHash(stable) === previous.semanticHash) {
         await writePreviousBytes(outputPath, previous);
         console.log('Reused unchanged Jira Flight Control envelope after Jira-trigger stabilization.');
@@ -739,7 +927,8 @@ async function main() {
     }
   }
 
-  const stable = await stabilizeProjection(first, acquire);
+  const stableRaw = await stabilizeProjection(first, acquire);
+  const stable = finalizeProjectionForPublication(stableRaw, previous?.payload, projectKey);
   if (previous && semanticHash(stable) === previous.semanticHash && !shouldHeartbeatUnchanged(trigger, previous.generatedAtMs, Date.now())) {
     await writePreviousBytes(outputPath, previous);
     console.log(`Reused Jira Flight Control envelope after stabilized ${trigger} refresh returned to prior semantics.`);

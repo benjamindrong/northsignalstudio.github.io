@@ -67,13 +67,39 @@ DRIVER = r'''<script>
     if (ideas !== closedIdeas) fail('Unchanged Benchmark Review data must preserve the existing Idea Backlog DOM node.');
     if (ideas.open) fail('Closed Idea Backlog state was not preserved after dashboardRefresh().');
 
+    const retainedMessage = 'Current BEN registry validation failed; showing last-known-good Benchmark Review data.';
+    window.DashboardBenchmarkReview.render({
+      state:'retained',
+      authority:'jira-native',
+      sourceKey:'BEN',
+      sourceLabel:'Jira-native BEN registry',
+      message:retainedMessage,
+      selectedNext:{ key:'BEN-54', status:'Preparing' },
+      pointerError:'',
+      invalidRecords:[],
+      runs:[
+        { key:'BEN-34', title:'Retained active benchmark', source:'Homepage Dashboard', activityKind:'candidate-evaluation', type:'Candidate Evaluation', status:'Running', statusRaw:'Running', resultState:'none', resultLines:[] },
+        { key:'BEN-54', title:'Retained next benchmark', source:'Homepage Dashboard', activityKind:'benchmark-testing', type:'Application Benchmark Testing', status:'Preparing', statusRaw:'Preparing', resultState:'none', resultLines:[] }
+      ],
+      previouslyConsidered:[],
+      freshBacklog:[]
+    });
+    await tick();
+    const retainedWarning = document.querySelector('.benchmark-retained-warning');
+    if (!retainedWarning || retainedWarning.textContent !== retainedMessage) fail('Retained Benchmark Review validation warning was not rendered.');
+    if (!document.querySelector('[data-benchmark-key="BEN-34"]')) fail('Retained last-known-good Benchmark Review records were not rendered.');
+    if (document.querySelector('.benchmark-invalid')) fail('Retained Benchmark Review must not render current invalid registry records.');
+    if (!document.getElementById('benchmarkSource')?.textContent.includes('retained')) fail('Retained Benchmark Review source metadata was not marked retained.');
+
     document.documentElement.dataset.benchmarkDisclosure = 'pass';
     result.textContent = JSON.stringify({
       pass:true,
       productionRefresh:true,
       unchangedRegistryNodePreserved:true,
       openStatePreserved:true,
-      closedStatePreserved:true
+      closedStatePreserved:true,
+      retainedWarningVisible:true,
+      retainedRecordsVisible:true
     });
   } catch (error) {
     document.documentElement.dataset.benchmarkDisclosure = 'fail';

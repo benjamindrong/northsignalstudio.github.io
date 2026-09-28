@@ -10,9 +10,28 @@ const {
   resultLinesForDisplay,
   resultSummaryText,
   notableFindingText,
-  createPersistedDetails
+  createPersistedDetails,
+  isRenderableRegistry,
+  retainedWarningText
 } = require('../dashboard/benchmark-review.js');
 const presentationSource = readFileSync(new URL('../dashboard/benchmark-review.js', import.meta.url), 'utf8');
+
+assert.equal(isRenderableRegistry({ state: 'ready' }), true, 'Current ready Benchmark Review data remains renderable.');
+assert.equal(isRenderableRegistry({ state: 'retained' }), true, 'Validated retained Benchmark Review data must remain renderable.');
+assert.equal(isRenderableRegistry({ state: 'unavailable' }), false, 'Unavailable Benchmark Review data must stay fail-closed.');
+assert.equal(
+  retainedWarningText({ state: 'retained', message: 'Current validation failed.' }),
+  'Current validation failed.',
+  'Retained Benchmark Review data must surface its producer validation-health message.'
+);
+assert.ok(
+  presentationSource.includes('benchmark-retained-warning'),
+  'Retained Benchmark Review rendering must expose a visible warning element.'
+);
+assert.ok(
+  presentationSource.includes("`${normalSource} · retained`"),
+  'Retained Benchmark Review source metadata must not look freshly validated.'
+);
 
 const leftColumnIndex = presentationSource.indexOf("const leftColumn = create('div', 'benchmark-column-stack')");
 const nextRenderIndex = presentationSource.indexOf("appendRunGroup(leftColumn, 'Next', nextRuns)");
