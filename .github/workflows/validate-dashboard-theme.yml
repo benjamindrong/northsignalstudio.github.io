@@ -18,7 +18,6 @@ on:
       - scripts/test-dashboard-work-items-browser-ci.py
       - scripts/test-benchmark-review-disclosure-browser.py
       - jira/ben-registry-guard/**
-      - jira/ben-registry-guard/**
       - .github/workflows/validate-dashboard-theme.yml
   push:
     branches:
@@ -38,6 +37,7 @@ on:
       - scripts/test-dashboard-work-items-browser.py
       - scripts/test-dashboard-work-items-browser-ci.py
       - scripts/test-benchmark-review-disclosure-browser.py
+      - jira/ben-registry-guard/**
       - .github/workflows/validate-dashboard-theme.yml
 
 permissions:
@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       - run: node scripts/test-dashboard-theme.mjs
       - run: node scripts/test-dashboard-work-items.mjs
       - run: node scripts/test-dashboard-work-relationships.mjs
