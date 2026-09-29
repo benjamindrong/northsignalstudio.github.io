@@ -683,6 +683,14 @@ async function runSelfTest() {
     throw new Error('repeated invalid refresh must preserve original retained provenance');
   }
 
+  const recoveredProjection = finalizeProjectionForPublication(
+    { ...payload, benchmarkReview },
+    { ...payload, benchmarkReview: retainedProjection.benchmarkReview },
+    'BEN'
+  );
+  if (recoveredProjection.benchmarkReview.state !== 'ready') throw new Error('later valid BEN registry must replace retained state automatically');
+  if (semanticHash(recoveredProjection) !== semanticHash(payload)) throw new Error('recovery publication must restore current valid registry semantics');
+
   const unavailableProjection = finalizeProjectionForPublication(invalidProjection, { ...payload, benchmarkReview: ben91InvalidReview }, 'BEN');
   if (unavailableProjection.benchmarkReview.state !== 'unavailable') throw new Error('invalid prior ready registry must not qualify as last-known-good');
   if ('runs' in unavailableProjection.benchmarkReview) throw new Error('unavailable registry must not expose invalid or retained records');
@@ -768,6 +776,20 @@ async function runSelfTest() {
     await fs.writeFile(previousPath, rawEnvelope, 'utf8');
     const validPrevious = await readPreviousState(previousPath, passphrase, nowMs);
     if (!validPrevious) throw new Error('valid prior envelope self-test failed');
+
+    const retainedPayload = { ...payload, benchmarkReview: retainedProjection.benchmarkReview };
+    await fs.writeFile(previousPath, `${JSON.stringify(encryptPayload(retainedPayload, passphrase), null, 2)}\n`, 'utf8');
+    const validRetainedPrevious = await readPreviousState(previousPath, passphrase, nowMs);
+    if (!validRetainedPrevious || validRetainedPrevious.payload.benchmarkReview.state !== 'retained') {
+      throw new Error('valid retained prior registry must qualify for reuse');
+    }
+
+    const tamperedRetainedPayload = {
+      ...retainedPayload,
+      benchmarkReview: { ...retainedPayload.benchmarkReview, retainedRegistrySha256: '0'.repeat(64) }
+    };
+    await fs.writeFile(previousPath, `${JSON.stringify(encryptPayload(tamperedRetainedPayload, passphrase), null, 2)}\n`, 'utf8');
+    if (await readPreviousState(previousPath, passphrase, nowMs)) throw new Error('tampered retained prior registry must not qualify for reuse');
 
     const invalidReadyPayload = { ...payload, benchmarkReview: ben91InvalidReview };
     await fs.writeFile(previousPath, `${JSON.stringify(encryptPayload(invalidReadyPayload, passphrase), null, 2)}\n`, 'utf8');
