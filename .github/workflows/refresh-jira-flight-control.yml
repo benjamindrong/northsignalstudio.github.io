@@ -21,6 +21,7 @@ on:
       - "scripts/test-dashboard-work-items-browser.mjs"
       - "scripts/test-dashboard-work-items-browser.py"
       - "scripts/refresh-jira-flight-control.mjs"
+      - "jira/ben-registry-guard/**"
       - ".github/workflows/refresh-jira-flight-control.yml"
   schedule:
     - cron: "3-58/5 * * * *"
@@ -55,6 +56,7 @@ on:
       - "scripts/test-dashboard-work-items-browser.mjs"
       - "scripts/test-dashboard-work-items-browser.py"
       - "scripts/refresh-jira-flight-control.mjs"
+      - "jira/ben-registry-guard/**"
       - ".github/workflows/refresh-jira-flight-control.yml"
 
 permissions:
@@ -74,6 +76,10 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       - name: Verify refresh logic
         run: |
