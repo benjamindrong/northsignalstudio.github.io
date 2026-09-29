@@ -142,7 +142,9 @@ function semanticValid(record) {
   return true;
 }
 
-export function validateRegistryRecord(record, { previousRecord = null, resolveSource } = {}) {
+export function validateRegistryRecord(record, { previousRecord = null, resolveSource, issueKey = '', projectKey = 'BEN' } = {}) {
+  if (projectKey !== 'BEN') return { ok: false, errors: ['BEN Registry Record is only valid in BEN.'] };
+  if (issueKey === 'BEN-21') return { ok: false, errors: ['BEN-21 is the registry pointer and cannot be a registry participant.'] };
   if (!validShape(record)) return { ok: false, errors: ['Record shape is invalid.'] };
   if (!semanticValid(record)) return { ok: false, errors: ['Record state is invalid.'] };
   if (previousRecord?.lifecycle === 'Completed' && record.lifecycle === 'Completed' && record.completedAt !== previousRecord.completedAt) return { ok: false, errors: ['Completed timestamp is immutable while remaining Completed.'] };
@@ -150,13 +152,13 @@ export function validateRegistryRecord(record, { previousRecord = null, resolveS
   return { ok: true, errors: [] };
 }
 
-export function validateRegistryMutation(record, { previousRecord = null, resolveSource } = {}) {
+export function validateRegistryMutation(record, { previousRecord = null, resolveSource, issueKey = '', projectKey = 'BEN' } = {}) {
   if (record == null) {
     return previousRecord == null
       ? { ok: true, errors: [] }
       : { ok: false, errors: ['Existing registry participation cannot be cleared. Use lifecycle Retired instead.'] };
   }
-  return validateRegistryRecord(record, { previousRecord, resolveSource });
+  return validateRegistryRecord(record, { previousRecord, resolveSource, issueKey, projectKey });
 }
 
 function q(values) {
@@ -167,6 +169,8 @@ export function buildJiraValidationExpression() {
   return [
     'let r = value;',
     'let p = issue?.[fieldId];',
+    "let projectSafe = project.key == 'BEN';",
+    "let pointerSafe = issue?.key != 'BEN-21';",
     `let lifecycles = [${q(LIFECYCLES)}];`,
     `let activities = [${q(ACTIVITY_KINDS)}];`,
     `let ideas = [${q(IDEA_CATEGORIES)}];`,
@@ -182,7 +186,7 @@ export function buildJiraValidationExpression() {
     "let sameSource = r?.source == null ? p?.source == null : p?.source != null && r.source.key == p.source.key && r.source.projectKey == p.source.projectKey;",
     "let loadedSource = r?.source == null || sameSource ? null : new Issue(r.source.key);",
     "let validSource = r?.source == null || (r.source.projectKey != 'BEN' && (sameSource || (loadedSource != null && loadedSource.project.key == r.source.projectKey)));",
-    `r == null ? p == null : (r.version == ${CONTRACT_VERSION} && lifecycles.includes(r.lifecycle) && (r.activityKind == null || activities.includes(r.activityKind)) && (r.ideaCategory == null || ideas.includes(r.ideaCategory)) && validResult && validUnused && validActive && validResultOwner && completedCandidateHasResult && findingOnlyCompleted && completedTimestamp && stableCompletedTimestamp && validSource)`
+    `r == null ? p == null : (projectSafe && pointerSafe && r.version == ${CONTRACT_VERSION} && lifecycles.includes(r.lifecycle) && (r.activityKind == null || activities.includes(r.activityKind)) && (r.ideaCategory == null || ideas.includes(r.ideaCategory)) && validResult && validUnused && validActive && validResultOwner && completedCandidateHasResult && findingOnlyCompleted && completedTimestamp && stableCompletedTimestamp && validSource)`
   ].join('\n');
 }
 , minLength: 24, maxLength: 24 },
