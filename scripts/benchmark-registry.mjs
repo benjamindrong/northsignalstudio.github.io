@@ -457,7 +457,9 @@ export function canonicalRecordFromLegacyProjection(projected) {
   if (projected.ideaCategory) record.ideaCategory = projected.ideaCategory;
   if (projected.status === 'Completed') {
     if (!projected.completedAt) throw new Error(`Legacy completed record ${projected.key} is missing completedAt.`);
-    record.completedAt = projected.completedAt;
+    const completedAt = new Date(projected.completedAt);
+    if (Number.isNaN(completedAt.getTime())) throw new Error(`Legacy completed record ${projected.key} has an invalid completedAt.`);
+    record.completedAt = completedAt.toISOString();
     if (projected.notableFinding) record.notableFinding = projected.notableFinding;
   }
   if (projected.status === 'Completed' && projected.activityKind === 'candidate-evaluation') {
