@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { FIELD_SCHEMA, validateRegistryRecord, buildJiraValidationExpression } from '../src/contract-definition.mjs';
+import { FIELD_SCHEMA, validateRegistryRecord, validateRegistryMutation, buildJiraValidationExpression } from '../src/contract-definition.mjs';
 import { renderManifest } from '../scripts/render-manifest.mjs';
 import { planMigration } from '../scripts/plan-migration.mjs';
 
