@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { FIELD_SCHEMA, validateRegistryRecord, buildJiraValidationExpression } from '../src/contract-definition.mjs';
 import { renderManifest } from '../scripts/render-manifest.mjs';
+import { planMigration } from '../scripts/plan-migration.mjs';
 
 const source = { key: 'HOME-1', projectKey: 'HOME' };
 const resolveSource = key => key === 'HOME-1' ? { projectKey: 'HOME' } : null;
@@ -68,4 +69,41 @@ test('one contract generates the Forge expression and manifest', () => {
   assert.doesNotMatch(manifest, /jira:workflowValidator/);
   assert.doesNotMatch(manifest, /jira:actionValidator/);
   assert.doesNotMatch(manifest, /issue-bulk-edit/);
+});
+
+
+function legacyIssue(key, labels, category, {
+  description = '',
+  completedAt = '',
+  links = []
+} = {}) {
+  return {
+    key,
+    fields: {
+      summary: `${key} summary`,
+      labels,
+      status: { statusCategory: { key: category } },
+      project: { key: 'BEN' },
+      updated: '2026-09-29T22:00:00.000Z',
+      statuscategorychangedate: completedAt,
+      description,
+      issuelinks: links
+    }
+  };
+}
+
+test('migration plan is deterministic and fails closed on ambiguous legacy state', () => {
+  const valid = legacyIssue('BEN-8', ['failure-evaluation'], 'indeterminate');
+  const plan = planMigration([valid]);
+  assert.equal(plan.schema, 'home55.ben-registry-migration.v1');
+  assert.equal(plan.records[0].key, 'BEN-8');
+  assert.deepEqual(plan.records[0].record, {
+    version: 1,
+    lifecycle: 'Running',
+    activityKind: 'failure-evaluation'
+  });
+
+  const invalid = legacyIssue('BEN-9', ['failure-evaluation', 'registry-idea'], 'indeterminate');
+  assert.throws(() => planMigration([invalid]), /Migration blocked/);
+  assert.throws(() => planMigration([valid, valid]), /duplicate Jira keys/);
 });
