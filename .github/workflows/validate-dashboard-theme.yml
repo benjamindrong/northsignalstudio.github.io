@@ -17,6 +17,8 @@ on:
       - scripts/test-dashboard-work-items-browser.py
       - scripts/test-dashboard-work-items-browser-ci.py
       - scripts/test-benchmark-review-disclosure-browser.py
+      - jira/ben-registry-guard/**
+      - jira/ben-registry-guard/**
       - .github/workflows/validate-dashboard-theme.yml
   push:
     branches:
@@ -53,6 +55,8 @@ jobs:
       - run: node scripts/test-dashboard-work-items.mjs
       - run: node scripts/test-dashboard-work-relationships.mjs
       - run: node scripts/test-dashboard-refresh.mjs
+      - name: Verify HOME-55 BEN registry prevention contract
+        run: npm test --prefix jira/ben-registry-guard
 
       - name: Verify Benchmark Review disclosure persistence
         run: python3 scripts/test-benchmark-review-disclosure-browser.py

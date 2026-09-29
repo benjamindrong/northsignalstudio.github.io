@@ -1,0 +1,10 @@
+{
+  "name": "ben-registry-guard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "render-manifest": "node scripts/render-manifest.mjs",
+    "check-manifest": "node scripts/render-manifest.mjs --check",
+    "test": "node --test test/*.test.mjs && npm run check-manifest"
+  }
+}

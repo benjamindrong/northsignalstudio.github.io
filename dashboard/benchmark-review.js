@@ -4,7 +4,6 @@
   const JIRA_BASE_URL = 'https://benjamindrong80.atlassian.net/browse/';
   const COMPLETED_VISIBLE_LIMIT = 6;
   const EXPANDED_RESULT_LIMIT = 2;
-  const RETAINED_WARNING_FALLBACK = 'Current BEN registry validation failed; showing last-known-good Benchmark Review data.';
   const expandedRunKeys = new Set();
   const EXPANDED_SECTION_STORAGE_KEY = 'dashboard-benchmark-expanded-sections';
 
@@ -357,15 +356,6 @@
     disclosure?.focus({ preventScroll: true });
   }
 
-  function isRenderableRegistry(registry) {
-    return registry?.state === 'ready' || registry?.state === 'retained';
-  }
-
-  function retainedWarningText(registry) {
-    if (registry?.state !== 'retained') return '';
-    return String(registry.message || RETAINED_WARNING_FALLBACK);
-  }
-
   function render(registry) {
     ensureSurface();
     const content = document.getElementById('benchmarkContent');
@@ -377,18 +367,13 @@
     const scrollTop = content.scrollTop;
     content.replaceChildren();
 
-    if (!isRenderableRegistry(registry)) {
+    if (!registry || registry.state !== 'ready') {
       source.textContent = registry?.sourceLabel || (registry?.sourceKey ? `${registry.sourceKey} · unavailable` : 'BEN registry unavailable');
       content.appendChild(create('div', 'benchmark-empty', registry?.message || 'Benchmark registry is unavailable.'));
       return;
     }
 
-    const retained = registry.state === 'retained';
-    const normalSource = registry.sourceLabel || `${registry.sourceKey || 'BEN'} · benchmark registry`;
-    source.textContent = retained ? `${normalSource} · retained` : normalSource;
-    if (retained) {
-      content.appendChild(create('div', 'benchmark-result backfill benchmark-retained-warning', retainedWarningText(registry)));
-    }
+    source.textContent = registry.sourceLabel || `${registry.sourceKey || 'BEN'} · benchmark registry`;
 
     const pointerError = pointerErrorMessage(registry);
     if (pointerError) content.appendChild(create('div', 'benchmark-result backfill', `Next pointer unavailable: ${pointerError}`));
@@ -448,9 +433,7 @@
     resultSummaryText,
     expandedResultLines,
     notableFindingText,
-    createPersistedDetails,
-    isRenderableRegistry,
-    retainedWarningText
+    createPersistedDetails
   };
   root.DashboardBenchmarkReview = { render, locked };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
