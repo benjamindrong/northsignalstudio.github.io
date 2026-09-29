@@ -50,9 +50,13 @@ test('source is validated when new and retained historically when unchanged', ()
   assert.equal(validateRegistryRecord({ ...record, source: { key: 'HOME-404', projectKey: 'HOME' } }, { previousRecord: record, resolveSource }).ok, false);
 });
 
-test('unknown properties are rejected at every schema level', () => {
+test('null, unknown, and destructive-clearing mutations are rejected', () => {
+  assert.equal(validateRegistryRecord({ version: 1, lifecycle: 'Unused', ideaCategory: null, activityKind: 'failure-evaluation' }).ok, false);
+  assert.equal(validateRegistryRecord({ version: 1, lifecycle: 'Unused', ideaCategory: 'fresh', source: null }).ok, false);
   assert.equal(validateRegistryRecord({ version: 1, lifecycle: 'Unused', ideaCategory: 'fresh', extra: true }).ok, false);
-  assert.equal(validateRegistryRecord({ version: 1, lifecycle: 'Completed', activityKind: 'candidate-evaluation', result: { mode: 'unknown', extra: true } }).ok, false);
+  assert.equal(validateRegistryRecord({ version: 1, lifecycle: 'Completed', activityKind: 'candidate-evaluation', completedAt, result: { mode: 'unknown', extra: true } }).ok, false);
+  assert.equal(validateRegistryMutation(null, { previousRecord: null }).ok, true, 'absence remains valid non-registry state');
+  assert.equal(validateRegistryMutation(null, { previousRecord: { version: 1, lifecycle: 'Unused', ideaCategory: 'fresh' } }).ok, false, 'existing registry state cannot be silently cleared');
   assert.equal(FIELD_SCHEMA.additionalProperties, false);
   assert.equal(FIELD_SCHEMA.properties.result.additionalProperties, false);
   assert.equal(FIELD_SCHEMA.properties.source.additionalProperties, false);
@@ -62,6 +66,7 @@ test('one contract generates the Forge expression and manifest', () => {
   const expression = buildJiraValidationExpression();
   assert.match(expression, /issue\?\.\[fieldId\]/);
   assert.match(expression, /sameSource/);
+  assert.match(expression, /r == null \? p == null/);
   assert.match(expression, /new Issue\(r\.source\.key\)/);
   const manifest = renderManifest();
   assert.match(manifest, /nodejs22\.x/);
