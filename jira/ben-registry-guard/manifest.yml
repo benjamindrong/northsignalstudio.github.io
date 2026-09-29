@@ -71,8 +71,9 @@ modules:
           completedAt:
             type: "string"
             format: "date-time"
-            minLength: 20
-            maxLength: 40
+            pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+            minLength: 24
+            maxLength: 24
           source:
             type: "object"
             additionalProperties: false
@@ -108,12 +109,12 @@ modules:
             let validResultOwner = r?.result == null || (r.lifecycle == 'Completed' && r.activityKind == 'candidate-evaluation');
             let completedCandidateHasResult = r?.lifecycle != 'Completed' || r.activityKind != 'candidate-evaluation' || r.result != null;
             let findingOnlyCompleted = r?.notableFinding == null || (r.lifecycle == 'Completed' && r.notableFinding.trim().length > 0 && r.notableFinding.length <= 2000);
-            let completedTimestamp = r?.lifecycle == 'Completed' ? r.completedAt != null && r.completedAt.length >= 20 && r.completedAt.length <= 40 : r?.completedAt == null;
+            let completedTimestamp = r?.lifecycle == 'Completed' ? r.completedAt != null && r.completedAt.length == 24 : r?.completedAt == null;
             let stableCompletedTimestamp = p?.lifecycle != 'Completed' || r?.lifecycle != 'Completed' || p.completedAt == r.completedAt;
             let sameSource = r?.source == null ? p?.source == null : p?.source != null && r.source.key == p.source.key && r.source.projectKey == p.source.projectKey;
             let loadedSource = r?.source == null || sameSource ? null : new Issue(r.source.key);
             let validSource = r?.source == null || (r.source.projectKey != 'BEN' && (sameSource || (loadedSource != null && loadedSource.project.key == r.source.projectKey)));
-            r != null && r.version == 1 && lifecycles.includes(r.lifecycle) && (r.activityKind == null || activities.includes(r.activityKind)) && (r.ideaCategory == null || ideas.includes(r.ideaCategory)) && validResult && validUnused && validActive && validResultOwner && completedCandidateHasResult && findingOnlyCompleted && completedTimestamp && stableCompletedTimestamp && validSource
+            r == null ? p == null : (r.version == 1 && lifecycles.includes(r.lifecycle) && (r.activityKind == null || activities.includes(r.activityKind)) && (r.ideaCategory == null || ideas.includes(r.ideaCategory)) && validResult && validUnused && validActive && validResultOwner && completedCandidateHasResult && findingOnlyCompleted && completedTimestamp && stableCompletedTimestamp && validSource)
           errorMessage: BEN Registry Record is invalid.
 
 permissions:
