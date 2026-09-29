@@ -18,12 +18,12 @@ export function renderManifest() {
   });
 
   const transitionExpression = buildJiraValidationExpression({
-    recordExpression: "issue['${BEN_REGISTRY_FIELD_KEY}']",
+    recordExpression: "issue['\${BEN_REGISTRY_FIELD_KEY}']",
     lifecycleExpression: 'transition.to.name'
   });
 
   return `app:
-  id: "ari:cloud:ecosystem::app/${APP_ID}"
+  id: "ari:cloud:ecosystem::app/\${APP_ID}"
   runtime:
     name: nodejs22.x
 
@@ -88,7 +88,7 @@ ${indent(transitionExpression, 8)}
   jira:actionValidator:
     - key: ben-registry-type-validator
       action: workItemTypeChanged
-      expression: "newIssueType != '${BEN_REGISTRY_ISSUE_TYPE_ID}' || '${BEN_REGISTRY_MIGRATION_KEYS}'.split(',').includes(issue.key)"
+      expression: "newIssueType != '\${BEN_REGISTRY_ISSUE_TYPE_ID}' || '\${BEN_REGISTRY_MIGRATION_KEYS}'.split(',').includes(issue.key)"
       errorMessage: Conversion into the BEN registry work type is disabled outside the migration allowlist.
 
 permissions:
