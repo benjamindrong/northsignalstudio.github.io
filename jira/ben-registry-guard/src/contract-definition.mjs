@@ -40,6 +40,7 @@ export const FIELD_SCHEMA = Object.freeze({
       }
     },
     notableFinding: { type: 'string', minLength: 1, maxLength: 2000 },
+    completedAt: { type: 'string', format: 'date-time', minLength: 20, maxLength: 40 },
     source: {
       type: 'object',
       additionalProperties: false,
@@ -70,11 +71,12 @@ function nonEmptyString(value, maxLength) {
 }
 
 function validShape(record) {
-  if (!exactKeys(record, ['version', 'lifecycle', 'activityKind', 'ideaCategory', 'result', 'notableFinding', 'source'], ['version', 'lifecycle'])) return false;
+  if (!exactKeys(record, ['version', 'lifecycle', 'activityKind', 'ideaCategory', 'result', 'notableFinding', 'completedAt', 'source'], ['version', 'lifecycle'])) return false;
   if (record.version !== CONTRACT_VERSION || !LIFECYCLES.includes(record.lifecycle)) return false;
   if (record.activityKind != null && !ACTIVITY_KINDS.includes(record.activityKind)) return false;
   if (record.ideaCategory != null && !IDEA_CATEGORIES.includes(record.ideaCategory)) return false;
   if (record.notableFinding != null && !nonEmptyString(record.notableFinding, 2000)) return false;
+  if (record.completedAt != null && (!nonEmptyString(record.completedAt, 40) || Number.isNaN(Date.parse(record.completedAt)))) return false;
 
   if (record.result != null) {
     if (!exactKeys(record.result, ['mode', 'outcome', 'scores', 'signal'], ['mode'])) return false;
@@ -111,11 +113,11 @@ function validateSource(record, previousRecord, resolveSource) {
 }
 
 function semanticValid(record) {
-  const { lifecycle, activityKind = null, ideaCategory = null, result = null, notableFinding = null } = record;
+  const { lifecycle, activityKind = null, ideaCategory = null, result = null, notableFinding = null, completedAt = null } = record;
 
   if (lifecycle === 'Unused') {
     if (activityKind == null && ideaCategory == null) return false;
-    if (result != null || notableFinding != null) return false;
+    if (result != null || notableFinding != null || completedAt != null) return false;
   } else {
     if (activityKind == null || ideaCategory != null) return false;
   }
@@ -123,6 +125,7 @@ function semanticValid(record) {
   if (result != null && !(lifecycle === 'Completed' && activityKind === 'candidate-evaluation')) return false;
   if (lifecycle === 'Completed' && activityKind === 'candidate-evaluation' && result == null) return false;
   if (notableFinding != null && lifecycle !== 'Completed') return false;
+  if (lifecycle === 'Completed' ? completedAt == null : completedAt != null) return false;
 
   return true;
 }
@@ -130,6 +133,7 @@ function semanticValid(record) {
 export function validateRegistryRecord(record, { previousRecord = null, resolveSource } = {}) {
   if (!validShape(record)) return { ok: false, errors: ['Record shape is invalid.'] };
   if (!semanticValid(record)) return { ok: false, errors: ['Record state is invalid.'] };
+  if (previousRecord?.lifecycle === 'Completed' && record.lifecycle === 'Completed' && record.completedAt !== previousRecord.completedAt) return { ok: false, errors: ['Completed timestamp is immutable while remaining Completed.'] };
   if (!validateSource(record, previousRecord, resolveSource)) return { ok: false, errors: ['Source identity is invalid.'] };
   return { ok: true, errors: [] };
 }
@@ -152,9 +156,11 @@ export function buildJiraValidationExpression() {
     "let validResultOwner = r?.result == null || (r.lifecycle == 'Completed' && r.activityKind == 'candidate-evaluation');",
     "let completedCandidateHasResult = r?.lifecycle != 'Completed' || r.activityKind != 'candidate-evaluation' || r.result != null;",
     "let findingOnlyCompleted = r?.notableFinding == null || (r.lifecycle == 'Completed' && r.notableFinding.trim().length > 0 && r.notableFinding.length <= 2000);",
+    "let completedTimestamp = r?.lifecycle == 'Completed' ? r.completedAt != null && r.completedAt.length >= 20 && r.completedAt.length <= 40 : r?.completedAt == null;",
+    "let stableCompletedTimestamp = p?.lifecycle != 'Completed' || r?.lifecycle != 'Completed' || p.completedAt == r.completedAt;",
     "let sameSource = r?.source == null ? p?.source == null : p?.source != null && r.source.key == p.source.key && r.source.projectKey == p.source.projectKey;",
     "let loadedSource = r?.source == null || sameSource ? null : new Issue(r.source.key);",
     "let validSource = r?.source == null || (r.source.projectKey != 'BEN' && (sameSource || (loadedSource != null && loadedSource.project.key == r.source.projectKey)));",
-    `r != null && r.version == ${CONTRACT_VERSION} && lifecycles.includes(r.lifecycle) && (r.activityKind == null || activities.includes(r.activityKind)) && (r.ideaCategory == null || ideas.includes(r.ideaCategory)) && validResult && validUnused && validActive && validResultOwner && completedCandidateHasResult && findingOnlyCompleted && validSource`
+    `r != null && r.version == ${CONTRACT_VERSION} && lifecycles.includes(r.lifecycle) && (r.activityKind == null || activities.includes(r.activityKind)) && (r.ideaCategory == null || ideas.includes(r.ideaCategory)) && validResult && validUnused && validActive && validResultOwner && completedCandidateHasResult && findingOnlyCompleted && completedTimestamp && stableCompletedTimestamp && validSource`
   ].join('\n');
 }
