@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { parseCanonicalResultSummary, projectBenchmarkRegistry } from './benchmark-registry.mjs';
+import { parseCanonicalResultSummary, projectBenchmarkRegistry, classifyLegacyBenchmarkIssue, canonicalRecordFromLegacyProjection } from './benchmark-registry.mjs';
 
 const require = createRequire(import.meta.url);
 const { orderedNextRuns, orderedOnDeckRuns, pointerErrorMessage, activityTypeLabel, resultFallbackText } = require('../dashboard/benchmark-review.js');
@@ -422,3 +422,72 @@ assert.equal(nonArray.authority, 'jira-native');
 assert.equal(nonArray.sourceKey, 'BEN');
 
 console.log('benchmark Jira-native registry contract tests passed');
+
+const canonicalFieldId = 'customfield_12345';
+const canonicalCompletedAt = '2026-08-28T18:30:00.000Z';
+const canonicalRecord = {
+  version: 1,
+  lifecycle: 'Completed',
+  activityKind: 'candidate-evaluation',
+  result: {
+    mode: 'summary',
+    outcome: 'Response B won.',
+    scores: 'RA 8.0 / RB 9.0.',
+    signal: 'Response B preserved the required state boundary.'
+  },
+  notableFinding: 'The canonical record preserves the completion finding.',
+  completedAt: canonicalCompletedAt,
+  source: { key: 'HOME-12', projectKey: 'HOME' }
+};
+const canonicalIssue = issue(
+  'BEN-90',
+  ['candidate-evaluation', 'registry-idea', 'registry-blocked', 'registry-result-unknown'],
+  'indeterminate',
+  { summary: 'Canonical registry projection ignores superseded contradictory authority' }
+);
+canonicalIssue.fields[canonicalFieldId] = canonicalRecord;
+const canonicalRegistry = projectBenchmarkRegistry([canonicalIssue], { registryFieldId: canonicalFieldId });
+assert.deepEqual(canonicalRegistry.invalidRecords, [], 'Canonical registry record must be the sole ticket authority after cutover.');
+const canonicalRun = canonicalRegistry.runs.find(run => run.key === 'BEN-90');
+assert.equal(canonicalRun?.status, 'Completed');
+assert.equal(canonicalRun?.activityKind, 'candidate-evaluation');
+assert.equal(canonicalRun?.resultState, 'recorded');
+assert.deepEqual(canonicalRun?.resultLines, [
+  'Outcome: Response B won.',
+  'Scores: RA 8.0 / RB 9.0.',
+  'Signal: Response B preserved the required state boundary.'
+]);
+assert.equal(canonicalRun?.notableFinding, 'The canonical record preserves the completion finding.');
+assert.equal(canonicalRun?.completedAt, canonicalCompletedAt);
+assert.equal(canonicalRun?.sourceKey, 'HOME-12');
+
+const migrationLegacyIssue = issue(
+  'BEN-92',
+  ['candidate-evaluation', 'registry-result-summary'],
+  'done',
+  {
+    description: summaryDescription,
+    links: [relates('HOME-12')],
+    statusCategoryChangedDate: canonicalCompletedAt
+  }
+);
+const migratedLegacyProjection = classifyLegacyBenchmarkIssue(migrationLegacyIssue);
+assert.deepEqual(migratedLegacyProjection.errors, []);
+const migratedRecord = canonicalRecordFromLegacyProjection(migratedLegacyProjection);
+assert.equal(migratedRecord.lifecycle, 'Completed');
+assert.equal(migratedRecord.activityKind, 'candidate-evaluation');
+assert.deepEqual(migratedRecord.result, {
+  mode: 'summary',
+  outcome: 'Response B won.',
+  scores: 'RA 8.0 / RB 9.0.',
+  signal: 'Response B preserved the required state boundary.'
+});
+assert.equal(migratedRecord.completedAt, canonicalCompletedAt);
+assert.deepEqual(migratedRecord.source, { key: 'HOME-12', projectKey: 'HOME' });
+
+assert.throws(
+  () => canonicalRecordFromLegacyProjection({ ...migratedLegacyProjection, errors: ['ambiguous legacy state'] }),
+  /not uniquely valid/,
+  'Migration must fail closed rather than normalize an ambiguous legacy record.'
+);
+
