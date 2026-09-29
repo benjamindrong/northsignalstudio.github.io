@@ -2,6 +2,9 @@
   "name": "ben-registry-guard",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22 <25"
+  },
   "scripts": {
     "render-manifest": "node scripts/render-manifest.mjs",
     "check-manifest": "node scripts/render-manifest.mjs --check",
