@@ -3,97 +3,111 @@ app:
   runtime:
     name: nodejs22.x
 
-environment:
-  variables:
-    - APP_ID
-    - BEN_REGISTRY_FIELD_KEY
-    - BEN_REGISTRY_ISSUE_TYPE_ID
-    - BEN_REGISTRY_MIGRATION_KEYS
-
 modules:
   jira:customField:
     - key: ben-registry-record
       name: BEN Registry Record
-      description: Canonical validated BEN registry metadata.
+      description: Canonical validated BEN registry state.
       type: object
       schema:
+        type: "object"
+        additionalProperties: false
+        required:
+          - "version"
+          - "lifecycle"
         properties:
           version:
-            type: integer
+            type: "integer"
+            enum:
+              - 1
+          lifecycle:
+            type: "string"
+            enum:
+              - "Unused"
+              - "Preparing"
+              - "Blocked"
+              - "Running"
+              - "Completed"
+              - "Retired"
           activityKind:
-            type: string
+            type: "string"
+            enum:
+              - "candidate-evaluation"
+              - "failure-evaluation"
+              - "benchmark-testing"
+              - "uiux-discovery"
           ideaCategory:
-            type: string
+            type: "string"
+            enum:
+              - "considered"
+              - "fresh"
           result:
-            type: object
+            type: "object"
+            additionalProperties: false
+            required:
+              - "mode"
             properties:
               mode:
-                type: string
+                type: "string"
+                enum:
+                  - "unknown"
+                  - "summary"
               outcome:
-                type: string
+                type: "string"
+                minLength: 1
+                maxLength: 500
               scores:
-                type: string
+                type: "string"
+                minLength: 1
+                maxLength: 500
               signal:
-                type: string
-          sourceKey:
-            type: string
-        required:
-          - version
+                type: "string"
+                minLength: 1
+                maxLength: 1000
+          notableFinding:
+            type: "string"
+            minLength: 1
+            maxLength: 2000
+          source:
+            type: "object"
+            additionalProperties: false
+            required:
+              - "key"
+              - "projectKey"
+            properties:
+              key:
+                type: "string"
+                pattern: "^[A-Z][A-Z0-9]+-[0-9]+$"
+              projectKey:
+                type: "string"
+                pattern: "^[A-Z][A-Z0-9]+$"
       view:
         formatter:
-          expression: "value == null ? '' : (value.activityKind == null ? 'Idea' : value.activityKind) + (value.sourceKey == null ? '' : ' · ' + value.sourceKey)"
+          expression: "value == null ? '' : value.lifecycle + ' · ' + (value.activityKind == null ? (value.ideaCategory == null ? 'Registry' : 'Idea ' + value.ideaCategory) : value.activityKind)"
       edit:
         experience:
           - issue-create
           - issue-view
+          - issue-transition
         validation:
           expression: |-
             let r = value;
-            let l = (issue == null || issue.id == null) ? 'Unused' : issue.status.name;
+            let p = issue?.[fieldId];
+            let lifecycles = ['Unused', 'Preparing', 'Blocked', 'Running', 'Completed', 'Retired'];
             let activities = ['candidate-evaluation', 'failure-evaluation', 'benchmark-testing', 'uiux-discovery'];
             let ideas = ['considered', 'fresh'];
-            let lifecycles = ['Unused', 'Preparing', 'Blocked', 'Running', 'Completed', 'Retired'];
             let resultModes = ['unknown', 'summary'];
-            let source = r != null && r.sourceKey != null ? new Issue(r.sourceKey) : null;
-            let base = r != null && r.version == 1 && lifecycles.includes(l) && (r.activityKind == null || activities.includes(r.activityKind)) && (r.ideaCategory == null || ideas.includes(r.ideaCategory)) && (r.sourceKey == null || (source != null && source.project.key != 'BEN'));
-            let resultShape = r == null || r.result == null || (resultModes.includes(r.result.mode) && (r.result.mode == 'unknown' ? r.result.outcome == null && r.result.scores == null && r.result.signal == null : r.result.outcome != null && r.result.outcome.trim().length > 0 && r.result.scores != null && r.result.scores.trim().length > 0 && r.result.signal != null && r.result.signal.trim().length > 0));
-            let unused = l != 'Unused' || ((r.activityKind != null || r.ideaCategory != null) && r.result == null);
-            let active = l == 'Unused' || (r.activityKind != null && r.ideaCategory == null);
-            let resultOwner = r.result == null || r.activityKind == 'candidate-evaluation';
-            let candidateCompleted = r.activityKind != 'candidate-evaluation' || l != 'Completed' || r.result != null;
-            let candidateForbidden = r.activityKind != 'candidate-evaluation' || !['Unused', 'Retired'].includes(l) || r.result == null;
-            base && resultShape && unused && active && resultOwner && candidateCompleted && candidateForbidden
-          errorMessage: BEN Registry Record is invalid for the current lifecycle.
-
-  jira:workflowValidator:
-    - key: ben-registry-transition-validator
-      name: BEN registry lifecycle validator
-      description: Rejects lifecycle transitions whose destination state would violate the BEN registry contract.
-      projectTypes:
-        - team-managed
-      expression: |-
-        let r = issue['${BEN_REGISTRY_FIELD_KEY}'];
-        let l = transition.to.name;
-        let activities = ['candidate-evaluation', 'failure-evaluation', 'benchmark-testing', 'uiux-discovery'];
-        let ideas = ['considered', 'fresh'];
-        let lifecycles = ['Unused', 'Preparing', 'Blocked', 'Running', 'Completed', 'Retired'];
-        let resultModes = ['unknown', 'summary'];
-        let source = r != null && r.sourceKey != null ? new Issue(r.sourceKey) : null;
-        let base = r != null && r.version == 1 && lifecycles.includes(l) && (r.activityKind == null || activities.includes(r.activityKind)) && (r.ideaCategory == null || ideas.includes(r.ideaCategory)) && (r.sourceKey == null || (source != null && source.project.key != 'BEN'));
-        let resultShape = r == null || r.result == null || (resultModes.includes(r.result.mode) && (r.result.mode == 'unknown' ? r.result.outcome == null && r.result.scores == null && r.result.signal == null : r.result.outcome != null && r.result.outcome.trim().length > 0 && r.result.scores != null && r.result.scores.trim().length > 0 && r.result.signal != null && r.result.signal.trim().length > 0));
-        let unused = l != 'Unused' || ((r.activityKind != null || r.ideaCategory != null) && r.result == null);
-        let active = l == 'Unused' || (r.activityKind != null && r.ideaCategory == null);
-        let resultOwner = r.result == null || r.activityKind == 'candidate-evaluation';
-        let candidateCompleted = r.activityKind != 'candidate-evaluation' || l != 'Completed' || r.result != null;
-        let candidateForbidden = r.activityKind != 'candidate-evaluation' || !['Unused', 'Retired'].includes(l) || r.result == null;
-        base && resultShape && unused && active && resultOwner && candidateCompleted && candidateForbidden
-      errorMessage: BEN registry state is invalid for the destination lifecycle.
-
-  jira:actionValidator:
-    - key: ben-registry-type-validator
-      action: workItemTypeChanged
-      expression: "newIssueType != '${BEN_REGISTRY_ISSUE_TYPE_ID}' || '${BEN_REGISTRY_MIGRATION_KEYS}'.split(',').includes(issue.key)"
-      errorMessage: Conversion into the BEN registry work type is disabled outside the migration allowlist.
+            let validResult = r?.result == null || (resultModes.includes(r.result.mode) && (r.result.mode == 'unknown' ? r.result.outcome == null && r.result.scores == null && r.result.signal == null : r.result.outcome != null && r.result.outcome.trim().length > 0 && r.result.outcome.length <= 500 && r.result.scores != null && r.result.scores.trim().length > 0 && r.result.scores.length <= 500 && r.result.signal != null && r.result.signal.trim().length > 0 && r.result.signal.length <= 1000));
+            let validUnused = r?.lifecycle != 'Unused' || ((r.activityKind != null || r.ideaCategory != null) && r.result == null && r.notableFinding == null);
+            let validActive = r?.lifecycle == 'Unused' || (r.activityKind != null && r.ideaCategory == null);
+            let validResultOwner = r?.result == null || (r.lifecycle == 'Completed' && r.activityKind == 'candidate-evaluation');
+            let completedCandidateHasResult = r?.lifecycle != 'Completed' || r.activityKind != 'candidate-evaluation' || r.result != null;
+            let findingOnlyCompleted = r?.notableFinding == null || (r.lifecycle == 'Completed' && r.notableFinding.trim().length > 0 && r.notableFinding.length <= 2000);
+            let sameSource = r?.source == null ? p?.source == null : p?.source != null && r.source.key == p.source.key && r.source.projectKey == p.source.projectKey;
+            let loadedSource = r?.source == null || sameSource ? null : new Issue(r.source.key);
+            let validSource = r?.source == null || (r.source.projectKey != 'BEN' && (sameSource || (loadedSource != null && loadedSource.project.key == r.source.projectKey)));
+            r != null && r.version == 1 && lifecycles.includes(r.lifecycle) && (r.activityKind == null || activities.includes(r.activityKind)) && (r.ideaCategory == null || ideas.includes(r.ideaCategory)) && validResult && validUnused && validActive && validResultOwner && completedCandidateHasResult && findingOnlyCompleted && validSource
+          errorMessage: BEN Registry Record is invalid.
 
 permissions:
   scopes:
