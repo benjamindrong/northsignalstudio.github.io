@@ -1,3 +1,5 @@
+import { CONTRACT_VERSION, validateRegistryRecord } from '../jira/ben-registry-guard/src/contract-definition.mjs';
+
 const ACTIVITY_LABELS = new Map([
   ['candidate-evaluation', 'Candidate Evaluation'],
   ['benchmark-testing', 'Application Benchmark Testing'],
@@ -298,7 +300,7 @@ export function extractNotableFinding(description, fallbackSignal = '') {
   return '';
 }
 
-function classifyIssue(issue) {
+export function classifyLegacyBenchmarkIssue(issue) {
   const labels = lowerLabels(issue);
   const errors = [];
   const key = clean(issue?.key);
@@ -385,6 +387,104 @@ function classifyIssue(issue) {
   };
 }
 
+function canonicalResultProjection(record) {
+  if (record?.lifecycle !== 'Completed' || record?.activityKind !== 'candidate-evaluation') {
+    return { resultState: 'none', resultLines: [], resultSignal: '' };
+  }
+  if (record.result?.mode === 'unknown') {
+    return { resultState: 'backfill', resultLines: ['Result: Unknown / backfill.'], resultSignal: '' };
+  }
+  if (record.result?.mode === 'summary') {
+    return {
+      resultState: 'recorded',
+      resultLines: [
+        `Outcome: ${clean(record.result.outcome)}`,
+        `Scores: ${clean(record.result.scores)}`,
+        `Signal: ${clean(record.result.signal)}`
+      ],
+      resultSignal: clean(record.result.signal)
+    };
+  }
+  return { resultState: 'none', resultLines: [], resultSignal: '' };
+}
+
+export function classifyCanonicalBenchmarkIssue(issue, registryFieldId) {
+  const key = clean(issue?.key);
+  const title = clean(issue?.fields?.summary) || key;
+  const record = issue?.fields?.[registryFieldId];
+  const errors = [];
+  const validation = validateRegistryRecord(record, { previousRecord: record });
+  if (!validation.ok) errors.push('BEN Registry Record failed canonical validation.');
+
+  const lifecycle = clean(record?.lifecycle);
+  const activityKind = clean(record?.activityKind);
+  const activityName = activityKind ? ACTIVITY_LABELS.get(activityKind) || activityKind : '';
+  const result = canonicalResultProjection(record);
+  const sourceKey = clean(record?.source?.key);
+  const ideaCategory = clean(record?.ideaCategory);
+
+  return {
+    key,
+    title,
+    status: lifecycle || 'Invalid',
+    statusRaw: lifecycle || 'Invalid',
+    activityKind,
+    activityTaxonomyVersion: ACTIVITY_TAXONOMY_VERSION,
+    type: activityName,
+    ideaCategory,
+    source: sourceKey || 'Unknown',
+    sourceKey,
+    turnsCompleted: null,
+    resultState: result.resultState,
+    resultLines: result.resultLines,
+    notableFinding: lifecycle === 'Completed' ? clean(record?.notableFinding) : '',
+    completedAt: lifecycle === 'Completed' ? clean(record?.completedAt) : '',
+    updatedAt: clean(issue?.fields?.updated),
+    errors
+  };
+}
+
+export function canonicalRecordFromLegacyProjection(projected) {
+  if (!projected || projected.errors?.length) {
+    throw new Error(`Legacy record ${projected?.key || 'unknown'} is not uniquely valid for migration.`);
+  }
+  const record = {
+    version: CONTRACT_VERSION,
+    lifecycle: projected.status
+  };
+
+  if (projected.activityKind) record.activityKind = projected.activityKind;
+  if (projected.ideaCategory) record.ideaCategory = projected.ideaCategory;
+  if (projected.status === 'Completed') {
+    if (!projected.completedAt) throw new Error(`Legacy completed record ${projected.key} is missing completedAt.`);
+    record.completedAt = projected.completedAt;
+    if (projected.notableFinding) record.notableFinding = projected.notableFinding;
+  }
+  if (projected.status === 'Completed' && projected.activityKind === 'candidate-evaluation') {
+    if (projected.resultState === 'backfill') {
+      record.result = { mode: 'unknown' };
+    } else if (projected.resultState === 'recorded') {
+      const values = Object.fromEntries((projected.resultLines || []).map(line => {
+        const index = String(line).indexOf(':');
+        return index < 0 ? ['', ''] : [String(line).slice(0, index).trim().toLowerCase(), String(line).slice(index + 1).trim()];
+      }));
+      record.result = { mode: 'summary', outcome: values.outcome, scores: values.scores, signal: values.signal };
+    } else {
+      throw new Error(`Legacy completed Candidate Evaluation ${projected.key} has no canonical result.`);
+    }
+  }
+  if (projected.sourceKey) {
+    record.source = {
+      key: projected.sourceKey,
+      projectKey: clean(projected.sourceKey).split('-')[0]
+    };
+  }
+
+  const validation = validateRegistryRecord(record, { previousRecord: record });
+  if (!validation.ok) throw new Error(`Migrated record ${projected.key} does not satisfy the canonical contract.`);
+  return record;
+}
+
 function maxUpdatedAt(records) {
   let best = '';
   let bestTime = NaN;
@@ -432,14 +532,18 @@ export function projectBenchmarkRegistry(issues, {
   pointerIssue = null,
   pointerMatches = [],
   sourceKey = 'BEN',
-  sourceLabel = 'Jira-native BEN registry'
+  sourceLabel = 'Jira-native BEN registry',
+  registryFieldId = ''
 } = {}) {
   if (!Array.isArray(issues)) {
     return { state: 'unavailable', authority: 'jira-native', sourceKey, sourceLabel, updatedAt: '', pointerUpdatedAt: '', message: 'BEN registry query did not return an issue array.' };
   }
 
   const eligibleIssues = issues.filter(issue => !EXCLUDED_REGISTRY_KEYS.has(clean(issue?.key)));
-  const projected = eligibleIssues.map(classifyIssue);
+  const classifier = registryFieldId
+    ? issue => classifyCanonicalBenchmarkIssue(issue, registryFieldId)
+    : classifyLegacyBenchmarkIssue;
+  const projected = eligibleIssues.map(classifier);
   const invalidRecords = projected
     .filter(record => record.errors.length)
     .map(record => ({ key: record.key, title: record.title, reasons: [...record.errors] }));
