@@ -8,6 +8,7 @@
   "scripts": {
     "render-manifest": "node scripts/render-manifest.mjs",
     "check-manifest": "node scripts/render-manifest.mjs --check",
-    "test": "node --test test/*.test.mjs && npm run check-manifest"
+    "test": "node --test test/*.test.mjs && npm run check-manifest && npm run audit-no-bypass",
+    "audit-no-bypass": "node scripts/audit-no-validator-bypass.mjs"
   }
 }
