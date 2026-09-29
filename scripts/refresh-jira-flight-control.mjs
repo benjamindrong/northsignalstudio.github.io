@@ -55,7 +55,25 @@ function benchmarkProjectKey(config) {
   return projectKey;
 }
 
-export function buildBenchmarkRegistryJql(projectKey) {
+export function benchmarkRegistryFieldId(config) {
+  const fieldId = String(config?.benchmarkRegistryFieldId || '').trim();
+  if (!fieldId) return '';
+  if (!/^customfield_\d+$/.test(fieldId)) {
+    throw new Error('benchmarkRegistryFieldId must be a concrete Jira customfield_<id> value.');
+  }
+  return fieldId;
+}
+
+function registryFieldJql(fieldId) {
+  const match = /^customfield_(\d+)$/.exec(fieldId);
+  if (!match) throw new Error('Canonical BEN registry field ID is invalid.');
+  return `cf[${match[1]}]`;
+}
+
+export function buildBenchmarkRegistryJql(projectKey, registryFieldId = '') {
+  if (registryFieldId) {
+    return `project = ${quoteJqlValue(projectKey)} AND ${registryFieldJql(registryFieldId)} IS NOT EMPTY ORDER BY key ASC`;
+  }
   const labels = REGISTRY_QUERY_LABELS.map(quoteJqlValue).join(', ');
   return `project = ${quoteJqlValue(projectKey)} AND labels IN (${labels}) ORDER BY key ASC`;
 }
@@ -197,18 +215,24 @@ async function hydrateBenchmarkCompletionDescriptions(baseUrl, authHeader, issue
 
 async function fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config) {
   const projectKey = benchmarkProjectKey(config);
+  const registryFieldId = benchmarkRegistryFieldId(config);
   const pointerKey = String(config.benchmarkRegistryPointerKey || 'BEN-21').trim();
   const maxIssues = Number.isFinite(Number(config.benchmarkRegistryMaxIssues)) ? Number(config.benchmarkRegistryMaxIssues) : 100;
   try {
+    const participantFields = registryFieldId
+      ? [...BENCHMARK_PARTICIPANT_FIELDS, registryFieldId]
+      : BENCHMARK_PARTICIPANT_FIELDS;
     const participants = await searchJqlIssues(
       baseUrl,
       authHeader,
-      buildBenchmarkRegistryJql(projectKey),
+      buildBenchmarkRegistryJql(projectKey, registryFieldId),
       maxIssues,
-      BENCHMARK_PARTICIPANT_FIELDS,
+      participantFields,
       { requireComplete: true, context: 'BEN registry participant query' }
     );
-    const issues = await hydrateBenchmarkCompletionDescriptions(baseUrl, authHeader, participants);
+    const issues = registryFieldId
+      ? participants
+      : await hydrateBenchmarkCompletionDescriptions(baseUrl, authHeader, participants);
 
     let pointerIssue = null;
     try {
@@ -239,7 +263,8 @@ async function fetchJiraNativeBenchmarkRegistry(baseUrl, authHeader, config) {
       pointerIssue,
       pointerMatches,
       sourceKey: projectKey,
-      sourceLabel: 'Jira-native BEN registry'
+      sourceLabel: 'Jira-native BEN registry',
+      registryFieldId
     });
   } catch (error) {
     console.warn(`Jira-native BEN registry is unavailable: ${error instanceof Error ? error.message : String(error)}`);
@@ -632,7 +657,17 @@ async function runSelfTest() {
     || !registryJql.includes('"registry-idea"')
     || registryJql.includes('"registry-blocked"')
     || registryJql.includes('"registry-result-summary"')
-  ) throw new Error('Benchmark registry JQL participation-boundary self-test failed');
+  ) throw new Error('Legacy Benchmark registry JQL participation-boundary self-test failed');
+  const canonicalRegistryJql = buildBenchmarkRegistryJql('BEN', 'customfield_12345');
+  if (!canonicalRegistryJql.includes('cf[12345] IS NOT EMPTY') || canonicalRegistryJql.includes('labels IN')) {
+    throw new Error('Canonical Benchmark registry JQL must use BEN Registry Record presence only.');
+  }
+  if (benchmarkRegistryFieldId({ benchmarkRegistryFieldId: 'customfield_12345' }) !== 'customfield_12345') {
+    throw new Error('Benchmark registry field ID validation self-test failed');
+  }
+  let invalidRegistryFieldRejected = false;
+  try { benchmarkRegistryFieldId({ benchmarkRegistryFieldId: 'BEN Registry Record' }); } catch { invalidRegistryFieldRejected = true; }
+  if (!invalidRegistryFieldRejected) throw new Error('Invalid Benchmark registry field ID must fail closed');
   if (!buildBenchmarkPointerIdentityJql('BEN').includes('Benchmark Registry Next Pointer')) throw new Error('Benchmark pointer identity JQL self-test failed');
 
   let boundedSearchFailed = false;
