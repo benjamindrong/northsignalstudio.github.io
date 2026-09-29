@@ -5,7 +5,8 @@ import { renderManifest } from '../scripts/render-manifest.mjs';
 
 const source = { key: 'HOME-1', projectKey: 'HOME' };
 const resolveSource = key => key === 'HOME-1' ? { projectKey: 'HOME' } : null;
-const candidate = lifecycle => ({ version: 1, lifecycle, activityKind: 'candidate-evaluation', source });
+const completedAt = '2026-09-29T22:00:00.000Z';
+const candidate = lifecycle => ({ version: 1, lifecycle, activityKind: 'candidate-evaluation', source, ...(lifecycle === 'Completed' ? { completedAt } : {}) });
 
 test('registry participation requires one valid canonical record', () => {
   assert.equal(validateRegistryRecord(null).ok, false);
@@ -29,7 +30,14 @@ test('candidate result is completed-only', () => {
 
 test('notable finding is completed-only', () => {
   assert.equal(validateRegistryRecord({ version: 1, lifecycle: 'Running', activityKind: 'failure-evaluation', notableFinding: 'x' }).ok, false);
-  assert.equal(validateRegistryRecord({ version: 1, lifecycle: 'Completed', activityKind: 'failure-evaluation', notableFinding: 'x' }).ok, true);
+  assert.equal(validateRegistryRecord({ version: 1, lifecycle: 'Completed', activityKind: 'failure-evaluation', notableFinding: 'x', completedAt }).ok, true);
+});
+
+test('completed timestamp is required and immutable while completed', () => {
+  const record = { version: 1, lifecycle: 'Completed', activityKind: 'failure-evaluation', completedAt };
+  assert.equal(validateRegistryRecord({ version: 1, lifecycle: 'Completed', activityKind: 'failure-evaluation' }).ok, false);
+  assert.equal(validateRegistryRecord(record).ok, true);
+  assert.equal(validateRegistryRecord({ ...record, completedAt: '2026-09-29T23:00:00.000Z' }, { previousRecord: record }).ok, false);
 });
 
 test('source is validated when new and retained historically when unchanged', () => {
