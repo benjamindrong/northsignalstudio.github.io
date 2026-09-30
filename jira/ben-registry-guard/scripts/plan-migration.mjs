@@ -1,11 +1,51 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import {
   classifyLegacyBenchmarkIssue,
+  classifyCanonicalBenchmarkIssue,
   canonicalRecordFromLegacyProjection
 } from '../../../scripts/benchmark-registry.mjs';
 
 function byKey(a, b) {
   return String(a.key).localeCompare(String(b.key), 'en', { sensitivity: 'variant' });
+}
+
+const PARITY_FIELDS = Object.freeze([
+  'status',
+  'activityKind',
+  'ideaCategory',
+  'resultState',
+  'resultLines',
+  'notableFinding',
+  'completedAt',
+  'source',
+  'sourceKey'
+]);
+
+function parityView(projected) {
+  return Object.fromEntries(PARITY_FIELDS.map(field => [field, projected?.[field] ?? (field === 'resultLines' ? [] : '')]));
+}
+
+function verifyProjectionParity(projected, record) {
+  const fieldId = 'customfield_10000';
+  const canonicalIssue = {
+    key: projected.key,
+    fields: {
+      summary: projected.title,
+      project: { key: 'BEN' },
+      updated: projected.updatedAt,
+      [fieldId]: record
+    }
+  };
+  const canonical = classifyCanonicalBenchmarkIssue(canonicalIssue, fieldId);
+  if (canonical.errors.length) {
+    throw new Error(`Migration canonical projection failed for ${projected.key}: ${canonical.errors.join(' | ')}`);
+  }
+  const legacyView = parityView(projected);
+  const canonicalView = parityView(canonical);
+  if (JSON.stringify(legacyView) !== JSON.stringify(canonicalView)) {
+    throw new Error(`Migration parity mismatch for ${projected.key}.`);
+  }
+  return { ok: true, checkedFields: [...PARITY_FIELDS] };
 }
 
 export function planMigration(issues) {
@@ -16,6 +56,7 @@ export function planMigration(issues) {
     if (projected.errors.length) {
       throw new Error(`Migration blocked for ${projected.key || 'unknown'}: ${projected.errors.join(' | ')}`);
     }
+    const record = canonicalRecordFromLegacyProjection(projected);
     return {
       key: projected.key,
       legacy: {
@@ -28,7 +69,8 @@ export function planMigration(issues) {
         completedAt: projected.completedAt || '',
         sourceKey: projected.sourceKey || ''
       },
-      record: canonicalRecordFromLegacyProjection(projected)
+      record,
+      parity: verifyProjectionParity(projected, record)
     };
   }).sort(byKey);
 

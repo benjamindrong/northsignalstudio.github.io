@@ -20,6 +20,52 @@ test('active states require one activity and no idea category', () => {
   assert.equal(validateRegistryRecord({ version: 1, lifecycle: 'Running', ideaCategory: 'fresh' }).ok, false);
 });
 
+test('lifecycle/activity/idea/result contract matrix has no unclassified combination', () => {
+  const lifecycles = ['Unused', 'Preparing', 'Blocked', 'Running', 'Completed', 'Retired'];
+  const activities = [null, 'candidate-evaluation', 'failure-evaluation', 'benchmark-testing', 'uiux-discovery'];
+  const ideas = [null, 'considered', 'fresh'];
+  const results = [
+    null,
+    { mode: 'unknown' },
+    { mode: 'summary', outcome: 'A', scores: '1-0', signal: 'Clear' }
+  ];
+
+  let checked = 0;
+  for (const lifecycle of lifecycles) {
+    for (const activityKind of activities) {
+      for (const ideaCategory of ideas) {
+        for (const result of results) {
+          const record = { version: 1, lifecycle };
+          if (activityKind) record.activityKind = activityKind;
+          if (ideaCategory) record.ideaCategory = ideaCategory;
+          if (result) record.result = result;
+          if (lifecycle === 'Completed') record.completedAt = completedAt;
+
+          const expected = lifecycle === 'Unused'
+            ? (Boolean(activityKind || ideaCategory) && result == null)
+            : (
+              activityKind != null
+              && ideaCategory == null
+              && (
+                result == null
+                  ? !(lifecycle === 'Completed' && activityKind === 'candidate-evaluation')
+                  : lifecycle === 'Completed' && activityKind === 'candidate-evaluation'
+              )
+            );
+
+          assert.equal(
+            validateRegistryRecord(record).ok,
+            expected,
+            `Unexpected contract result for ${JSON.stringify(record)}`
+          );
+          checked += 1;
+        }
+      }
+    }
+  }
+  assert.equal(checked, 270);
+});
+
 test('candidate result is completed-only', () => {
   const result = { mode: 'summary', outcome: 'A', scores: '1-0', signal: 'Clear' };
   assert.equal(validateRegistryRecord({ ...candidate('Running'), result }, { resolveSource }).ok, false);
@@ -78,6 +124,7 @@ test('one contract generates the Forge expression and manifest', () => {
   assert.doesNotMatch(manifest, /jira:workflowValidator/);
   assert.doesNotMatch(manifest, /jira:actionValidator/);
   assert.doesNotMatch(manifest, /issue-bulk-edit/);
+  assert.doesNotMatch(manifest, /edit:\s*[\s\S]*parser:/, 'CSV/object parser must not be enabled implicitly.');
 });
 
 
@@ -111,6 +158,18 @@ test('migration plan is deterministic and fails closed on ambiguous legacy state
     lifecycle: 'Running',
     activityKind: 'failure-evaluation'
   });
+  assert.equal(plan.records[0].parity.ok, true);
+  assert.deepEqual(plan.records[0].parity.checkedFields, [
+    'status',
+    'activityKind',
+    'ideaCategory',
+    'resultState',
+    'resultLines',
+    'notableFinding',
+    'completedAt',
+    'source',
+    'sourceKey'
+  ]);
 
   const invalid = legacyIssue('BEN-9', ['failure-evaluation', 'registry-idea'], 'indeterminate');
   assert.throws(() => planMigration([invalid]), /Migration blocked/);

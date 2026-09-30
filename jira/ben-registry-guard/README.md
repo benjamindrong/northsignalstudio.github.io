@@ -11,7 +11,7 @@ HOME-55 prevents invalid BEN registry state before Jira persists it.
 3. Completed notable findings are canonical record data instead of post-cutover Description parsing.
 4. A source is resolved when first set or changed. An unchanged stored source remains historical authority even if that source is later deleted or no longer visible.
 5. JSON schema rejects unknown properties at every object level.
-6. Bulk edit is intentionally not enabled because Forge bulk validation does not expose the issue context needed for safe historical-source handling.
+6. Bulk edit is intentionally not declared as an edit experience. Before cutover, production verification must prove Jira cannot mutate BEN Registry Record through bulk edit; if Jira exposes a built-in bulk path, the PR remains blocked until that path is shown to enforce the same server-side contract or is administratively disabled.
 7. Registry records are valid only in BEN, and BEN-21 is explicitly excluded from participation.
 8. Production code must not use Forge's private field-update API because it bypasses custom-field validation.
 
@@ -24,7 +24,7 @@ HOME-55 prevents invalid BEN registry state before Jira persists it.
 5. Prove migration parity before changing Homepage Dashboard registry acquisition.
 6. Cut the Dashboard query/projector to BEN Registry Record only.
 7. Remove legacy lifecycle/result/source authority after parity verification.
-8. Verify UI, REST edit, automation, and disabled bulk-edit behavior on the exact candidate. CSV/object-field import is not a supported production mutation path; the fail-closed migration planner is the only migration input path.
+8. Verify UI, REST edit, automation, bulk-edit behavior, and CSV/object-field import behavior on the exact candidate. Bulk/import may proceed only if the same server-side contract is proven; otherwise those mutation surfaces must be administratively unavailable. The fail-closed migration planner is the only approved migration input path.
 9. Run Forge CLI lint/deploy validation and production smoke verification before merge.
 
 ## Local checks
