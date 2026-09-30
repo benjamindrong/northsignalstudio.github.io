@@ -40,7 +40,13 @@ export const FIELD_SCHEMA = Object.freeze({
       }
     },
     notableFinding: { type: 'string', minLength: 1, maxLength: 2000 },
-    completedAt: { type: 'string', format: 'date-time', pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$', minLength: 24, maxLength: 24 },
+    completedAt: {
+      type: 'string',
+      format: 'date-time',
+      pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$',
+      minLength: 24,
+      maxLength: 24
+    },
     source: {
       type: 'object',
       additionalProperties: false,
@@ -53,60 +59,38 @@ export const FIELD_SCHEMA = Object.freeze({
   }
 });
 
-const SOURCE_KEY = /^[A-Z][A-Z0-9]+-\d+$/;
-const PROJECT_KEY = /^[A-Z][A-Z0-9]+$/;
-const COMPLETED_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-
-function ownKeys(value) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value) : [];
+function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function exactKeys(value, allowed, required = []) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const keys = ownKeys(value);
-  return keys.every(key => allowed.includes(key)) && required.every(key => keys.includes(key));
+function schemaTypeMatches(type, value) {
+  if (type === 'object') return isObject(value);
+  if (type === 'string') return typeof value === 'string';
+  if (type === 'integer') return Number.isInteger(value);
+  return false;
 }
 
-function nonEmptyString(value, maxLength) {
-  return typeof value === 'string' && value.trim().length > 0 && value.length <= maxLength;
-}
+function schemaValid(schema, value) {
+  if (!schemaTypeMatches(schema.type, value)) return false;
+  if (schema.enum && !schema.enum.includes(value)) return false;
 
-function hasOwn(value, key) {
-  return Object.prototype.hasOwnProperty.call(value, key);
-}
-
-function optionalNonNull(record, key) {
-  return !hasOwn(record, key) || record[key] !== null;
-}
-
-function validShape(record) {
-  if (!exactKeys(record, ['version', 'lifecycle', 'activityKind', 'ideaCategory', 'result', 'notableFinding', 'completedAt', 'source'], ['version', 'lifecycle'])) return false;
-  if (record.version !== CONTRACT_VERSION || !LIFECYCLES.includes(record.lifecycle)) return false;
-  for (const key of ['activityKind', 'ideaCategory', 'result', 'notableFinding', 'completedAt', 'source']) {
-    if (!optionalNonNull(record, key)) return false;
-  }
-  if (record.activityKind != null && !ACTIVITY_KINDS.includes(record.activityKind)) return false;
-  if (record.ideaCategory != null && !IDEA_CATEGORIES.includes(record.ideaCategory)) return false;
-  if (record.notableFinding != null && !nonEmptyString(record.notableFinding, 2000)) return false;
-  if (record.completedAt != null && (!COMPLETED_AT.test(record.completedAt) || Number.isNaN(Date.parse(record.completedAt)))) return false;
-
-  if (record.result != null) {
-    if (!exactKeys(record.result, ['mode', 'outcome', 'scores', 'signal'], ['mode'])) return false;
-    if (!RESULT_MODES.includes(record.result.mode)) return false;
-    if (record.result.mode === 'unknown') {
-      if ('outcome' in record.result || 'scores' in record.result || 'signal' in record.result) return false;
-    } else {
-      if (!nonEmptyString(record.result.outcome, 500)) return false;
-      if (!nonEmptyString(record.result.scores, 500)) return false;
-      if (!nonEmptyString(record.result.signal, 1000)) return false;
-    }
+  if (schema.type === 'string') {
+    if (schema.minLength != null && value.length < schema.minLength) return false;
+    if (schema.maxLength != null && value.length > schema.maxLength) return false;
+    if (schema.pattern && !(new RegExp(schema.pattern)).test(value)) return false;
+    if (schema.format === 'date-time' && Number.isNaN(Date.parse(value))) return false;
+    return true;
   }
 
-  if (record.source != null) {
-    if (!exactKeys(record.source, ['key', 'projectKey'], ['key', 'projectKey'])) return false;
-    if (!SOURCE_KEY.test(record.source.key) || !PROJECT_KEY.test(record.source.projectKey)) return false;
-  }
+  if (schema.type === 'integer') return true;
 
+  const keys = Object.keys(value);
+  const properties = schema.properties || {};
+  if (schema.additionalProperties === false && keys.some(key => !(key in properties))) return false;
+  if ((schema.required || []).some(key => !(key in value))) return false;
+  for (const key of keys) {
+    if (!properties[key] || !schemaValid(properties[key], value[key])) return false;
+  }
   return true;
 }
 
@@ -115,77 +99,134 @@ function sourceEqual(a, b) {
   return a?.key === b?.key && a?.projectKey === b?.projectKey;
 }
 
-function validateSource(record, previousRecord, resolveSource) {
+function validResult(record) {
+  if (record.result == null) return true;
+  if (record.result.mode === 'unknown') {
+    return !('outcome' in record.result) && !('scores' in record.result) && !('signal' in record.result);
+  }
+  return record.result.mode === 'summary'
+    && record.result.outcome.trim().length > 0
+    && record.result.scores.trim().length > 0
+    && record.result.signal.trim().length > 0;
+}
+
+function validSource(context) {
+  const { record, previousRecord, resolveSource } = context;
   if (record.source == null) return true;
   if (record.source.projectKey === 'BEN') return false;
+  if (!record.source.key.startsWith(`${record.source.projectKey}-`)) return false;
   if (previousRecord && sourceEqual(record.source, previousRecord.source)) return true;
   if (typeof resolveSource !== 'function') return false;
   const resolved = resolveSource(record.source.key);
   return Boolean(resolved && resolved.projectKey === record.source.projectKey && resolved.projectKey !== 'BEN');
 }
 
-function semanticValid(record) {
-  const { lifecycle, activityKind = null, ideaCategory = null, result = null, notableFinding = null, completedAt = null } = record;
+const SEMANTIC_RULES = Object.freeze([
+  {
+    id: 'ben-project-only',
+    local: ({ projectKey }) => projectKey === 'BEN',
+    jira: "project.key == 'BEN'"
+  },
+  {
+    id: 'pointer-excluded',
+    local: ({ issueKey }) => issueKey !== 'BEN-21',
+    jira: "issue?.key != 'BEN-21'"
+  },
+  {
+    id: 'result-shape',
+    local: ({ record }) => validResult(record),
+    jira: "r.result == null || (r.result.mode == 'unknown' ? r.result.outcome == null && r.result.scores == null && r.result.signal == null : r.result.mode == 'summary' && r.result.outcome != null && r.result.outcome.trim().length > 0 && r.result.scores != null && r.result.scores.trim().length > 0 && r.result.signal != null && r.result.signal.trim().length > 0)"
+  },
+  {
+    id: 'unused-state',
+    local: ({ record }) => record.lifecycle !== 'Unused'
+      || ((record.activityKind != null || record.ideaCategory != null)
+        && record.result == null
+        && record.notableFinding == null
+        && record.completedAt == null),
+    jira: "r.lifecycle != 'Unused' || ((r.activityKind != null || r.ideaCategory != null) && r.result == null && r.notableFinding == null && r.completedAt == null)"
+  },
+  {
+    id: 'active-state',
+    local: ({ record }) => record.lifecycle === 'Unused'
+      || (record.activityKind != null && record.ideaCategory == null),
+    jira: "r.lifecycle == 'Unused' || (r.activityKind != null && r.ideaCategory == null)"
+  },
+  {
+    id: 'completed-only-result',
+    local: ({ record }) => record.result == null
+      || (record.lifecycle === 'Completed' && record.activityKind === 'candidate-evaluation'),
+    jira: "r.result == null || (r.lifecycle == 'Completed' && r.activityKind == 'candidate-evaluation')"
+  },
+  {
+    id: 'completed-candidate-requires-result',
+    local: ({ record }) => record.lifecycle !== 'Completed'
+      || record.activityKind !== 'candidate-evaluation'
+      || record.result != null,
+    jira: "r.lifecycle != 'Completed' || r.activityKind != 'candidate-evaluation' || r.result != null"
+  },
+  {
+    id: 'completed-only-finding',
+    local: ({ record }) => record.notableFinding == null
+      || (record.lifecycle === 'Completed' && record.notableFinding.trim().length > 0),
+    jira: "r.notableFinding == null || (r.lifecycle == 'Completed' && r.notableFinding.trim().length > 0)"
+  },
+  {
+    id: 'completed-timestamp',
+    local: ({ record }) => record.lifecycle === 'Completed'
+      ? record.completedAt != null
+      : record.completedAt == null,
+    jira: "r.lifecycle == 'Completed' ? r.completedAt != null : r.completedAt == null"
+  },
+  {
+    id: 'completed-timestamp-immutable',
+    local: ({ record, previousRecord }) => previousRecord?.lifecycle !== 'Completed'
+      || record.lifecycle !== 'Completed'
+      || previousRecord.completedAt === record.completedAt,
+    jira: "p?.lifecycle != 'Completed' || r.lifecycle != 'Completed' || p.completedAt == r.completedAt"
+  },
+  {
+    id: 'source-valid',
+    local: context => validSource(context),
+    jira: "r.source == null || (r.source.projectKey != 'BEN' && r.source.key.startsWith(r.source.projectKey + '-') && (sameSource || (loadedSource != null && loadedSource.project.key == r.source.projectKey)))"
+  }
+]);
 
-  if (lifecycle === 'Unused') {
-    if (activityKind == null && ideaCategory == null) return false;
-    if (result != null || notableFinding != null || completedAt != null) return false;
-  } else {
-    if (activityKind == null || ideaCategory != null) return false;
+export const SEMANTIC_RULE_IDS = Object.freeze(SEMANTIC_RULES.map(rule => rule.id));
+
+export function validateRegistryRecord(record, {
+  previousRecord = null,
+  resolveSource,
+  issueKey = '',
+  projectKey = 'BEN'
+} = {}) {
+  if (!schemaValid(FIELD_SCHEMA, record)) {
+    return { ok: false, errors: ['Record shape is invalid.'] };
   }
 
-  if (result != null && !(lifecycle === 'Completed' && activityKind === 'candidate-evaluation')) return false;
-  if (lifecycle === 'Completed' && activityKind === 'candidate-evaluation' && result == null) return false;
-  if (notableFinding != null && lifecycle !== 'Completed') return false;
-  if (lifecycle === 'Completed' ? completedAt == null : completedAt != null) return false;
-
-  return true;
+  const context = { record, previousRecord, resolveSource, issueKey, projectKey };
+  const failed = SEMANTIC_RULES.filter(rule => !rule.local(context)).map(rule => rule.id);
+  return failed.length
+    ? { ok: false, errors: failed.map(id => `Semantic rule failed: ${id}`) }
+    : { ok: true, errors: [] };
 }
 
-export function validateRegistryRecord(record, { previousRecord = null, resolveSource, issueKey = '', projectKey = 'BEN' } = {}) {
-  if (projectKey !== 'BEN') return { ok: false, errors: ['BEN Registry Record is only valid in BEN.'] };
-  if (issueKey === 'BEN-21') return { ok: false, errors: ['BEN-21 is the registry pointer and cannot be a registry participant.'] };
-  if (!validShape(record)) return { ok: false, errors: ['Record shape is invalid.'] };
-  if (!semanticValid(record)) return { ok: false, errors: ['Record state is invalid.'] };
-  if (previousRecord?.lifecycle === 'Completed' && record.lifecycle === 'Completed' && record.completedAt !== previousRecord.completedAt) return { ok: false, errors: ['Completed timestamp is immutable while remaining Completed.'] };
-  if (!validateSource(record, previousRecord, resolveSource)) return { ok: false, errors: ['Source identity is invalid.'] };
-  return { ok: true, errors: [] };
-}
-
-export function validateRegistryMutation(record, { previousRecord = null, resolveSource, issueKey = '', projectKey = 'BEN' } = {}) {
+export function validateRegistryMutation(record, options = {}) {
   if (record == null) {
-    return previousRecord == null
+    return options.previousRecord == null
       ? { ok: true, errors: [] }
       : { ok: false, errors: ['Existing registry participation cannot be cleared. Use lifecycle Retired instead.'] };
   }
-  return validateRegistryRecord(record, { previousRecord, resolveSource, issueKey, projectKey });
-}
-
-function q(values) {
-  return values.map(value => `'${value}'`).join(', ');
+  return validateRegistryRecord(record, options);
 }
 
 export function buildJiraValidationExpression() {
+  const rules = SEMANTIC_RULES.map(rule => `(${rule.jira})`).join(' && ');
   return [
     'let r = value;',
     'let p = issue?.[fieldId];',
-    "let projectSafe = project.key == 'BEN';",
-    "let pointerSafe = issue?.key != 'BEN-21';",
-    `let lifecycles = [${q(LIFECYCLES)}];`,
-    `let activities = [${q(ACTIVITY_KINDS)}];`,
-    `let ideas = [${q(IDEA_CATEGORIES)}];`,
-    `let resultModes = [${q(RESULT_MODES)}];`,
-    "let validResult = r?.result == null || (resultModes.includes(r.result.mode) && (r.result.mode == 'unknown' ? r.result.outcome == null && r.result.scores == null && r.result.signal == null : r.result.outcome != null && r.result.outcome.trim().length > 0 && r.result.outcome.length <= 500 && r.result.scores != null && r.result.scores.trim().length > 0 && r.result.scores.length <= 500 && r.result.signal != null && r.result.signal.trim().length > 0 && r.result.signal.length <= 1000));",
-    "let validUnused = r?.lifecycle != 'Unused' || ((r.activityKind != null || r.ideaCategory != null) && r.result == null && r.notableFinding == null);",
-    "let validActive = r?.lifecycle == 'Unused' || (r.activityKind != null && r.ideaCategory == null);",
-    "let validResultOwner = r?.result == null || (r.lifecycle == 'Completed' && r.activityKind == 'candidate-evaluation');",
-    "let completedCandidateHasResult = r?.lifecycle != 'Completed' || r.activityKind != 'candidate-evaluation' || r.result != null;",
-    "let findingOnlyCompleted = r?.notableFinding == null || (r.lifecycle == 'Completed' && r.notableFinding.trim().length > 0 && r.notableFinding.length <= 2000);",
-    "let completedTimestamp = r?.lifecycle == 'Completed' ? r.completedAt != null && r.completedAt.length == 24 : r?.completedAt == null;",
-    "let stableCompletedTimestamp = p?.lifecycle != 'Completed' || r?.lifecycle != 'Completed' || p.completedAt == r.completedAt;",
     "let sameSource = r?.source == null ? p?.source == null : p?.source != null && r.source.key == p.source.key && r.source.projectKey == p.source.projectKey;",
     "let loadedSource = r?.source == null || sameSource ? null : new Issue(r.source.key);",
-    "let validSource = r?.source == null || (r.source.projectKey != 'BEN' && (sameSource || (loadedSource != null && loadedSource.project.key == r.source.projectKey)));",
-    `r == null ? p == null : (projectSafe && pointerSafe && r.version == ${CONTRACT_VERSION} && lifecycles.includes(r.lifecycle) && (r.activityKind == null || activities.includes(r.activityKind)) && (r.ideaCategory == null || ideas.includes(r.ideaCategory)) && validResult && validUnused && validActive && validResultOwner && completedCandidateHasResult && findingOnlyCompleted && completedTimestamp && stableCompletedTimestamp && validSource)`
+    `r == null ? p == null : (${rules})`
   ].join('\n');
 }
