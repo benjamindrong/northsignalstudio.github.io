@@ -490,4 +490,3 @@ assert.throws(
   /not uniquely valid/,
   'Migration must fail closed rather than normalize an ambiguous legacy record.'
 );
-
