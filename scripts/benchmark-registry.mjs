@@ -413,7 +413,7 @@ export function classifyCanonicalBenchmarkIssue(issue, registryFieldId) {
   const title = clean(issue?.fields?.summary) || key;
   const record = issue?.fields?.[registryFieldId];
   const errors = [];
-  const validation = validateRegistryRecord(record, { previousRecord: record });
+  const validation = validateRegistryRecord(record, { previousRecord: record, issueKey: key, projectKey: issueProjectKey(issue) });
   if (!validation.ok) errors.push('BEN Registry Record failed canonical validation.');
 
   const lifecycle = clean(record?.lifecycle);
@@ -482,7 +482,7 @@ export function canonicalRecordFromLegacyProjection(projected) {
     };
   }
 
-  const validation = validateRegistryRecord(record, { previousRecord: record });
+  const validation = validateRegistryRecord(record, { previousRecord: record, issueKey: projected.key, projectKey: 'BEN' });
   if (!validation.ok) throw new Error(`Migrated record ${projected.key} does not satisfy the canonical contract.`);
   return record;
 }
@@ -541,7 +541,9 @@ export function projectBenchmarkRegistry(issues, {
     return { state: 'unavailable', authority: 'jira-native', sourceKey, sourceLabel, updatedAt: '', pointerUpdatedAt: '', message: 'BEN registry query did not return an issue array.' };
   }
 
-  const eligibleIssues = issues.filter(issue => !EXCLUDED_REGISTRY_KEYS.has(clean(issue?.key)));
+  const eligibleIssues = registryFieldId
+    ? issues
+    : issues.filter(issue => !EXCLUDED_REGISTRY_KEYS.has(clean(issue?.key)));
   const classifier = registryFieldId
     ? issue => classifyCanonicalBenchmarkIssue(issue, registryFieldId)
     : classifyLegacyBenchmarkIssue;
