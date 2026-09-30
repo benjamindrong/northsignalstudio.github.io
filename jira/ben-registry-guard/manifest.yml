@@ -99,24 +99,9 @@ modules:
           expression: |-
             let r = value;
             let p = issue?.[fieldId];
-            let projectSafe = project.key == 'BEN';
-            let pointerSafe = issue?.key != 'BEN-21';
-            let lifecycles = ['Unused', 'Preparing', 'Blocked', 'Running', 'Completed', 'Retired'];
-            let activities = ['candidate-evaluation', 'failure-evaluation', 'benchmark-testing', 'uiux-discovery'];
-            let ideas = ['considered', 'fresh'];
-            let resultModes = ['unknown', 'summary'];
-            let validResult = r?.result == null || (resultModes.includes(r.result.mode) && (r.result.mode == 'unknown' ? r.result.outcome == null && r.result.scores == null && r.result.signal == null : r.result.outcome != null && r.result.outcome.trim().length > 0 && r.result.outcome.length <= 500 && r.result.scores != null && r.result.scores.trim().length > 0 && r.result.scores.length <= 500 && r.result.signal != null && r.result.signal.trim().length > 0 && r.result.signal.length <= 1000));
-            let validUnused = r?.lifecycle != 'Unused' || ((r.activityKind != null || r.ideaCategory != null) && r.result == null && r.notableFinding == null);
-            let validActive = r?.lifecycle == 'Unused' || (r.activityKind != null && r.ideaCategory == null);
-            let validResultOwner = r?.result == null || (r.lifecycle == 'Completed' && r.activityKind == 'candidate-evaluation');
-            let completedCandidateHasResult = r?.lifecycle != 'Completed' || r.activityKind != 'candidate-evaluation' || r.result != null;
-            let findingOnlyCompleted = r?.notableFinding == null || (r.lifecycle == 'Completed' && r.notableFinding.trim().length > 0 && r.notableFinding.length <= 2000);
-            let completedTimestamp = r?.lifecycle == 'Completed' ? r.completedAt != null && r.completedAt.length == 24 : r?.completedAt == null;
-            let stableCompletedTimestamp = p?.lifecycle != 'Completed' || r?.lifecycle != 'Completed' || p.completedAt == r.completedAt;
             let sameSource = r?.source == null ? p?.source == null : p?.source != null && r.source.key == p.source.key && r.source.projectKey == p.source.projectKey;
             let loadedSource = r?.source == null || sameSource ? null : new Issue(r.source.key);
-            let validSource = r?.source == null || (r.source.projectKey != 'BEN' && (sameSource || (loadedSource != null && loadedSource.project.key == r.source.projectKey)));
-            r == null ? p == null : (projectSafe && pointerSafe && r.version == 1 && lifecycles.includes(r.lifecycle) && (r.activityKind == null || activities.includes(r.activityKind)) && (r.ideaCategory == null || ideas.includes(r.ideaCategory)) && validResult && validUnused && validActive && validResultOwner && completedCandidateHasResult && findingOnlyCompleted && completedTimestamp && stableCompletedTimestamp && validSource)
+            r == null ? p == null : ((project.key == 'BEN') && (issue?.key != 'BEN-21') && (r.result == null || (r.result.mode == 'unknown' ? r.result.outcome == null && r.result.scores == null && r.result.signal == null : r.result.mode == 'summary' && r.result.outcome != null && r.result.outcome.trim().length > 0 && r.result.scores != null && r.result.scores.trim().length > 0 && r.result.signal != null && r.result.signal.trim().length > 0)) && (r.lifecycle != 'Unused' || ((r.activityKind != null || r.ideaCategory != null) && r.result == null && r.notableFinding == null && r.completedAt == null)) && (r.lifecycle == 'Unused' || (r.activityKind != null && r.ideaCategory == null)) && (r.result == null || (r.lifecycle == 'Completed' && r.activityKind == 'candidate-evaluation')) && (r.lifecycle != 'Completed' || r.activityKind != 'candidate-evaluation' || r.result != null) && (r.notableFinding == null || (r.lifecycle == 'Completed' && r.notableFinding.trim().length > 0)) && (r.lifecycle == 'Completed' ? r.completedAt != null : r.completedAt == null) && (p?.lifecycle != 'Completed' || r.lifecycle != 'Completed' || p.completedAt == r.completedAt) && (r.source == null || (r.source.projectKey != 'BEN' && r.source.key.startsWith(r.source.projectKey + '-') && (sameSource || (loadedSource != null && loadedSource.project.key == r.source.projectKey)))))
           errorMessage: BEN Registry Record is invalid.
 
 permissions:
