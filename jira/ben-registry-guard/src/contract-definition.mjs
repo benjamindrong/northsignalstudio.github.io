@@ -188,7 +188,7 @@ const SEMANTIC_RULES = Object.freeze([
   {
     id: 'source-valid',
     local: context => validSource(context),
-    jira: "r.source == null || (r.source.projectKey != 'BEN' && r.source.key.startsWith(r.source.projectKey + '-') && (sameSource || (loadedSource != null && loadedSource.project.key == r.source.projectKey)))"
+    jira: "r.source == null || (r.source.projectKey != 'BEN' && r.source.key.indexOf(r.source.projectKey + '-') == 0 && (sameSource || (loadedSource != null && loadedSource.project.key == r.source.projectKey)))"
   }
 ]);
 
