@@ -6,13 +6,14 @@ HOME-55 prevents invalid BEN registry state before Jira persists it.
 
 ## Safety properties
 
-1. Registry participation requires a valid BEN Registry Record; absence means non-registry work.
+1. Registry participation requires a valid BEN Registry Record; absence means non-registry work. Once present, the record cannot be cleared—use lifecycle `Retired` instead.
 2. Candidate Evaluation results are valid only on Completed records.
 3. Completed notable findings are canonical record data instead of post-cutover Description parsing.
 4. A source is resolved when first set or changed. An unchanged stored source remains historical authority even if that source is later deleted or no longer visible.
 5. JSON schema rejects unknown properties at every object level.
 6. Bulk edit is intentionally not enabled because Forge bulk validation does not expose the issue context needed for safe historical-source handling.
-7. Production code must not use Forge's private field-update API because it bypasses custom-field validation.
+7. Registry records are valid only in BEN, and BEN-21 is explicitly excluded from participation.
+8. Production code must not use Forge's private field-update API because it bypasses custom-field validation.
 
 ## Cutover gates
 
@@ -23,7 +24,7 @@ HOME-55 prevents invalid BEN registry state before Jira persists it.
 5. Prove migration parity before changing Homepage Dashboard registry acquisition.
 6. Cut the Dashboard query/projector to BEN Registry Record only.
 7. Remove legacy lifecycle/result/source authority after parity verification.
-8. Verify UI, REST edit, automation, import, and disabled bulk-edit behavior on the exact candidate.
+8. Verify UI, REST edit, automation, and disabled bulk-edit behavior on the exact candidate. CSV/object-field import is not a supported production mutation path; the fail-closed migration planner is the only migration input path.
 9. Run Forge CLI lint/deploy validation and production smoke verification before merge.
 
 ## Local checks
