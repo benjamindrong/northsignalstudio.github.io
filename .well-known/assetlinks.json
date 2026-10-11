@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.northsignalstudio.lifeline",
+      "sha256_cert_fingerprints": [
+        "D4:C6:AE:2F:0B:03:56:25:2C:2A:2B:02:8B:5A:D9:2B:64:9B:7E:F3:4D:E5:C0:A3:D6:8E:EF:6E:F5:0D:C3:83"
+      ]
+    }
+  }
+]
