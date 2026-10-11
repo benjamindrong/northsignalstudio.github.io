@@ -145,6 +145,7 @@
 
     return {
       state: 'ready', authority: 'dashboard-native-benchmark-review',
+      generatedAt: publication.generatedAt,
       sourceKey: 'Native', sourceLabel: 'Dashboard-native Benchmark Review',
       selectedNext: selected || null, pointerError: '',
       runs, completedOrder: completedRuns.map(run => run.key),
