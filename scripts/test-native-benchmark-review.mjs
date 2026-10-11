@@ -52,7 +52,7 @@ assert.equal(data.previouslyConsidered.length,0);
 assert.equal(adapt(fixture(),p,now+MAX_AGE_MS).runs.length,3);
 assert.throws(()=>adapt(fixture(),p,now+MAX_AGE_MS+1),/stale/i);
 assert.throws(()=>adapt(fixture(),p,now-120_001),/future/i);
-assert.throws(()=>adapt(fixture(),undefined),/approved project/i);
+assert.throws(()=>projectNativeReview(fixture(),{now}),/approved project/i);
 assert.throws(()=>adapt(fixture(),'77777777-7777-4777-8777-777777777777'),/project mismatch/i);
 function mutation(fn){
  const value=fixture();fn(value);
