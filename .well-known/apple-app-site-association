@@ -3,6 +3,18 @@
     "apps": [],
     "details": [
       {
+        "appID": "5FF5MBB334.com.northsignalstudio.lifeline",
+        "paths": [
+          "/lifeline/oauth/callback"
+        ]
+      },
+      {
+        "appID": "5FF5MBB334.com.northsignalstudio.lifeline.sandbox",
+        "paths": [
+          "/lifeline/sandbox/oauth/callback"
+        ]
+      },
+      {
         "appID": "5FF5MBB334.com.lifeline.sandbox.nonproduction",
         "paths": [
           "/lifeline/oauth/callback*"
