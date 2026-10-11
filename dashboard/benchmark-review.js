@@ -126,8 +126,13 @@
   }
 
   function runLink(run) {
+    // A native-only review is never a Jira issue: display its durable ticket ID as text.
+    if (run.nativeTicketId && !run.legacyDisplayKey) {
+      return create('span', 'benchmark-run-title', `${run.key} · ${run.title}`);
+    }
+    const key = run.legacyDisplayKey || run.key;
     const link = create('a', 'benchmark-run-title', `${run.key} · ${run.title}`);
-    link.href = `${JIRA_BASE_URL}${encodeURIComponent(run.key)}`;
+    link.href = `${JIRA_BASE_URL}${encodeURIComponent(key)}`;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     return link;
@@ -269,6 +274,12 @@
   }
 
   function orderedCompletedRuns(registry) {
+    if (registry?.authority === 'dashboard-native-benchmark-review') {
+      // The native repository owns completed ordering, including timestamp tie breaks.
+      const byKey = new Map(registry.runs.filter(run => run.status === 'Completed')
+        .map(run => [run.key, run]));
+      return registry.completedOrder.map(key => byKey.get(key));
+    }
     return registry.runs
       .filter(run => run.status === 'Completed')
       .sort((a, b) => completionTimestamp(b) - completionTimestamp(a)
@@ -281,6 +292,7 @@
   }
 
   function pointerErrorMessage(registry) {
+    if (registry?.authority === 'dashboard-native-benchmark-review') return '';
     if (registry?.pointerError) return registry.pointerError;
     if (!registry?.selectedNext) {
       return 'BEN-21 does not identify a selected Preparing, Blocked, or Running registry item.';
@@ -389,6 +401,7 @@
 
     const onDeckRuns = orderedOnDeckRuns(registry);
     const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');
+    const retiredRuns = registry.runs.filter(run => run.status === 'Retired');
     const completedRuns = completedRunsForDisplay(registry);
     const hasLeftColumn = nextRuns.length || onDeckRuns.length;
     const columns = create('div', hasLeftColumn ? 'benchmark-columns' : 'benchmark-columns completed-only');
@@ -401,6 +414,7 @@
     const rightColumn = create('div', 'benchmark-column-stack');
     if (blockedRuns.length) appendRunGroup(rightColumn, 'Blocked', blockedRuns);
     appendRunGroup(rightColumn, 'Completed', completedRuns.runs, { count: completedRuns.total });
+    if (retiredRuns.length) appendRunGroup(rightColumn, 'Retired', retiredRuns);
     columns.appendChild(rightColumn);
     content.appendChild(columns);
 
