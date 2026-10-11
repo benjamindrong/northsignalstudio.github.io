@@ -399,7 +399,7 @@
 
           if (nativeBenchmarkResult.status === 'fulfilled') {
             const native = nativeBenchmarkResult.value;
-            markSourceSuccess('benchmark', { generatedAt: nativeBenchmarkResult.value.generatedAt || new Date().toISOString() });
+            markSourceSuccess('benchmark', native);
             RefreshHealth.renderBenchmarkReview(native);
           } else {
             markSourceFailure('benchmark', nativeBenchmarkResult.reason);
