@@ -4,6 +4,8 @@
   const JIRA_BASE_URL = 'https://benjamindrong80.atlassian.net/browse/';
   const COMPLETED_VISIBLE_LIMIT = 6;
   const EXPANDED_RESULT_LIMIT = 2;
+  let expandedCompleted = false;
+  let displayedRegistry = null;
   const expandedRunKeys = new Set();
   const EXPANDED_SECTION_STORAGE_KEY = 'dashboard-benchmark-expanded-sections';
 
@@ -71,6 +73,8 @@
       .benchmark-column-stack { min-width: 0; display: grid; gap: 10px; align-content: start; }
       .benchmark-group { min-width: 0; border: 1px solid var(--board-line-soft); background: #101310; }
       .benchmark-group h3 { margin: 0; padding: 7px 8px; border-bottom: 1px solid var(--board-line-soft); color: #c8cec8; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+      .benchmark-more { margin: 8px; padding: 5px 7px; background: transparent; color: var(--board-text); border: 1px solid var(--board-line-soft); cursor: pointer; font: inherit; font-size: 10px; }
+      .benchmark-more:hover, .benchmark-more:focus-visible { border-color: var(--board-text); }
       .benchmark-run { min-width: 0; padding: 8px; border-bottom: 1px solid var(--board-line-soft); }
       .benchmark-run:last-child { border-bottom: 0; }
       .benchmark-result { margin-top: 5px; color: #c8c8bc; font-size: 9px; line-height: 1.35; overflow-wrap: anywhere; }
@@ -253,6 +257,16 @@
     group.appendChild(create('h3', '', `${label} · ${count}`));
     if (!runs.length) group.appendChild(create('div', 'benchmark-run benchmark-result unknown', `No ${label.toLowerCase()} benchmarks recorded.`));
     else for (const run of runs) appendRun(group, run);
+    if (label === 'Completed' && count > COMPLETED_VISIBLE_LIMIT) {
+      const toggle = create('button', 'benchmark-more',
+        expandedCompleted ? 'Show fewer' : `Show all ${count}`);
+      toggle.type = 'button';
+      toggle.addEventListener('click', () => {
+        expandedCompleted = !expandedCompleted;
+        render(displayedRegistry);
+      });
+      group.appendChild(toggle);
+    }
     content.appendChild(group);
   }
 
@@ -288,7 +302,8 @@
 
   function completedRunsForDisplay(registry) {
     const ordered = orderedCompletedRuns(registry);
-    return { total: ordered.length, runs: ordered.slice(0, COMPLETED_VISIBLE_LIMIT) };
+    return { total: ordered.length,
+      runs: expandedCompleted ? ordered : ordered.slice(0, COMPLETED_VISIBLE_LIMIT) };
   }
 
   function pointerErrorMessage(registry) {
@@ -379,13 +394,15 @@
     const scrollTop = content.scrollTop;
     content.replaceChildren();
 
-    if (!registry || registry.state !== 'ready') {
+    if (!registry || registry.state !== 'ready' ||
+        registry.authority !== 'dashboard-native-benchmark-review') {
       source.textContent = registry?.sourceLabel || (registry?.sourceKey ? `${registry.sourceKey} · unavailable` : 'BEN registry unavailable');
       content.appendChild(create('div', 'benchmark-empty', registry?.message || 'Benchmark registry is unavailable.'));
       return;
     }
 
-    source.textContent = registry.sourceLabel || `${registry.sourceKey || 'BEN'} · benchmark registry`;
+    displayedRegistry = registry;
+    source.textContent = 'Dashboard-native Benchmark Review';
 
     const pointerError = pointerErrorMessage(registry);
     if (pointerError) content.appendChild(create('div', 'benchmark-result backfill', `Next pointer unavailable: ${pointerError}`));
@@ -426,6 +443,8 @@
   function locked(message = 'Unlock the dashboard to load Benchmark Review.') {
     ensureSurface();
     expandedRunKeys.clear();
+    expandedCompleted = false;
+    displayedRegistry = null;
     const content = document.getElementById('benchmarkContent');
     const source = document.getElementById('benchmarkSource');
     if (source) source.textContent = 'Encrypted BEN registry';
