@@ -69,6 +69,7 @@ mutation(v=>{v.records[0].result=null;});
 mutation(v=>{v.records[2].ideaCategory=null;});
 mutation(v=>{v.registry.selectedNextLegacyDisplayKey='BEN-99';});
 mutation(v=>{v.records.push(v.records[0]);});
+mutation(v=>{v.records[3].legacyDisplayKey='BEN-99';v.records[0].legacyDisplayKey='BEN-99';});
 mutation(v=>{v.records[0].completedAtEpochMillis='not-a-time';});
 const noSelected=fixture();noSelected.registry.selectedNextTicketId=null;
 assert.equal(adapt(noSelected).selectedNext,null);
