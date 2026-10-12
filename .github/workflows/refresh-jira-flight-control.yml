@@ -172,10 +172,16 @@ jobs:
               document.querySelectorAll('script').forEach(node => node.remove());
             </` + `script></body></html>`;
           fs.writeFileSync('dashboard/.native-benchmark-acceptance.html', page);
+          fs.writeFileSync('dashboard/.native-benchmark-refusal.html',
+            '<!doctype html><html><head><meta charset="utf-8"></head><body>' +
+            '<div class="dashboard-grid"></div><script src="./benchmark-review.js"></' + 'script>' +
+            '<script>DashboardBenchmarkReview.render({state:"ready",authority:"jira-native",' +
+            'sourceLabel:"Jira-native BEN registry",runs:[{key:"BEN-21",status:"Running",title:"Unauthorized"}]});' +
+            'document.querySelectorAll("script").forEach(node=>node.remove());</' + 'script></body></html>');
           NODE
           python3 -m http.server 8000 --bind 127.0.0.1 >/tmp/dashboard-native-browser.log 2>&1 &
           server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true; rm -f dashboard/.native-benchmark-acceptance.html' EXIT
+          trap 'kill "$server_pid" 2>/dev/null || true; rm -f dashboard/.native-benchmark-acceptance.html dashboard/.native-benchmark-refusal.html' EXIT
           for attempt in {1..20}; do
             if curl -fsS http://127.0.0.1:8000/dashboard/index.html >/dev/null; then break; fi
             sleep 0.2
@@ -189,6 +195,9 @@ jobs:
           grep -F 'BEN-14 · Completed review 1' /tmp/dashboard-native-benchmark-dom.html
           grep -F 'Native ticket:' /tmp/dashboard-native-benchmark-dom.html
           if grep -F 'Jira-native BEN registry' /tmp/dashboard-native-benchmark-dom.html; then exit 1; fi
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/.native-benchmark-refusal.html >/tmp/dashboard-native-refusal-dom.html
+          grep -F 'Benchmark registry is unavailable.' /tmp/dashboard-native-refusal-dom.html
+          if grep -F 'BEN-21 · Unauthorized' /tmp/dashboard-native-refusal-dom.html; then exit 1; fi
 
       - name: Verify candidate diff
         run: |
