@@ -130,124 +130,59 @@ jobs:
           console.log('Benchmark Review UI seam checks passed');
           NODE
 
-      - name: Verify Benchmark Review browser states
+      - name: Verify native Benchmark Review browser states
         run: |
-          cat > dashboard/benchmark-review-completed-only.html <<'HTML'
-          <!doctype html><html><head><meta charset="utf-8"></head><body>
-          <div class="dashboard-grid"></div><script src="./benchmark-review.js"></script><script>
-          DashboardBenchmarkReview.render({
-            state:'ready',authority:'jira-native',sourceKey:'BEN',sourceLabel:'Jira-native BEN registry',
-            selectedNext:null,pointerError:'BEN-21 Parent is missing.',invalidRecords:[],
-            runs:[
-              {key:'BEN-14',title:'Crossmark Physical Signal Hunt Field Benchmark',status:'Completed',statusRaw:'Completed',activityKind:'benchmark-testing',type:'Benchmark Testing',source:'CROS-1',resultState:'none',resultLines:[]},
-              {key:'BEN-13',title:'Crossmark X Handoff Benchmark',status:'Unused',statusRaw:'Unused',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'CROS-1',resultState:'none',resultLines:[]}
-            ],
-            previouslyConsidered:[{key:'BEN-22',title:'MyRAM Markdown Preview',detail:''}],
-            freshBacklog:[{group:'Fresh idea backlog',ideas:[{key:'BEN-25',title:'Runline Needs Anchoring',detail:''}]}]
-          });
-          document.querySelectorAll('script').forEach(node=>node.remove());
-          </script></body></html>
-          HTML
-
-          cat > dashboard/benchmark-review-active.html <<'HTML'
-          <!doctype html><html><head><meta charset="utf-8"></head><body>
-          <div class="dashboard-grid"></div><script src="./benchmark-review.js"></script><script>
-          DashboardBenchmarkReview.render({
-            state:'ready',authority:'jira-native',sourceKey:'BEN',sourceLabel:'Jira-native BEN registry',
-            selectedNext:{key:'BEN-17',title:'Runline Event Board PRD Candidate Evaluation',status:'Preparing',statusRaw:'Preparing',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'RUN-5',resultState:'none',resultLines:[]},
-            pointerError:'',invalidRecords:[{key:'BEN-99',title:'Invalid fixture',reasons:['Invalid lifecycle fixture.']}],
-            runs:[
-              {key:'BEN-42',title:'Later prepared candidate',status:'Preparing',statusRaw:'Preparing',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'Unknown',resultState:'none',resultLines:[]},
-              {key:'BEN-17',title:'Runline Event Board PRD Candidate Evaluation',status:'Preparing',statusRaw:'Preparing',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'RUN-5',resultState:'none',resultLines:[]},
-              {key:'BEN-40',title:'Blocked candidate',status:'Blocked',statusRaw:'Blocked',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'Unknown',resultState:'none',resultLines:[]},
-              {key:'BEN-41',title:'Running candidate',status:'Running',statusRaw:'Running',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'Unknown',resultState:'none',resultLines:[]},
-              {key:'BEN-10',title:'PR Health',status:'Completed',statusRaw:'Completed',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'HOME-12',resultState:'backfill',resultLines:['Result: Unknown / backfill.']},
-              {key:'BEN-11',title:'Crossmark Signal Hunt Benchmark',status:'Completed',statusRaw:'Completed',activityKind:'candidate-evaluation',type:'Candidate Evaluation',source:'CROS-1',resultState:'recorded',resultLines:['Outcome: Response B won.','Scores: Unknown','Signal: State continuity.']}
-            ],previouslyConsidered:[],freshBacklog:[]
-          });
-          document.querySelectorAll('script').forEach(node=>node.remove());
-          </script></body></html>
-          HTML
-
-          cat > dashboard/benchmark-review-legacy-type.html <<'HTML'
-          <!doctype html><html><head><meta charset="utf-8"></head><body>
-          <div class="dashboard-grid"></div><script src="./benchmark-review.js"></script><script>
-          DashboardBenchmarkReview.render({
-            state:'ready',authority:'jira-native',sourceKey:'BEN',sourceLabel:'Jira-native BEN registry',
-            selectedNext:{key:'BEN-17',title:'Legacy candidate type fallback',status:'Preparing',statusRaw:'Preparing',type:'Candidate Evaluation — legacy snapshot',source:'RUN-5',resultState:'none',resultLines:[]},
-            pointerError:'',invalidRecords:[],runs:[
-              {key:'BEN-17',title:'Legacy candidate type fallback',status:'Preparing',statusRaw:'Preparing',type:'Candidate Evaluation — legacy snapshot',source:'RUN-5',resultState:'none',resultLines:[]},
-              {key:'BEN-14',title:'Legacy testing type fallback',status:'Completed',statusRaw:'Completed',type:'Benchmark Testing — legacy snapshot',source:'CROS-1',resultState:'none',resultLines:[]}
-            ],previouslyConsidered:[],freshBacklog:[]
-          });
-          document.querySelectorAll('script').forEach(node=>node.remove());
-          </script></body></html>
-          HTML
-
-          python3 -m http.server 8000 --bind 127.0.0.1 >/tmp/dashboard-http.log 2>&1 &
+          node --check dashboard/native-benchmark-review.js
+          node scripts/test-native-benchmark-review.mjs
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const projectId = '22222222-2222-4222-8222-222222222222';
+          const ids = [...Array(7)].map((_, i) =>
+            `11111111-1111-4111-8111-${String(i + 1).padStart(12, '0')}`);
+          const stamp = Date.parse('2026-10-10T15:00:00.000Z');
+          const native = {
+            version: 1, authority: 'dashboard-native-benchmark-review',
+            generatedAt: new Date(stamp).toISOString(), nativeProjectionSha256: 'a'.repeat(64),
+            registry: {projectId, selectedNextTicketId: null, selectedNextLegacyDisplayKey: null},
+            records: ids.map((ticketId, i) => ({
+              ticketId, summary: 'Completed review ' + (i + 1), lifecycle: 'Completed',
+              activityKind: 'candidate-evaluation', ideaCategory: null,
+              legacyDisplayKey: i === 0 ? 'BEN-14' : null, legacySourceKey: null,
+              sourceTicketId: null, result: {kind: 'unknown'}, notableFinding: null,
+              completedAtEpochMillis: String(stamp - i * 60000),
+            })),
+            completedOrder: ids,
+          };
+          const data = JSON.stringify(native);
+          const page = `<!doctype html><html><head><meta charset="utf-8"></head><body>
+            <div class="dashboard-grid"></div>
+            <script src="./native-benchmark-review.js"></` + `script>
+            <script src="./benchmark-review.js"></` + `script>
+            <script>const value=${data};
+              DashboardBenchmarkReview.render(
+                DashboardNativeBenchmarkReview.projectNativeReview(value,{
+                  expectedProjectId:'${projectId}', now:${stamp}
+                }));
+              document.querySelectorAll('script').forEach(node => node.remove());
+            </` + `script></body></html>`;
+          fs.writeFileSync('dashboard/.native-benchmark-acceptance.html', page);
+          NODE
+          python3 -m http.server 8000 --bind 127.0.0.1 >/tmp/dashboard-native-browser.log 2>&1 &
           server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          trap 'kill "$server_pid" 2>/dev/null || true; rm -f dashboard/.native-benchmark-acceptance.html' EXIT
           for attempt in {1..20}; do
             if curl -fsS http://127.0.0.1:8000/dashboard/index.html >/dev/null; then break; fi
             sleep 0.2
           done
           browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
-          test -n "$browser" || { echo "No supported headless Chrome/Chromium executable is available."; exit 1; }
-
-          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/index.html > /tmp/dashboard-index-dom.html
-          grep -F 'widget widget--benchmark' /tmp/dashboard-index-dom.html
-          grep -F 'Unlock the dashboard to load Benchmark Review.' /tmp/dashboard-index-dom.html
-
-          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/display.html > /tmp/dashboard-display-dom.html
-          grep -F 'data-view="3"' /tmp/dashboard-display-dom.html
-          grep -F '>Benchmark Review</button>' /tmp/dashboard-display-dom.html
-
-          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/benchmark-review-completed-only.html > /tmp/benchmark-completed-only-dom.html
-          grep -F 'Jira-native BEN registry' /tmp/benchmark-completed-only-dom.html
-          grep -F 'Next pointer unavailable: BEN-21 Parent is missing.' /tmp/benchmark-completed-only-dom.html
-          grep -F 'class="benchmark-columns completed-only"' /tmp/benchmark-completed-only-dom.html
-          grep -F 'Completed · 1' /tmp/benchmark-completed-only-dom.html
-          grep -F 'Type: Application Testing' /tmp/benchmark-completed-only-dom.html
-          grep -F 'Application testing record.' /tmp/benchmark-completed-only-dom.html
-          grep -F 'Defined unused benchmarks' /tmp/benchmark-completed-only-dom.html
-          grep -F 'Previously considered / unused' /tmp/benchmark-completed-only-dom.html
-          grep -F 'Fresh · Fresh idea backlog' /tmp/benchmark-completed-only-dom.html
-          if grep -F 'Active ·' /tmp/benchmark-completed-only-dom.html; then exit 1; fi
-
-          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/benchmark-review-active.html > /tmp/benchmark-active-dom.html
-          grep -F 'Active · 1' /tmp/benchmark-active-dom.html
-          grep -F 'Next · 1' /tmp/benchmark-active-dom.html
-          grep -F 'On Deck · 1' /tmp/benchmark-active-dom.html
-          grep -F 'Blocked · 1' /tmp/benchmark-active-dom.html
-          grep -F 'BEN-17 · Runline Event Board PRD Candidate Evaluation' /tmp/benchmark-active-dom.html
-          grep -F 'BEN-42 · Later prepared candidate' /tmp/benchmark-active-dom.html
-          grep -F 'Type: Comparative Evaluation' /tmp/benchmark-active-dom.html
-          grep -F 'class="benchmark-status blocked"' /tmp/benchmark-active-dom.html
-          grep -F 'class="benchmark-status running"' /tmp/benchmark-active-dom.html
-          grep -F 'Completed · 2' /tmp/benchmark-active-dom.html
-          grep -F 'Outcome: Response B won.' /tmp/benchmark-active-dom.html
-          grep -F 'Result: Unknown / backfill.' /tmp/benchmark-active-dom.html
-          grep -F 'Invalid registry records · 1' /tmp/benchmark-active-dom.html
-          if grep -F 'Next pointer unavailable:' /tmp/benchmark-active-dom.html; then exit 1; fi
-          if grep -F 'benchmark-columns completed-only' /tmp/benchmark-active-dom.html; then exit 1; fi
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const dom = fs.readFileSync('/tmp/benchmark-active-dom.html', 'utf8');
-          const selected = dom.indexOf('BEN-17 · Runline Event Board PRD Candidate Evaluation');
-          const later = dom.indexOf('BEN-42 · Later prepared candidate');
-          if (selected < 0 || later < 0 || selected >= later) throw new Error('BEN-21 selected Next benchmark was not rendered before On Deck work.');
-          const newestCompleted = dom.indexOf('BEN-11 · Crossmark Signal Hunt Benchmark');
-          const olderCompleted = dom.indexOf('BEN-10 · PR Health');
-          if (newestCompleted < 0 || olderCompleted < 0 || newestCompleted >= olderCompleted) throw new Error('Completed benchmarks were not rendered newest-first.');
-          NODE
-
-          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/benchmark-review-legacy-type.html > /tmp/benchmark-legacy-type-dom.html
-          grep -F 'Type: Application Testing — legacy snapshot' /tmp/benchmark-legacy-type-dom.html
-          grep -F 'Type: Comparative Evaluation — legacy snapshot' /tmp/benchmark-legacy-type-dom.html
-          grep -F 'Application testing record.' /tmp/benchmark-legacy-type-dom.html
-          grep -F 'No comparative results recorded yet.' /tmp/benchmark-legacy-type-dom.html
-
-          rm -f dashboard/benchmark-review-completed-only.html dashboard/benchmark-review-active.html dashboard/benchmark-review-legacy-type.html
+          test -n "$browser"
+          "$browser" --headless --no-sandbox --disable-gpu --virtual-time-budget=1500 --dump-dom http://127.0.0.1:8000/dashboard/.native-benchmark-acceptance.html >/tmp/dashboard-native-benchmark-dom.html
+          grep -F 'Dashboard-native Benchmark Review' /tmp/dashboard-native-benchmark-dom.html
+          grep -F 'Completed · 7' /tmp/dashboard-native-benchmark-dom.html
+          grep -F 'Show all 7' /tmp/dashboard-native-benchmark-dom.html
+          grep -F 'BEN-14 · Completed review 1' /tmp/dashboard-native-benchmark-dom.html
+          grep -F 'Native ticket:' /tmp/dashboard-native-benchmark-dom.html
+          if grep -F 'Jira-native BEN registry' /tmp/dashboard-native-benchmark-dom.html; then exit 1; fi
 
       - name: Verify candidate diff
         run: |
