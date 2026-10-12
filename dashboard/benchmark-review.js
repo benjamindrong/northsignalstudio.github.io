@@ -118,7 +118,7 @@
     header.appendChild(title);
     const board = create('div', 'benchmark-board');
     board.setAttribute('aria-label', 'Benchmark Review registry');
-    const meta = create('div', 'benchmark-meta', 'Encrypted BEN registry');
+    const meta = create('div', 'benchmark-meta', 'Encrypted native Benchmark Review');
     meta.id = 'benchmarkSource';
     const content = create('div', 'benchmark-content');
     content.id = 'benchmarkContent';
@@ -450,7 +450,7 @@
     displayedRegistry = null;
     const content = document.getElementById('benchmarkContent');
     const source = document.getElementById('benchmarkSource');
-    if (source) source.textContent = 'Encrypted BEN registry';
+    if (source) source.textContent = 'Encrypted native Benchmark Review';
     if (content) {
       content.replaceChildren();
       content.appendChild(create('div', 'benchmark-empty', message));
