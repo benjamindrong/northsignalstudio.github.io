@@ -144,6 +144,8 @@ assertSafeDashboardDataPublisher({
 verifyInlineScripts(new URL('../dashboard/index.html', import.meta.url));
 verifyInlineScripts(new URL('../dashboard/display.html', import.meta.url));
 
+assert.match(indexSource, /RefreshHealth\.overallState\(\{ jira: sources\.jira, github: sources\.github \}\)/,
+  'Native Benchmark Review failure must not change the pre-existing Jira/GitHub dashboard health verdict');
 assert.match(indexSource, /fetchNativeBenchmark\(passphrase\)/,
   'Native Benchmark Review needs a separate encrypted publication fetch');
 assert.doesNotMatch(fs.readFileSync(new URL('../dashboard/refresh-health.js', import.meta.url), 'utf8'),
