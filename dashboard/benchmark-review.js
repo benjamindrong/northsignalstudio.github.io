@@ -396,7 +396,7 @@
 
     if (!registry || registry.state !== 'ready' ||
         registry.authority !== 'dashboard-native-benchmark-review') {
-      source.textContent = registry?.sourceLabel || (registry?.sourceKey ? `${registry.sourceKey} · unavailable` : 'BEN registry unavailable');
+      source.textContent = 'Dashboard-native Benchmark Review · unavailable';
       content.appendChild(create('div', 'benchmark-empty', registry?.message || 'Benchmark registry is unavailable.'));
       return;
     }
