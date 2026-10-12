@@ -344,7 +344,9 @@
         if (!unlocked) return { state: 'locked', text: 'Locked · unlock to refresh', refreshing: false, checkedAt: 0, sources: { jira: 'locked', github: 'locked', benchmark: 'locked' } };
         const now = Date.now();
         const sources = { jira: sourceState('jira', now), github: sourceState('github', now), benchmark: sourceState('benchmark', now) };
-        let state = RefreshHealth.overallState(sources); if (refreshPromise) state = 'refreshing';
+        // Native BEN has its own status; do not change legacy Jira/GitHub dashboard health semantics.
+        let state = RefreshHealth.overallState({ jira: sources.jira, github: sources.github });
+        if (refreshPromise) state = 'refreshing';
         const labels = { current: 'current', stale: 'stale', failed: 'failed', waiting: 'waiting' };
         const text = refreshPromise ? 'Refreshing dashboard feeds…' : `Jira ${labels[sources.jira]} · GitHub ${labels[sources.github]} · Native BEN ${labels[sources.benchmark]} · checked ${formatClock(lastRefreshAttemptAt)}`;
         return { state, text, refreshing: Boolean(refreshPromise), checkedAt: lastRefreshAttemptAt, sources };
