@@ -56,6 +56,7 @@
     requireValid(Array.isArray(publication.records) && Array.isArray(publication.completedOrder), 'lists');
 
     const recordsById = new Map();
+    const displayKeys = new Set();
     const runs = [];
     const previous = [], fresh = [];
     const completedSet = new Set();
@@ -100,10 +101,13 @@
           resultState = 'recorded';
         }
       }
+      const displayKey = record.legacyDisplayKey || 'Native ticket: ' + record.ticketId;
+      requireValid(!displayKeys.has(displayKey), 'duplicate review display identity');
+      displayKeys.add(displayKey);
       const run = {
         nativeTicketId: record.ticketId,
         legacyDisplayKey: record.legacyDisplayKey,
-        key: record.legacyDisplayKey || 'Native ticket: ' + record.ticketId,
+        key: displayKey,
         title: record.summary,
         status: record.lifecycle,
         statusRaw: record.lifecycle,
