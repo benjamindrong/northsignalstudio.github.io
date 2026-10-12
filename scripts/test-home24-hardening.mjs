@@ -203,18 +203,18 @@ assert.equal([...workflowSource.matchAll(CUTOVER_BLOCK)].length, 0,
   'obsolete Jira-native cutover blocks must not run after native cutover');
 assert.doesNotMatch(workflowSource, /HOME24_CUTOVER_PENDING|live-gate:|independentPointer/,
   'historical BEN-21 credentialed gates must not execute');
-assert.doesNotMatch(workflowSource, /benchmark-registry-authority\\.txt/,
+assert.ok(!workflowSource.includes('benchmark-registry-authority.txt'),
   'the published Jira workflow cannot read or rewrite legacy authority flags');
 assert.doesNotMatch(producerSource,
   /fetchJiraNativeBenchmarkRegistry|REGISTRY_QUERY_LABELS|buildBenchmarkRegistryJql|buildBenchmarkPointerIdentityJql|benchmarkReview|BENCHMARK_POINTER_SUMMARY/,
   'generic Jira acquisition must not restore Benchmark Review authority');
-assert.doesNotMatch(refreshSource, /payload\\.benchmarkReview/,
+assert.ok(!refreshSource.includes('payload.benchmarkReview'),
   'browser refresh must not accept Jira BEN state');
-assert.match(workflowSource, /owned_path=dashboard\\/jira-flight-control\\.enc\\.json/,
+assert.ok(workflowSource.includes('owned_path=dashboard/jira-flight-control.enc.json'),
   'generic Jira publication must still own its original encrypted artifact');
-assert.match(workflowSource, /sibling_path=dashboard\\/github-prs\\.enc\\.json/,
+assert.ok(workflowSource.includes('sibling_path=dashboard/github-prs.enc.json'),
   'generic Jira publication must preserve the GitHub sibling snapshot');
-assert.match(workflowSource, /python3 -m http\\.server 8000 --bind 127\\.0\\.0\\.1/,
+assert.ok(workflowSource.includes('python3 -m http.server 8000 --bind 127.0.0.1'),
   'native browser fixtures must bind to loopback');
 const rejected = findings.filter(finding => !finding.allowed);
 assert.deepEqual(rejected, [],
