@@ -195,12 +195,14 @@
   </main>
 
   <script src="./work-items.js"></script>
+  <script src="./native-benchmark-review.js"></script>
   <script src="./refresh-health.js"></script>
   <script>
     (() => {
       'use strict';
       const JIRA_CONFIG_URL = './jira-flight-control.config.json';
       const GITHUB_CONFIG_URL = './github-prs.config.json';
+      const NATIVE_BENCHMARK_CONFIG_URL = './benchmark-review-native.config.json';
       const rowsEl = document.getElementById('flightRows');
       const sourceEl = document.getElementById('flightSource');
       const lockEl = document.getElementById('flightLock');
@@ -212,9 +214,10 @@
       const healthEl = document.getElementById('dashboardHealth');
       const WorkItems = window.DashboardWorkItems;
       const RefreshHealth = window.DashboardRefreshHealth;
+      const NativeBenchmark = window.DashboardNativeBenchmarkReview;
       const AUTO_REFRESH_MS = 15_000;
       const configPromises = new Map();
-      const sourceHealth = { jira: RefreshHealth.emptySourceState(), github: RefreshHealth.emptySourceState() };
+      const sourceHealth = { jira: RefreshHealth.emptySourceState(), github: RefreshHealth.emptySourceState(), benchmark: RefreshHealth.emptySourceState() };
       let jiraPayload = null;
       let githubPayload = null;
       let refreshTimer = 0;
@@ -314,25 +317,44 @@
         if (!response.ok) throw new Error(`${label} data is not available yet (${response.status}).`);
         return decryptEnvelope(await response.json(), passphrase);
       }
-      function fetchDashboardPayloads(passphrase) { return Promise.allSettled([fetchEncryptedPayload(JIRA_CONFIG_URL, passphrase, 'Jira'), fetchEncryptedPayload(GITHUB_CONFIG_URL, passphrase, 'GitHub')]); }
+      async function fetchNativeBenchmark(passphrase) {
+        const config = await getConfig(NATIVE_BENCHMARK_CONFIG_URL);
+        if (config?.contractVersion !== 1) throw new Error('Native Benchmark Review configuration unavailable.');
+        // Unconfigured, fixture and foreign projects must never qualify as production data.
+        if (!config.expectedProjectId) throw new Error('Native Benchmark Review production project is not configured.');
+        const publication = await fetchEncryptedPayload(NATIVE_BENCHMARK_CONFIG_URL, passphrase, 'Native Benchmark Review');
+        return NativeBenchmark.projectNativeReview(publication, { expectedProjectId: config.expectedProjectId });
+      }
+      function fetchDashboardPayloads(passphrase) { return Promise.allSettled([
+        fetchEncryptedPayload(JIRA_CONFIG_URL, passphrase, 'Jira'),
+        fetchEncryptedPayload(GITHUB_CONFIG_URL, passphrase, 'GitHub'),
+        fetchNativeBenchmark(passphrase),
+      ]); }
       function markSourceSuccess(source, payload) { sourceHealth[source] = RefreshHealth.markSourceSuccess(sourceHealth[source], payload); }
       function markSourceFailure(source, failure) { sourceHealth[source] = RefreshHealth.markSourceFailure(sourceHealth[source], failure); }
-      function resetHealth() { sourceHealth.jira = RefreshHealth.emptySourceState(); sourceHealth.github = RefreshHealth.emptySourceState(); lastRefreshAttemptAt = 0; }
+      function resetHealth() {
+        sourceHealth.jira = RefreshHealth.emptySourceState();
+        sourceHealth.github = RefreshHealth.emptySourceState();
+        sourceHealth.benchmark = RefreshHealth.emptySourceState();
+        lastRefreshAttemptAt = 0;
+      }
       function sourceState(source, now = Date.now()) { return RefreshHealth.sourceState(sourceHealth[source], now); }
       function refreshStateSnapshot() {
         const unlocked = Boolean(sessionStorage.getItem('flight-control-passphrase'));
-        if (!unlocked) return { state: 'locked', text: 'Locked · unlock to refresh', refreshing: false, checkedAt: 0, sources: { jira: 'locked', github: 'locked' } };
+        if (!unlocked) return { state: 'locked', text: 'Locked · unlock to refresh', refreshing: false, checkedAt: 0, sources: { jira: 'locked', github: 'locked', benchmark: 'locked' } };
         const now = Date.now();
-        const sources = { jira: sourceState('jira', now), github: sourceState('github', now) };
-        let state = RefreshHealth.overallState(sources); if (refreshPromise) state = 'refreshing';
+        const sources = { jira: sourceState('jira', now), github: sourceState('github', now), benchmark: sourceState('benchmark', now) };
+        // Native BEN has its own status; do not change legacy Jira/GitHub dashboard health semantics.
+        let state = RefreshHealth.overallState({ jira: sources.jira, github: sources.github });
+        if (refreshPromise) state = 'refreshing';
         const labels = { current: 'current', stale: 'stale', failed: 'failed', waiting: 'waiting' };
-        const text = refreshPromise ? 'Refreshing Jira + GitHub…' : `Jira ${labels[sources.jira]} · GitHub ${labels[sources.github]} · checked ${formatClock(lastRefreshAttemptAt)}`;
+        const text = refreshPromise ? 'Refreshing dashboard feeds…' : `Jira ${labels[sources.jira]} · GitHub ${labels[sources.github]} · Native BEN ${labels[sources.benchmark]} · checked ${formatClock(lastRefreshAttemptAt)}`;
         return { state, text, refreshing: Boolean(refreshPromise), checkedAt: lastRefreshAttemptAt, sources };
       }
       function updateHealth() {
         const detail = refreshStateSnapshot();
         healthEl.dataset.state = detail.state; healthEl.textContent = detail.text;
-        healthEl.title = [sourceHealth.jira.error && `Jira: ${sourceHealth.jira.error}`, sourceHealth.github.error && `GitHub: ${sourceHealth.github.error}`].filter(Boolean).join('\n');
+        healthEl.title = [sourceHealth.jira.error && `Jira: ${sourceHealth.jira.error}`, sourceHealth.github.error && `GitHub: ${sourceHealth.github.error}`, sourceHealth.benchmark.error && `Native BEN: ${sourceHealth.benchmark.error}`].filter(Boolean).join('\n');
         refreshEl.disabled = detail.state === 'locked' || detail.refreshing;
         window.dispatchEvent(new CustomEvent('dashboard-refresh-state', { detail }));
       }
@@ -345,19 +367,28 @@
         refreshTimer = window.setTimeout(() => { refreshUnlocked(); }, delay);
       }
 
-      async function refreshWithPassphrase(passphrase, { establishSession = false, requireJira = false } = {}) {
+      async function refreshWithPassphrase(passphrase, { establishSession = false, requireAny = false } = {}) {
         if (refreshPromise) return refreshPromise;
         const version = sessionVersion;
         lastRefreshAttemptAt = Date.now();
         refreshPromise = (async () => {
-          const [jiraResult, githubResult] = await fetchDashboardPayloads(passphrase);
+          const [jiraResult, githubResult, nativeBenchmarkResult] = await fetchDashboardPayloads(passphrase);
           if (version !== sessionVersion) return null;
           if (!establishSession && sessionStorage.getItem('flight-control-passphrase') !== passphrase) return null;
-          if (requireJira && jiraResult.status === 'rejected') return { jira: jiraResult.status, github: githubResult.status, unlockFailure: jiraResult.reason };
+          if (requireAny && [jiraResult, githubResult, nativeBenchmarkResult].every(result => result.status === 'rejected')) {
+            return { unlockFailure: jiraResult.reason };
+          }
           if (establishSession) { sessionVersion += 1; sessionStorage.setItem('flight-control-passphrase', passphrase); }
 
           if (jiraResult.status === 'fulfilled') { jiraPayload = jiraResult.value; markSourceSuccess('jira', jiraPayload); renderJira(jiraPayload); }
-          else markSourceFailure('jira', jiraResult.reason);
+          else {
+            markSourceFailure('jira', jiraResult.reason);
+            if (!jiraPayload) {
+              rowsEl.innerHTML = '<div class="flight-empty">Jira Flight Control feed unavailable.</div>';
+              sourceEl.textContent = 'Jira feed unavailable';
+              lockEl.hidden = false;
+            }
+          }
 
           if (githubResult.status === 'fulfilled') { githubPayload = githubResult.value; markSourceSuccess('github', githubPayload); renderGithub(githubPayload); }
           else {
@@ -368,16 +399,29 @@
             }
           }
 
+          if (nativeBenchmarkResult.status === 'fulfilled') {
+            const native = nativeBenchmarkResult.value;
+            markSourceSuccess('benchmark', native);
+            RefreshHealth.renderBenchmarkReview(native);
+          } else {
+            markSourceFailure('benchmark', nativeBenchmarkResult.reason);
+            // No Jira data fallback, including when a previous native refresh succeeded.
+            RefreshHealth.renderBenchmarkReview({
+              state: 'unavailable',
+              sourceLabel: 'Dashboard-native Benchmark Review · unavailable',
+              message: 'Native Benchmark Review is unavailable or stale.',
+            });
+          }
           if (jiraPayload) renderRecent(jiraPayload, githubPayload);
-          return { jira: jiraResult.status, github: githubResult.status };
+          return { jira: jiraResult.status, github: githubResult.status, benchmark: nativeBenchmarkResult.status };
         })();
         updateHealth();
         try { return await refreshPromise; }
         finally { refreshPromise = null; updateHealth(); scheduleAutoRefresh(); }
       }
 
-      async function unlock(passphrase) { const result = await refreshWithPassphrase(passphrase, { establishSession: true, requireJira: true }); if (result?.unlockFailure) throw result.unlockFailure; }
-      async function restoreSavedSession(passphrase) { const result = await refreshWithPassphrase(passphrase, { requireJira: true }); if (result?.unlockFailure) throw result.unlockFailure; }
+      async function unlock(passphrase) { const result = await refreshWithPassphrase(passphrase, { establishSession: true, requireAny: true }); if (result?.unlockFailure) throw result.unlockFailure; }
+      async function restoreSavedSession(passphrase) { const result = await refreshWithPassphrase(passphrase, { requireAny: true }); if (result?.unlockFailure) throw result.unlockFailure; }
       async function refreshUnlocked() { const passphrase = sessionStorage.getItem('flight-control-passphrase'); if (!passphrase) { updateHealth(); return null; } return refreshWithPassphrase(passphrase); }
       async function onUnlock(event) {
         event.preventDefault(); const input = document.getElementById('unlockPassphrase'); const error = document.getElementById('unlockError'); error.textContent = '';

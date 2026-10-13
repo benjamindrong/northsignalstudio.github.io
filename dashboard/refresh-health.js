@@ -102,10 +102,6 @@
 
   function markSourceSuccess(state, payload, now = Date.now()) {
     if (Array.isArray(payload?.issues)) {
-      renderBenchmarkReview(payload.benchmarkReview || {
-        state: 'unavailable',
-        message: 'Benchmark registry is unavailable in the current Jira snapshot.'
-      });
       pendingWorkSources.jira = payload;
       scheduleWorkRelationships();
     }
@@ -148,5 +144,5 @@
 
   loadBenchmarkReview();
   loadWorkRelationships();
-  return { STALE_AFTER_MS, emptySourceState, markSourceSuccess, markSourceFailure, sourceState, overallState };
+  return { STALE_AFTER_MS, emptySourceState, markSourceSuccess, markSourceFailure, sourceState, overallState, renderBenchmarkReview, lockBenchmarkReview };
 });
