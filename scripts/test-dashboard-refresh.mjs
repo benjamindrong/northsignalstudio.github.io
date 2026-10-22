@@ -22,7 +22,7 @@ function verifyInlineScripts(filePath) {
   scripts.forEach((script, index) => new vm.Script(script, { filename: `${filePath}#inline-${index + 1}` }));
 }
 
-function captureMissingBenchmarkFallback() {
+function captureNativeOnlyBenchmarkRendering() {
   const source = fs.readFileSync(new URL('../dashboard/refresh-health.js', import.meta.url), 'utf8');
   let rendered = null;
   const context = {
@@ -46,9 +46,14 @@ function captureMissingBenchmarkFallback() {
   const isolated = context.DashboardRefreshHealth;
   isolated.markSourceSuccess(isolated.emptySourceState(), {
     generatedAt: new Date(NOW).toISOString(),
-    issues: []
+    issues: [],
+    benchmarkReview: { state: 'ready', authority: 'jira-native' }
   }, NOW);
-  return rendered;
+  const afterJira = rendered;
+  isolated.renderBenchmarkReview({
+    state: 'unavailable', sourceLabel: 'Dashboard-native Benchmark Review · unavailable'
+  });
+  return { afterJira, afterNative: rendered };
 }
 
 function assertSafeDashboardDataPublisher({ label, workflow, ownedPath, siblingPath, verifyCommand }) {
@@ -88,17 +93,20 @@ assert.equal(health.sourceState(recoveredState, NOW), 'current', 'new recent sna
 assert.equal(health.sourceState(health.emptySourceState(), NOW), 'waiting', 'source should wait before first success');
 assert.equal(health.sourceState(success({ generatedAt: 'not-a-date' }), NOW), 'stale', 'invalid generatedAt should be stale');
 
-const missingBenchmarkFallback = captureMissingBenchmarkFallback();
-assert.equal(missingBenchmarkFallback?.state, 'unavailable', 'missing benchmarkReview should degrade only the Benchmark Review panel');
-assert.equal('authority' in missingBenchmarkFallback, false, 'missing benchmarkReview must not invent a registry authority');
-assert.equal('sourceKey' in missingBenchmarkFallback, false, 'missing benchmarkReview must not attribute the failure to BEN-8 or another source');
-assert.equal('sourceLabel' in missingBenchmarkFallback, false, 'missing benchmarkReview must keep source metadata authority-neutral');
+const nativePresentation = captureNativeOnlyBenchmarkRendering();
+assert.equal(nativePresentation.afterJira, null,
+  'Jira benchmarkReview fields, even if present, cannot render the native Benchmark Review panel');
+assert.equal(nativePresentation.afterNative.state, 'unavailable',
+  'Only explicit native-feed rendering can change Benchmark Review presentation');
+assert.match(nativePresentation.afterNative.sourceLabel, /Dashboard-native/);
 
 const indexSource = fs.readFileSync(new URL('../dashboard/index.html', import.meta.url), 'utf8');
 const workItemsScript = '<script src="./work-items.js"></script>';
+const nativeScript = '<script src="./native-benchmark-review.js"></script>';
 const refreshHealthScript = '<script src="./refresh-health.js"></script>';
 assert.ok(indexSource.includes(workItemsScript), 'dashboard must load the shared work-item renderer');
-assert.ok(indexSource.indexOf(workItemsScript) < indexSource.indexOf(refreshHealthScript), 'work-items.js must load before refresh-health.js');
+assert.ok(indexSource.indexOf(workItemsScript) < indexSource.indexOf(nativeScript), 'work-items.js must load before native Benchmark adapter');
+assert.ok(indexSource.indexOf(nativeScript) < indexSource.indexOf(refreshHealthScript), 'native adapter must load before refresh-health.js');
 assert.match(indexSource, /WorkItems\.renderFlight\(rowsEl, payload\)/, 'Flight Control must delegate to DashboardWorkItems');
 assert.match(indexSource, /WorkItems\.renderGithub\(githubRowsEl, payload\)/, 'Code Review must delegate to DashboardWorkItems');
 assert.match(indexSource, /WorkItems\.renderRecent\(recentRowsEl, jiraPayloadValue, githubPayloadValue\)/, 'Recently Active must delegate to DashboardWorkItems');
@@ -136,4 +144,11 @@ assertSafeDashboardDataPublisher({
 verifyInlineScripts(new URL('../dashboard/index.html', import.meta.url));
 verifyInlineScripts(new URL('../dashboard/display.html', import.meta.url));
 
-console.log('dashboard refresh-health, 15-second polling, producer cadence, fail-closed shared publication, and inline syntax tests passed');
+assert.match(indexSource, /RefreshHealth\.overallState\(\{ jira: sources\.jira, github: sources\.github \}\)/,
+  'Native Benchmark Review failure must not change the pre-existing Jira/GitHub dashboard health verdict');
+assert.match(indexSource, /fetchNativeBenchmark\(passphrase\)/,
+  'Native Benchmark Review needs a separate encrypted publication fetch');
+assert.doesNotMatch(fs.readFileSync(new URL('../dashboard/refresh-health.js', import.meta.url), 'utf8'),
+  /payload\.benchmarkReview/,
+  'Jira refresh health must not read Benchmark Review from the Jira payload');
+console.log('dashboard native Benchmark Review isolation, refresh-health, fail-closed publication, and inline syntax checks passed');
