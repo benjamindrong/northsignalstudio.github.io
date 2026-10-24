@@ -10,8 +10,21 @@
 
   const JIRA_KEY_PATTERN = /\b[A-Z][A-Z0-9_]*-[1-9][0-9]*\b/g;
 
-  function distinctTitleKeys(title) {
-    return [...new Set(String(title || '').match(JIRA_KEY_PATTERN) || [])];
+  function distinctKeys(value) {
+    return [...new Set(String(value || '').match(JIRA_KEY_PATTERN) || [])];
+  }
+
+  function jiraKeyForPull(pull) {
+    const branchKeys = distinctKeys(pull?.sourceBranch);
+    const titleKeys = distinctKeys(pull?.title);
+
+    if (branchKeys.length > 1) return '';
+    if (branchKeys.length === 1) {
+      if (titleKeys.length === 0) return branchKeys[0];
+      if (titleKeys.length === 1 && titleKeys[0] === branchKeys[0]) return branchKeys[0];
+      return '';
+    }
+    return titleKeys.length === 1 ? titleKeys[0] : '';
   }
 
   function groupBy(items, keyForItem) {
@@ -42,9 +55,9 @@
 
     const uniqueMatches = [];
     for (const { pull, identity } of uniquePulls) {
-      const keys = distinctTitleKeys(pull?.title);
-      if (keys.length !== 1) continue;
-      const jira = uniqueJiraByKey.get(keys[0]);
+      const key = jiraKeyForPull(pull);
+      if (!key) continue;
+      const jira = uniqueJiraByKey.get(key);
       if (!jira || !pull?.url) continue;
       uniqueMatches.push({ jira, pull, identity });
     }
@@ -159,7 +172,9 @@
 
   return {
     JIRA_KEY_PATTERN,
-    distinctTitleKeys,
+    distinctKeys,
+    distinctTitleKeys: distinctKeys,
+    jiraKeyForPull,
     resolve,
     compactCounterpartLabel,
     render,
