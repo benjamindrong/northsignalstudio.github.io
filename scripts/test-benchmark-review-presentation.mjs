@@ -8,6 +8,7 @@ const {
   orderedOnDeckRuns,
   completedRunsForDisplay,
   resultLinesForDisplay,
+  expandedResultLines,
   resultSummaryText,
   notableFindingText,
   createPersistedDetails
@@ -140,6 +141,11 @@ assert.deepEqual(
   resultLinesForDisplay({ resultLines }, false),
   resultLines,
   'Non-compact presentation must retain all existing result lines.'
+);
+assert.deepEqual(
+  expandedResultLines({ resultLines }),
+  resultLines,
+  'Expanded native Completed results must display Outcome, Scores, and Signal together.'
 );
 assert.deepEqual(resultLinesForDisplay({ resultLines: null }, true), [], 'Missing result lines must remain missing.');
 assert.equal(

@@ -3,7 +3,7 @@
 
   const JIRA_BASE_URL = 'https://benjamindrong80.atlassian.net/browse/';
   const COMPLETED_VISIBLE_LIMIT = 6;
-  const EXPANDED_RESULT_LIMIT = 2;
+  const EXPANDED_RESULT_LIMIT = 3;
   let expandedCompleted = false;
   let displayedRegistry = null;
   const expandedRunKeys = new Set();
