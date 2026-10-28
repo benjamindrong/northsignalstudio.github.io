@@ -122,11 +122,11 @@ jobs:
             [benchmark, "run.status === 'Running'", 'running-only active benchmark grouping'],
             [benchmark, "run.status === 'Preparing'", 'preparing benchmark On Deck grouping'],
             [benchmark, "run.status === 'Blocked'", 'blocked benchmark grouping'],
-            [benchmark, 'orderedNextRuns', 'BEN-21-only next projection'],
+            [benchmark, 'orderedNextRuns', 'native selected-next projection'],
             [benchmark, 'orderedOnDeckRuns', 'non-selected Preparing On Deck projection'],
-            [benchmark, 'Next pointer unavailable:', 'visible BEN-21 pointer failure'],
+            [benchmark, "registry.authority !== 'dashboard-native-benchmark-review'", 'native-only render admission'],
             [benchmark, 'benchmark-columns completed-only', 'completed-only full-width layout'],
-            [benchmark, 'registry.sourceLabel', 'registry source metadata'],
+            [benchmark, "source.textContent = 'Dashboard-native Benchmark Review'", 'native registry source metadata'],
             [benchmark, "run.activityKind === 'benchmark-testing'", 'Application Testing result distinction'],
             [benchmark, 'Defined unused benchmarks', 'defined-unused registry distinction']
           ];
