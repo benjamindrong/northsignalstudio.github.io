@@ -39,7 +39,6 @@ assert.ok(completedRenderIndex < rightColumnAppendIndex, 'The completed right-co
 
 const queueRegistry = {
   selectedNext: { key: 'BEN-64', status: 'Preparing' },
-  pointerError: '',
   runs: [
     { key: 'BEN-52', status: 'Preparing' },
     { key: 'BEN-53', status: 'Preparing' },
@@ -50,55 +49,55 @@ const queueRegistry = {
 assert.deepEqual(
   orderedNextRuns(queueRegistry).map(run => run.key),
   ['BEN-64'],
-  'Next must contain only the Preparing BEN-21 selected target.'
+  'Next must contain only the Preparing Dashboard-native selected-next target.'
 );
 assert.deepEqual(
   orderedOnDeckRuns(queueRegistry).map(run => run.key),
   ['BEN-52', 'BEN-53'],
-  'Preparing items that are not selected by BEN-21 must be On Deck.'
+  'Preparing items that are not selected by Dashboard-native authority must be On Deck.'
 );
 
 const runningPointerRegistry = {
   selectedNext: { key: 'BEN-62', status: 'Running' },
-  pointerError: '',
   runs: queueRegistry.runs
 };
 assert.deepEqual(
   orderedNextRuns(runningPointerRegistry).map(run => run.key),
   [],
-  'A Running BEN-21 target must stay Active instead of being relabeled Next.'
+  'A Running Dashboard-native selected-next target must stay Active instead of being relabeled Next.'
 );
 assert.deepEqual(
   orderedOnDeckRuns(runningPointerRegistry).map(run => run.key),
   ['BEN-52', 'BEN-53', 'BEN-64'],
-  'All Preparing items remain On Deck when BEN-21 points to Running work.'
+  'All Preparing items remain On Deck when Dashboard-native selected-next points to Running work.'
 );
 
 const blockedPointerRegistry = {
   selectedNext: { key: 'BEN-40', status: 'Blocked' },
-  pointerError: '',
   runs: [...queueRegistry.runs, { key: 'BEN-40', status: 'Blocked' }]
 };
 assert.deepEqual(
   orderedNextRuns(blockedPointerRegistry).map(run => run.key),
   [],
-  'A Blocked BEN-21 target must stay Blocked instead of being relabeled Next.'
+  'A Blocked Dashboard-native selected-next target must stay Blocked instead of being relabeled Next.'
 );
 assert.deepEqual(
   orderedOnDeckRuns(blockedPointerRegistry).map(run => run.key),
   ['BEN-52', 'BEN-53', 'BEN-64'],
-  'All Preparing items remain On Deck when BEN-21 points to Blocked work.'
+  'All Preparing items remain On Deck when Dashboard-native selected-next points to Blocked work.'
 );
 assert.ok(
   presentationSource.includes("const activeRuns = registry.runs.filter(run => run.status === 'Running');"),
-  'Running BEN-21 targets must remain in the Active lifecycle group.'
+  'Running Dashboard-native selected-next targets must remain in the Active lifecycle group.'
 );
 assert.ok(
   presentationSource.includes("const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');"),
-  'Blocked BEN-21 targets must remain in the Blocked lifecycle group.'
+  'Blocked Dashboard-native selected-next targets must remain in the Blocked lifecycle group.'
 );
 
 const registry = {
+  authority: 'dashboard-native-benchmark-review',
+  completedOrder: ['BEN-44', 'BEN-69', 'BEN-65', 'BEN-63', 'BEN-62', 'BEN-61', 'BEN-50'],
   runs: [
     { key: 'BEN-69', status: 'Completed', completedAt: '2026-09-20T12:00:00.000Z' },
     { key: 'BEN-65', status: 'Completed', completedAt: '2026-09-19T12:00:00.000Z' },
@@ -116,21 +115,15 @@ assert.equal(completed.total, 7, 'Completed heading count must retain the full c
 assert.deepEqual(
   completed.runs.map(run => run.key),
   ['BEN-44', 'BEN-69', 'BEN-65', 'BEN-63', 'BEN-62', 'BEN-61'],
-  'Completed display must order by Jira completion time before applying the six-item limit.'
+  'Completed display must preserve native completion order before applying the six-item limit.'
 );
 
-const fallbackCompleted = completedRunsForDisplay({
-  runs: [
-    { key: 'BEN-7', status: 'Completed', completedAt: '' },
-    { key: 'BEN-11', status: 'Completed', completedAt: 'not-a-date' },
-    { key: 'BEN-5', status: 'Completed', completedAt: '2026-09-01T00:00:00.000Z' },
-    { key: 'BEN-20', status: 'Completed', completedAt: '2026-09-01T00:00:00.000Z' }
-  ]
-});
 assert.deepEqual(
-  fallbackCompleted.runs.map(run => run.key),
-  ['BEN-20', 'BEN-5', 'BEN-11', 'BEN-7'],
-  'Equal or unavailable completion timestamps must use deterministic BEN-key ordering, with unavailable timestamps last.'
+  completedRunsForDisplay({ authority: 'dashboard-native-benchmark-review',
+    completedOrder: ['BEN-20', 'BEN-5'],
+    runs: [{ key: 'BEN-5', status: 'Completed' }, { key: 'BEN-20', status: 'Completed' }] }).runs.map(run => run.key),
+  ['BEN-20', 'BEN-5'],
+  'Presentation must preserve native completion order without Jira timestamp fallback.'
 );
 
 const resultLines = [

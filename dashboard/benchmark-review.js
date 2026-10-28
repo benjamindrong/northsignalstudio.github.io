@@ -271,55 +271,28 @@
   }
 
   function orderedNextRuns(registry) {
-    if (pointerErrorMessage(registry) || registry.selectedNext?.status !== 'Preparing') return [];
+    if (registry.selectedNext?.status !== 'Preparing') return [];
     return [registry.selectedNext];
   }
 
   function orderedOnDeckRuns(registry) {
-    const selectedKey = !pointerErrorMessage(registry) && registry.selectedNext?.status === 'Preparing'
+    const selectedKey = registry.selectedNext?.status === 'Preparing'
       ? registry.selectedNext.key
       : '';
     return registry.runs.filter(run => run.status === 'Preparing' && run.key !== selectedKey);
   }
 
-  function completionTimestamp(run) {
-    const timestamp = Date.parse(String(run?.completedAt || ''));
-    return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
-  }
-
   function orderedCompletedRuns(registry) {
-    if (registry?.authority === 'dashboard-native-benchmark-review') {
-      // The native repository owns completed ordering, including timestamp tie breaks.
-      const byKey = new Map(registry.runs.filter(run => run.status === 'Completed')
-        .map(run => [run.key, run]));
-      return registry.completedOrder.map(key => byKey.get(key));
-    }
-    return registry.runs
-      .filter(run => run.status === 'Completed')
-      .sort((a, b) => completionTimestamp(b) - completionTimestamp(a)
-        || String(b.key || '').localeCompare(String(a.key || ''), undefined, { numeric: true }));
+    // Only the validated native repository projection determines Completed ordering.
+    const byKey = new Map(registry.runs.filter(run => run.status === 'Completed')
+      .map(run => [run.key, run]));
+    return registry.completedOrder.map(key => byKey.get(key));
   }
 
   function completedRunsForDisplay(registry) {
     const ordered = orderedCompletedRuns(registry);
     return { total: ordered.length,
       runs: expandedCompleted ? ordered : ordered.slice(0, COMPLETED_VISIBLE_LIMIT) };
-  }
-
-  function pointerErrorMessage(registry) {
-    if (registry?.authority === 'dashboard-native-benchmark-review') return '';
-    if (registry?.pointerError) return registry.pointerError;
-    if (!registry?.selectedNext) {
-      return 'BEN-21 does not identify a selected Preparing, Blocked, or Running registry item.';
-    }
-    if (!['Preparing', 'Blocked', 'Running'].includes(registry.selectedNext.status)) {
-      return 'BEN-21 Parent does not identify an eligible Preparing, Blocked, or Running registry item.';
-    }
-    const selectedKey = registry.selectedNext.key;
-    if (!Array.isArray(registry.runs) || !registry.runs.some(run => ['Preparing', 'Blocked', 'Running'].includes(run.status) && run.key === selectedKey)) {
-      return 'BEN-21 Parent is unavailable from the eligible registry projection.';
-    }
-    return '';
   }
 
   function appendIdeas(content, registry) {
@@ -407,9 +380,6 @@
     displayedRegistry = registry;
     source.textContent = 'Dashboard-native Benchmark Review';
 
-    const pointerError = pointerErrorMessage(registry);
-    if (pointerError) content.appendChild(create('div', 'benchmark-result backfill', `Next pointer unavailable: ${pointerError}`));
-
     const nextRuns = orderedNextRuns(registry);
     const activeRuns = registry.runs.filter(run => run.status === 'Running');
     if (activeRuns.length) {
@@ -461,7 +431,6 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = {
     orderedNextRuns,
     orderedOnDeckRuns,
-    pointerErrorMessage,
     completedRunsForDisplay,
     resultLinesForDisplay,
     activityTypeLabel,
