@@ -131,8 +131,8 @@ for (const selector of [
 
 const { expandedResultLines } = require('../dashboard/benchmark-review.js');
 const compactBenchmarkDetails = expandedResultLines({ resultLines: ['one', 'two', 'three'] });
-if (compactBenchmarkDetails.length !== 2 || compactBenchmarkDetails.join('|') !== 'one|two') {
-  fail('Benchmark Review expanded result detail must be capped at two existing result lines.');
+if (compactBenchmarkDetails.length !== 3 || compactBenchmarkDetails.join('|') !== 'one|two|three') {
+  fail('Benchmark Review expanded native detail must preserve all three canonical result fields.');
 }
 
 const hexToRgb = hex => {
