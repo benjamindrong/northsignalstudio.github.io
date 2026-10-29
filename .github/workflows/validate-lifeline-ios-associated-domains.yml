@@ -1,0 +1,28 @@
+name: Validate Lifeline iOS associated domains
+
+on:
+  pull_request:
+    paths:
+      - .well-known/apple-app-site-association
+      - scripts/test-lifeline-ios-associated-domains.mjs
+      - .github/workflows/validate-lifeline-ios-associated-domains.yml
+  push:
+    branches:
+      - main
+    paths:
+      - .well-known/apple-app-site-association
+      - scripts/test-lifeline-ios-associated-domains.mjs
+      - .github/workflows/validate-lifeline-ios-associated-domains.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/test-lifeline-ios-associated-domains.mjs
