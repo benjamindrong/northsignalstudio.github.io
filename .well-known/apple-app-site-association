@@ -18,6 +18,8 @@
   },
   "webcredentials": {
     "apps": [
+      "5FF5MBB334.com.northsignalstudio.lifeline",
+      "5FF5MBB334.com.northsignalstudio.lifeline.sandbox",
       "5FF5MBB334.com.lifeline.sandbox.nonproduction"
     ]
   }
