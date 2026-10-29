@@ -194,55 +194,29 @@ for (const { file, source } of trackedTextFiles()) {
   });
 }
 
-const expectedStateLines = [
-  `if test -e "_dashboard-data/${AUTHORITY_STATE_PATH}"; then`,
-  `rm -f "_dashboard-data/${AUTHORITY_STATE_PATH}"`,
-  `git -C _dashboard-data add -A "${AUTHORITY_STATE_PATH}"`
-].sort();
-
-function assertAuthorityStateWorkflow(source) {
-  const cutoverBlocks = [...source.matchAll(CUTOVER_BLOCK)].map(match => match[1]);
-  assert.equal(cutoverBlocks.length, 2, 'workflow must contain only the two reviewed one-time cutover-finalization blocks');
-
-  const outsideCutover = source.replace(CUTOVER_BLOCK, '');
-  assert.equal(outsideCutover.includes(AUTHORITY_STATE_PATH), false, 'authority-state path may appear only inside marked cutover-finalization blocks');
-
-  const stateLines = cutoverBlocks
-    .flatMap(block => block.split(/\r?\n/))
-    .map(line => line.trim())
-    .filter(line => line.includes(AUTHORITY_STATE_PATH))
-    .sort();
-  assert.deepEqual(stateLines, expectedStateLines, 'authority-state file may only be existence-tested, deleted, and staged for deletion');
-}
-
+// HOME-24's one-time Jira authority transition is historical. Runtime cutover now
+// forbids reinstating the legacy BEN-21 credentialed publisher or state flag.
 const workflowSource = fs.readFileSync(WORKFLOW, 'utf8');
-assertAuthorityStateWorkflow(workflowSource);
-
-const hiddenReadWorkflow = workflowSource.replace(
-  `rm -f "_dashboard-data/${AUTHORITY_STATE_PATH}"`,
-  `cat "_dashboard-data/${AUTHORITY_STATE_PATH}" >/dev/null\n          rm -f "_dashboard-data/${AUTHORITY_STATE_PATH}"`
-);
-assert.throws(
-  () => assertAuthorityStateWorkflow(hiddenReadWorkflow),
-  /authority-state file may only be existence-tested, deleted, and staged for deletion/,
-  'a hidden authority-state read in a later cutover block must fail the whole-workflow audit'
-);
-
-const recreationWorkflow = workflowSource.replace(
-  `rm -f "_dashboard-data/${AUTHORITY_STATE_PATH}"`,
-  `printf 'jira-native\\n' > "_dashboard-data/${AUTHORITY_STATE_PATH}"\n          rm -f "_dashboard-data/${AUTHORITY_STATE_PATH}"`
-);
-assert.throws(
-  () => assertAuthorityStateWorkflow(recreationWorkflow),
-  /authority-state file may only be existence-tested, deleted, and staged for deletion/,
-  'authority-state recreation in a later cutover block must fail the whole-workflow audit'
-);
-
-const serializedRegistryCount = (workflowSource.match(/Buffer\.from\(JSON\.stringify\(registry\), 'utf8'\)\.toString\('base64'\)/g) || []).length;
-assert.equal(serializedRegistryCount, 2, 'both credentialed browser seams must serialize registry payloads as inert base64 data');
-assert.doesNotMatch(workflowSource, /DashboardBenchmarkReview\.render\(\$\{JSON\.stringify\(registry\)\}\)/, 'credentialed browser seams must never interpolate raw registry JSON into executable script');
-assert.match(workflowSource, /python3 -m http\.server 8000 --bind 127\.0\.0\.1/g, 'browser fixtures must bind their temporary server to loopback');
-
+const producerSource = fs.readFileSync('scripts/refresh-jira-flight-control.mjs', 'utf8');
+const refreshSource = fs.readFileSync('dashboard/refresh-health.js', 'utf8');
+assert.equal([...workflowSource.matchAll(CUTOVER_BLOCK)].length, 0,
+  'obsolete Jira-native cutover blocks must not run after native cutover');
+assert.doesNotMatch(workflowSource, /HOME24_CUTOVER_PENDING|live-gate:|independentPointer/,
+  'historical BEN-21 credentialed gates must not execute');
+assert.ok(!workflowSource.includes('benchmark-registry-authority.txt'),
+  'the published Jira workflow cannot read or rewrite legacy authority flags');
+assert.doesNotMatch(producerSource,
+  /fetchJiraNativeBenchmarkRegistry|REGISTRY_QUERY_LABELS|buildBenchmarkRegistryJql|buildBenchmarkPointerIdentityJql|benchmarkReview|BENCHMARK_POINTER_SUMMARY/,
+  'generic Jira acquisition must not restore Benchmark Review authority');
+assert.ok(!refreshSource.includes('payload.benchmarkReview'),
+  'browser refresh must not accept Jira BEN state');
+assert.ok(workflowSource.includes('owned_path=dashboard/jira-flight-control.enc.json'),
+  'generic Jira publication must still own its original encrypted artifact');
+assert.ok(workflowSource.includes('sibling_path=dashboard/github-prs.enc.json'),
+  'generic Jira publication must preserve the GitHub sibling snapshot');
+assert.ok(workflowSource.includes('python3 -m http.server 8000 --bind 127.0.0.1'),
+  'native browser fixtures must bind to loopback');
 const rejected = findings.filter(finding => !finding.allowed);
-assert.deepEqual(rejected, [], rejected.map(finding => `${finding.file}:${finding.line} ${finding.classification} (${finding.literal})`).join('\n'));
-console.log(`HOME-24 adversarial registry hardening tests passed; classified ${findings.length} non-production legacy/state occurrence(s).`);
+assert.deepEqual(rejected, [],
+  rejected.map(finding => `${finding.file}:${finding.line} ${finding.classification} (${finding.literal})`).join('\\n'));
+console.log(`PASS: native authority anti-regression and historical fixture audit; ${findings.length} permitted historical occurrences`);

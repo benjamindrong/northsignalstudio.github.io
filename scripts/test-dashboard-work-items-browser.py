@@ -96,24 +96,39 @@ FETCH_STUB = r'''<script>
     ...Array.from({length:16}, (_, i) => ({ key:`MYR-${300+i}`, projectKey:'MYR', projectName:'MyRAM', summary:`Filler row ${i} for deterministic scroll preservation`, status:'To Do', statusCategory:'new', lastMove:iso(6), updatedAt:iso(6), url:jiraUrl(`MYR-${300+i}`) }))
   ];
 
-  const benchmarkRegistry = () => ({
-    state:'ready',
-    sourceKey:'BEN',
-    sourceLabel:'Jira-native BEN registry',
-    selectedNext:{ key:'BEN-54', status:'Preparing' },
-    runs:[
-      { key:'BEN-34', title:'Active benchmark with expanded result detail', source:'Homepage Dashboard', activityKind:'candidate-evaluation', type:'Candidate Evaluation', status:'Running', statusRaw:'Running', turnsCompleted:'3', resultState:'recorded', resultLines:['Active result summary line one.', 'Active result detail line two with complete expanded benchmark content.'] },
-      { key:'BEN-54', title:'Next benchmark remains selected by BEN-21', source:'Homepage Dashboard', activityKind:'benchmark-testing', type:'Benchmark Testing - Field Test', status:'Preparing', statusRaw:'Preparing', resultState:'none', resultLines:[] },
-      { key:'BEN-20', title:'Completed benchmark with multiple result lines', source:'Homepage Dashboard', activityKind:'candidate-evaluation', type:'Candidate Evaluation', status:'Completed', statusRaw:'Completed', turnsCompleted:'5', resultState:'recorded', resultLines:['Completed result summary line one.', 'Completed result detail line two remains available when expanded.'] },
-      { key:'BEN-19', title:'Completed benchmark 19', source:'Homepage Dashboard', activityKind:'benchmark-testing', type:'Benchmark Testing', status:'Completed', statusRaw:'Completed', resultState:'none', resultLines:[] },
-      { key:'BEN-18', title:'Completed benchmark 18', source:'Homepage Dashboard', activityKind:'candidate-evaluation', type:'Candidate Evaluation', status:'Completed', statusRaw:'Completed', resultState:'unknown', resultLines:[] },
-      { key:'BEN-17', title:'Completed benchmark 17', source:'Homepage Dashboard', activityKind:'candidate-evaluation', type:'Candidate Evaluation', status:'Completed', statusRaw:'Completed', resultState:'recorded', resultLines:['BEN-17 summary.'] },
-      { key:'BEN-16', title:'Completed benchmark 16', source:'Homepage Dashboard', activityKind:'candidate-evaluation', type:'Candidate Evaluation', status:'Completed', statusRaw:'Completed', resultState:'recorded', resultLines:['BEN-16 summary.'] },
-      { key:'BEN-15', title:'Blocked benchmark preserves grouping', source:'Homepage Dashboard', activityKind:'benchmark-testing', type:'Benchmark Testing', status:'Blocked', statusRaw:'Blocked', resultState:'none', resultLines:[] }
-    ],
-    previouslyConsidered:[],
-    freshBacklog:[],
-    invalidRecords:[]
+  // Public, minimized native display contract; Jira data remains a separate generic feed.
+  const nativeProjectId = 'c906c4e7-2c69-4847-9495-ba902abc0f50';
+  const nativeGeneratedAt = new Date().toISOString();
+  const completionBase = Date.now();
+  const review = (key, index, lifecycle, kind, summary, result = null) => ({
+    ticketId: '11111111-1111-4111-8111-' + String(index).padStart(12, '0'),
+    summary, lifecycle, activityKind:kind, ideaCategory:null,
+    legacyDisplayKey:key, legacySourceKey:'HOME-61', sourceTicketId:null,
+    result, notableFinding:lifecycle === 'Completed' ? 'Preserved native finding.' : null,
+    completedAtEpochMillis:lifecycle === 'Completed' ? String(completionBase - index * 60000) : null
+  });
+  const nativeReviewRecords = [
+    review('BEN-34',1,'Running','candidate-evaluation','Active benchmark with expandable native detail'),
+    review('BEN-54',2,'Preparing','benchmark-testing','Next benchmark selected by native authority'),
+    review('BEN-20',3,'Completed','candidate-evaluation','Completed benchmark with multiple result lines',
+      {kind:'summary',outcome:'Completed result summary line one.',scores:'5/5',
+       signal:'Completed result detail line two remains available when expanded.'}),
+    review('BEN-19',4,'Completed','benchmark-testing','Completed benchmark 19'),
+    review('BEN-18',5,'Completed','candidate-evaluation','Completed benchmark 18',{kind:'unknown'}),
+    review('BEN-17',6,'Completed','candidate-evaluation','Completed benchmark 17',
+      {kind:'summary',outcome:'BEN-17 summary.',scores:'1/1',signal:'Stable.'}),
+    review('BEN-16',7,'Completed','candidate-evaluation','Completed benchmark 16',
+      {kind:'summary',outcome:'BEN-16 summary.',scores:'1/1',signal:'Stable.'}),
+    review('BEN-15',8,'Blocked','benchmark-testing','Blocked benchmark preserves grouping')
+  ];
+  const nativeBenchmarkPublication = () => ({
+    version:1,authority:'dashboard-native-benchmark-review',
+    generatedAt:nativeGeneratedAt,nativeProjectionSha256:'a'.repeat(64),
+    registry:{projectId:nativeProjectId,
+      selectedNextTicketId:nativeReviewRecords[1].ticketId,
+      selectedNextLegacyDisplayKey:'BEN-54'},
+    records:nativeReviewRecords,
+    completedOrder:nativeReviewRecords.filter(r => r.lifecycle === 'Completed').map(r => r.ticketId)
   });
 
   function jiraPayload(revision) {
@@ -129,7 +144,7 @@ FETCH_STUB = r'''<script>
       issues.splice(removeIndex, 1);
       issues.push({ key:'HOME-32', projectKey:'HOME', projectName:'Homepage Dashboard', summary:'Inserted row', status:'Blocked', statusCategory:'indeterminate', lastMove:iso(29), updatedAt:iso(29), url:jiraUrl('HOME-32') });
     }
-    return { generatedAt: iso(30 + revision), projects:['HOME','MYR'], issues, benchmarkReview:benchmarkRegistry() };
+    return { generatedAt: iso(30 + revision), projects:['HOME','MYR'], issues };
   }
 
   function githubPayload(revision) {
@@ -167,6 +182,12 @@ FETCH_STUB = r'''<script>
     state.requests.push(url.pathname);
     if (url.pathname.endsWith('/jira-flight-control.config.json')) return jsonResponse({ dataUrl:'./home29-test-jira.enc.json' });
     if (url.pathname.endsWith('/github-prs.config.json')) return jsonResponse({ dataUrl:'./home29-test-github.enc.json' });
+    if (url.pathname.endsWith('/benchmark-review-native.config.json')) return jsonResponse({
+      contractVersion:1,expectedProjectId:nativeProjectId,dataUrl:'./home29-test-native.enc.json'
+    });
+    if (url.pathname.endsWith('/home29-test-native.enc.json')) {
+      return jsonResponse(await encrypt(nativeBenchmarkPublication()));
+    }
     if (url.pathname.endsWith('/home29-test-jira.enc.json')) {
       if (state.jiraFail) return new Response('controlled Jira failure', {status:503});
       return jsonResponse(await encrypt(jiraPayload(state.revision)));
@@ -228,7 +249,7 @@ MAIN_DRIVER = r'''<script>
     assert(home29.querySelector('[data-work-details]').textContent.includes('long summary'), 'full Jira summary exposed');
     assert(pr7.querySelector('[data-work-details]').textContent.includes('long pull request title'), 'full PR title exposed');
     assert(activeBenchmark.querySelector('[data-benchmark-summary]').hidden && !activeBenchmark.querySelector('[data-benchmark-details]').hidden, 'active Benchmark Review item expands independently');
-    assert(activeBenchmark.querySelector('[data-benchmark-details]').textContent.includes('Active result detail line two'), 'active Benchmark Review full result detail exposed');
+    assert(activeBenchmark.querySelector('[data-benchmark-details]').textContent.includes('No comparative results recorded yet.'), 'active Benchmark Review full result detail exposed');
     assert(completedBenchmark.querySelector('[data-benchmark-details]').textContent.includes('Completed result detail line two'), 'completed Benchmark Review full result detail exposed');
     assert(document.querySelector('.benchmark-group h3')?.textContent.includes('Next'), 'Benchmark Review Next grouping preserved');
     assert([...document.querySelectorAll('.benchmark-group h3')].some(header => header.textContent === 'Completed · 5'), 'Benchmark Review Completed count preserved');
@@ -297,7 +318,7 @@ MAIN_DRIVER = r'''<script>
     assert(rowById('HOME-29') === retainedJira, 'Jira failure retains Jira row');
     assert([...document.querySelectorAll('[data-work-kind="recent"]')].some(row => row.dataset.workId === 'JIRA:HOME-29'), 'Recently Active retains failed Jira source payload');
     assert(rowById('GITHUB:benjamindrong/HomepageDashboard#99'.toLowerCase()) || document.querySelector('[data-work-id$="#99"]'), 'successful GitHub sibling updates during Jira failure');
-    assert(benchmarkByKey('BEN-34').querySelector('.benchmark-disclosure').getAttribute('aria-expanded') === 'true', 'retained Jira payload preserves Benchmark Review expansion through Jira failure');
+    assert(benchmarkByKey('BEN-34').querySelector('.benchmark-disclosure').getAttribute('aria-expanded') === 'true', 'independent native feed preserves Benchmark Review expansion through Jira failure');
     window.__home29Fixture.jiraFail = false;
 
     const retainedGithub = document.querySelector('[data-work-id="benjamindrong/homepagedashboard#40"]');
@@ -404,7 +425,7 @@ DISPLAY_PARENT_DRIVER = r'''<script>
     const benchmarkDisclosure = benchmarkRow.querySelector('.benchmark-disclosure');
     benchmarkDisclosure.click();
     if (benchmarkDisclosure.getAttribute('aria-expanded') !== 'true' || benchmarkRow.querySelector('[data-benchmark-details]').hidden) throw new Error('Benchmark Review disclosure did not expand under Display Mode overrides');
-    if (!benchmarkRow.querySelector('[data-benchmark-details]').textContent.includes('Active result detail line two')) throw new Error('Benchmark Review full detail unavailable under Display Mode');
+    if (!benchmarkRow.querySelector('[data-benchmark-details]').textContent.includes('No comparative results recorded yet.')) throw new Error('Benchmark Review full detail unavailable under Display Mode');
 
     const childRoot = child.documentElement;
     if (!childRoot) throw new Error('Display Mode child document root became unavailable');

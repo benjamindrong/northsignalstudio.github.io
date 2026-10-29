@@ -3,7 +3,9 @@
 
   const JIRA_BASE_URL = 'https://benjamindrong80.atlassian.net/browse/';
   const COMPLETED_VISIBLE_LIMIT = 6;
-  const EXPANDED_RESULT_LIMIT = 2;
+  const EXPANDED_RESULT_LIMIT = 3;
+  let expandedCompleted = false;
+  let displayedRegistry = null;
   const expandedRunKeys = new Set();
   const EXPANDED_SECTION_STORAGE_KEY = 'dashboard-benchmark-expanded-sections';
 
@@ -71,6 +73,8 @@
       .benchmark-column-stack { min-width: 0; display: grid; gap: 10px; align-content: start; }
       .benchmark-group { min-width: 0; border: 1px solid var(--board-line-soft); background: #101310; }
       .benchmark-group h3 { margin: 0; padding: 7px 8px; border-bottom: 1px solid var(--board-line-soft); color: #c8cec8; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+      .benchmark-more { margin: 8px; padding: 5px 7px; background: transparent; color: var(--board-text); border: 1px solid var(--board-line-soft); cursor: pointer; font: inherit; font-size: 10px; }
+      .benchmark-more:hover, .benchmark-more:focus-visible { border-color: var(--board-text); }
       .benchmark-run { min-width: 0; padding: 8px; border-bottom: 1px solid var(--board-line-soft); }
       .benchmark-run:last-child { border-bottom: 0; }
       .benchmark-result { margin-top: 5px; color: #c8c8bc; font-size: 9px; line-height: 1.35; overflow-wrap: anywhere; }
@@ -114,7 +118,7 @@
     header.appendChild(title);
     const board = create('div', 'benchmark-board');
     board.setAttribute('aria-label', 'Benchmark Review registry');
-    const meta = create('div', 'benchmark-meta', 'Encrypted BEN registry');
+    const meta = create('div', 'benchmark-meta', 'Encrypted native Benchmark Review');
     meta.id = 'benchmarkSource';
     const content = create('div', 'benchmark-content');
     content.id = 'benchmarkContent';
@@ -126,8 +130,13 @@
   }
 
   function runLink(run) {
+    // A native-only review is never a Jira issue: display its durable ticket ID as text.
+    if (run.nativeTicketId && !run.legacyDisplayKey) {
+      return create('span', 'benchmark-run-title', `${run.key} · ${run.title}`);
+    }
+    const key = run.legacyDisplayKey || run.key;
     const link = create('a', 'benchmark-run-title', `${run.key} · ${run.title}`);
-    link.href = `${JIRA_BASE_URL}${encodeURIComponent(run.key)}`;
+    link.href = `${JIRA_BASE_URL}${encodeURIComponent(key)}`;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     return link;
@@ -248,51 +257,42 @@
     group.appendChild(create('h3', '', `${label} · ${count}`));
     if (!runs.length) group.appendChild(create('div', 'benchmark-run benchmark-result unknown', `No ${label.toLowerCase()} benchmarks recorded.`));
     else for (const run of runs) appendRun(group, run);
+    if (label === 'Completed' && count > COMPLETED_VISIBLE_LIMIT) {
+      const toggle = create('button', 'benchmark-more',
+        expandedCompleted ? 'Show fewer' : `Show all ${count}`);
+      toggle.type = 'button';
+      toggle.addEventListener('click', () => {
+        expandedCompleted = !expandedCompleted;
+        render(displayedRegistry);
+      });
+      group.appendChild(toggle);
+    }
     content.appendChild(group);
   }
 
   function orderedNextRuns(registry) {
-    if (pointerErrorMessage(registry) || registry.selectedNext?.status !== 'Preparing') return [];
+    if (registry.selectedNext?.status !== 'Preparing') return [];
     return [registry.selectedNext];
   }
 
   function orderedOnDeckRuns(registry) {
-    const selectedKey = !pointerErrorMessage(registry) && registry.selectedNext?.status === 'Preparing'
+    const selectedKey = registry.selectedNext?.status === 'Preparing'
       ? registry.selectedNext.key
       : '';
     return registry.runs.filter(run => run.status === 'Preparing' && run.key !== selectedKey);
   }
 
-  function completionTimestamp(run) {
-    const timestamp = Date.parse(String(run?.completedAt || ''));
-    return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
-  }
-
   function orderedCompletedRuns(registry) {
-    return registry.runs
-      .filter(run => run.status === 'Completed')
-      .sort((a, b) => completionTimestamp(b) - completionTimestamp(a)
-        || String(b.key || '').localeCompare(String(a.key || ''), undefined, { numeric: true }));
+    // Only the validated native repository projection determines Completed ordering.
+    const byKey = new Map(registry.runs.filter(run => run.status === 'Completed')
+      .map(run => [run.key, run]));
+    return registry.completedOrder.map(key => byKey.get(key));
   }
 
   function completedRunsForDisplay(registry) {
     const ordered = orderedCompletedRuns(registry);
-    return { total: ordered.length, runs: ordered.slice(0, COMPLETED_VISIBLE_LIMIT) };
-  }
-
-  function pointerErrorMessage(registry) {
-    if (registry?.pointerError) return registry.pointerError;
-    if (!registry?.selectedNext) {
-      return 'BEN-21 does not identify a selected Preparing, Blocked, or Running registry item.';
-    }
-    if (!['Preparing', 'Blocked', 'Running'].includes(registry.selectedNext.status)) {
-      return 'BEN-21 Parent does not identify an eligible Preparing, Blocked, or Running registry item.';
-    }
-    const selectedKey = registry.selectedNext.key;
-    if (!Array.isArray(registry.runs) || !registry.runs.some(run => ['Preparing', 'Blocked', 'Running'].includes(run.status) && run.key === selectedKey)) {
-      return 'BEN-21 Parent is unavailable from the eligible registry projection.';
-    }
-    return '';
+    return { total: ordered.length,
+      runs: expandedCompleted ? ordered : ordered.slice(0, COMPLETED_VISIBLE_LIMIT) };
   }
 
   function appendIdeas(content, registry) {
@@ -367,16 +367,18 @@
     const scrollTop = content.scrollTop;
     content.replaceChildren();
 
-    if (!registry || registry.state !== 'ready') {
-      source.textContent = registry?.sourceLabel || (registry?.sourceKey ? `${registry.sourceKey} · unavailable` : 'BEN registry unavailable');
+    if (!registry || registry.state !== 'ready' ||
+        registry.authority !== 'dashboard-native-benchmark-review') {
+      displayedRegistry = null;
+      expandedCompleted = false;
+      expandedRunKeys.clear();
+      source.textContent = 'Dashboard-native Benchmark Review · unavailable';
       content.appendChild(create('div', 'benchmark-empty', registry?.message || 'Benchmark registry is unavailable.'));
       return;
     }
 
-    source.textContent = registry.sourceLabel || `${registry.sourceKey || 'BEN'} · benchmark registry`;
-
-    const pointerError = pointerErrorMessage(registry);
-    if (pointerError) content.appendChild(create('div', 'benchmark-result backfill', `Next pointer unavailable: ${pointerError}`));
+    displayedRegistry = registry;
+    source.textContent = 'Dashboard-native Benchmark Review';
 
     const nextRuns = orderedNextRuns(registry);
     const activeRuns = registry.runs.filter(run => run.status === 'Running');
@@ -389,6 +391,7 @@
 
     const onDeckRuns = orderedOnDeckRuns(registry);
     const blockedRuns = registry.runs.filter(run => run.status === 'Blocked');
+    const retiredRuns = registry.runs.filter(run => run.status === 'Retired');
     const completedRuns = completedRunsForDisplay(registry);
     const hasLeftColumn = nextRuns.length || onDeckRuns.length;
     const columns = create('div', hasLeftColumn ? 'benchmark-columns' : 'benchmark-columns completed-only');
@@ -401,6 +404,7 @@
     const rightColumn = create('div', 'benchmark-column-stack');
     if (blockedRuns.length) appendRunGroup(rightColumn, 'Blocked', blockedRuns);
     appendRunGroup(rightColumn, 'Completed', completedRuns.runs, { count: completedRuns.total });
+    if (retiredRuns.length) appendRunGroup(rightColumn, 'Retired', retiredRuns);
     columns.appendChild(rightColumn);
     content.appendChild(columns);
 
@@ -412,9 +416,11 @@
   function locked(message = 'Unlock the dashboard to load Benchmark Review.') {
     ensureSurface();
     expandedRunKeys.clear();
+    expandedCompleted = false;
+    displayedRegistry = null;
     const content = document.getElementById('benchmarkContent');
     const source = document.getElementById('benchmarkSource');
-    if (source) source.textContent = 'Encrypted BEN registry';
+    if (source) source.textContent = 'Encrypted native Benchmark Review';
     if (content) {
       content.replaceChildren();
       content.appendChild(create('div', 'benchmark-empty', message));
@@ -425,7 +431,6 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = {
     orderedNextRuns,
     orderedOnDeckRuns,
-    pointerErrorMessage,
     completedRunsForDisplay,
     resultLinesForDisplay,
     activityTypeLabel,
